@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, StyleSheet,
+  View, Text, FlatList, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,12 +8,8 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, StatusPill, BottomSheet } from '../shared';
-
-const EXAM_SCORES: Record<string, { avg: number; high: number; low: number }[]> = {
-  'Mid-Term 2026':    [{ avg: 71, high: 98, low: 34 }, { avg: 76, high: 95, low: 41 }, { avg: 82, high: 99, low: 52 }, { avg: 78, high: 97, low: 45 }],
-  'Unit Test 1':      [{ avg: 68, high: 92, low: 30 }, { avg: 74, high: 90, low: 38 }, { avg: 79, high: 96, low: 48 }, { avg: 75, high: 94, low: 42 }],
-  'Annual Exam 2025': [{ avg: 74, high: 99, low: 38 }, { avg: 79, high: 97, low: 44 }, { avg: 85, high: 100, low: 55 }, { avg: 81, high: 98, low: 48 }],
-};
+import { principalApi } from '../../services/principal';
+import type { StudentResult, ResultSummary } from '../../types/principal';
 
 const SUBJECTS      = ['Math', 'Science', 'English', 'Hindi'];
 const ALL_SUBJECTS  = ['Math', 'Science', 'English', 'Hindi', 'SST'];
@@ -31,13 +27,16 @@ type Student = {
   class: string;
 };
 
-const STUDENTS: Student[] = [
-  { rank: 1, name: 'Ananya Singh', total: '363/400', pct: '91%', class: 'Class 6', breakdown: { Math: 91, Science: 88, English: 95, Hindi: 89 } },
-  { rank: 2, name: 'Aarav Sharma', total: '351/400', pct: '88%', class: 'Class 7', breakdown: { Math: 87, Science: 85, English: 91, Hindi: 88 } },
-  { rank: 3, name: 'Kavya Nair',   total: '340/400', pct: '85%', class: 'Class 8', breakdown: { Math: 84, Science: 83, English: 88, Hindi: 85 } },
-  { rank: 4, name: 'Ishaan Verma', total: '318/400', pct: '80%', class: 'Class 6', breakdown: { Math: 78, Science: 80, English: 82, Hindi: 78 } },
-  { rank: 5, name: 'Priya Reddy',  total: '302/400', pct: '76%', class: 'Class 7', breakdown: { Math: 74, Science: 75, English: 79, Hindi: 74 } },
-];
+function mapApiStudent(r: StudentResult): Student {
+  return {
+    rank: r.rank,
+    name: r.student_name,
+    total: `${r.total_marks}/${r.max_marks}`,
+    pct: `${r.percentage.toFixed(0)}%`,
+    class: 'Class 6', // API result doesn't include class — kept as default
+    breakdown: Object.fromEntries(r.subjects.map(s => [s.subject_name, s.marks_obtained])),
+  };
+}
 
 function RankBadge({ rank }: { rank: number }) {
   const bg = RANK_CFG[rank]?.bg ?? colors.border;
@@ -49,21 +48,58 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 export function ResultsScreen() {
-  const [exams, setExams]             = useState<string[]>(Object.keys(EXAM_SCORES));
-  const [exam, setExam]               = useState('Mid-Term 2026');
-  const [classFilter, setClassFilter] = useState('All');
-  const [expanded, setExpanded]       = useState<number | null>(null);
-  const [published, setPublished]     = useState(false);
+  const [exams, setExams]                     = useState<string[]>([]);
+  const [exam, setExam]                       = useState('');
+  const [examIdMap, setExamIdMap]             = useState<Record<string, number>>({});
+  const [classFilter, setClassFilter]         = useState('All');
+  const [students, setStudents]               = useState<Student[]>([]);
+  const [summary, setSummary]                 = useState<ResultSummary | null>(null);
+  const [expanded, setExpanded]               = useState<number | null>(null);
+  const [published, setPublished]             = useState(false);
+  const [loadingExams, setLoadingExams]       = useState(true);
+  const [loadingResults, setLoadingResults]   = useState(false);
 
   // Exam creation state
-  const [showExamSheet, setShowExamSheet]       = useState(false);
-  const [newExamName, setNewExamName]           = useState('');
-  const [newExamSubjects, setNewExamSubjects]   = useState<string[]>([]);
-  const [newExamDate, setNewExamDate]           = useState('');
-  const [creatingExam, setCreatingExam]         = useState(false);
+  const [showExamSheet, setShowExamSheet]     = useState(false);
+  const [newExamName, setNewExamName]         = useState('');
+  const [newExamSubjects, setNewExamSubjects] = useState<string[]>([]);
+  const [newExamDate, setNewExamDate]         = useState('');
+  const [creatingExam, setCreatingExam]       = useState(false);
 
-  const scores           = EXAM_SCORES[exam] ?? EXAM_SCORES['Mid-Term 2026'];
-  const filteredStudents = classFilter === 'All' ? STUDENTS : STUDENTS.filter(s => s.class === classFilter);
+  const filteredStudents = classFilter === 'All'
+    ? students
+    : students.filter(s => s.class === classFilter);
+
+  // ── Load exam list on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    setLoadingExams(true);
+    principalApi.getExams()
+      .then(data => {
+        if (data.length > 0) {
+          const names = data.map(e => e.name);
+          const idMap = Object.fromEntries(data.map(e => [e.name, e.id]));
+          setExams(names);
+          setExamIdMap(idMap);
+          setExam(names[0]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingExams(false));
+  }, []);
+
+  // ── Load results when selected exam changes ───────────────────────────────
+  useEffect(() => {
+    const examId = examIdMap[exam];
+    if (!examId) return;
+    setLoadingResults(true);
+    principalApi.getResults({ exam_id: examId })
+      .then(data => {
+        setStudents(data.results.map(mapApiStudent));
+        setSummary(data.summary);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingResults(false));
+  }, [exam, examIdMap]);
 
   function handleToggleExpand(rank: number) {
     setExpanded(prev => (prev === rank ? null : rank));
@@ -75,21 +111,34 @@ export function ResultsScreen() {
     );
   }
 
-  function handleCreateExam() {
+  async function handleCreateExam() {
     if (!newExamName.trim()) return;
     setCreatingExam(true);
-    setTimeout(() => {
-      const name = newExamName.trim();
-      setExams(prev => [...prev, name]);
-      setExam(name);
-      setCreatingExam(false);
+    try {
+      const date = newExamDate || new Date().toISOString().split('T')[0];
+      const created = await principalApi.createExam({
+        name: newExamName.trim(),
+        start_date: date,
+        end_date: date,
+        class_ids: [1],    // ⚠ placeholder — needs class picker API
+        section_ids: [1],  // ⚠ placeholder — needs section picker API
+        subjects: newExamSubjects.length > 0
+          ? newExamSubjects.map((_, i) => ({ subject_id: i + 1, max_marks: 100, pass_marks: 35 }))
+          : [{ subject_id: 1, max_marks: 100, pass_marks: 35 }],
+      });
+      setExams(prev => [...prev, created.name]);
+      setExamIdMap(prev => ({ ...prev, [created.name]: created.id }));
+      setExam(created.name);
       setShowExamSheet(false);
-      setNewExamName('');
-      setNewExamSubjects([]);
-      setNewExamDate('');
-    }, 600);
+      setNewExamName(''); setNewExamSubjects([]); setNewExamDate('');
+    } catch (err: any) {
+      Alert.alert('Error', err.details ?? 'Failed to create exam.');
+    } finally {
+      setCreatingExam(false);
+    }
   }
 
+  // ── Score table (uses summary from API or placeholder) ────────────────────
   const ScoreTable = (
     <View style={styles.tableCard}>
       <View style={styles.tableHeader}>
@@ -97,24 +146,28 @@ export function ResultsScreen() {
           <Text key={h} style={styles.tableHeaderCell}>{h}</Text>
         ))}
       </View>
-      {SUBJECTS.map((s, i) => (
-        <View
-          key={s}
-          style={[
-            styles.tableRow,
-            { backgroundColor: i % 2 === 0 ? colors.surface : colors.background },
-          ]}
-        >
-          <Text style={[styles.tableCell, styles.tableCellSubject]}>{s}</Text>
-          <Text style={[styles.tableCell, styles.tableCellCenter]}>{scores[i].avg}%</Text>
+      {summary ? (
+        // Show summary row when we have API data
+        <View style={[styles.tableRow, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.tableCell, styles.tableCellSubject]}>All Subjects</Text>
+          <Text style={[styles.tableCell, styles.tableCellCenter]}>{summary.average_percentage.toFixed(0)}%</Text>
           <Text style={[styles.tableCell, styles.tableCellCenter, { color: '#0F6E56' }]}>
-            {scores[i].high}%
+            {summary.highest_percentage.toFixed(0)}%
           </Text>
           <Text style={[styles.tableCell, styles.tableCellCenter, { color: '#991B1B' }]}>
-            {scores[i].low}%
+            {summary.lowest_percentage.toFixed(0)}%
           </Text>
         </View>
-      ))}
+      ) : (
+        SUBJECTS.map((s, i) => (
+          <View key={s} style={[styles.tableRow, { backgroundColor: i % 2 === 0 ? colors.surface : colors.background }]}>
+            <Text style={[styles.tableCell, styles.tableCellSubject]}>{s}</Text>
+            <Text style={[styles.tableCell, styles.tableCellCenter]}>—</Text>
+            <Text style={[styles.tableCell, styles.tableCellCenter, { color: '#0F6E56' }]}>—</Text>
+            <Text style={[styles.tableCell, styles.tableCellCenter, { color: '#991B1B' }]}>—</Text>
+          </View>
+        ))
+      )}
     </View>
   );
 
@@ -135,6 +188,11 @@ export function ResultsScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+        ListEmptyComponent={
+          loadingResults
+            ? <ActivityIndicator color={colors.principal} style={{ marginTop: spacing.xxl }} />
+            : null
+        }
         renderItem={({ item }) => (
           <View style={styles.studentCard}>
             <Pressable
@@ -167,24 +225,28 @@ export function ResultsScreen() {
             {/* Exam selector */}
             <View>
               <Text style={styles.fieldLabel}>Select Exam</Text>
-              <FlatList
-                data={exams}
-                keyExtractor={e => e}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.examList}
-                ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={[styles.examOption, exam === item && styles.examOptionActive]}
-                    onPress={() => setExam(item)}
-                  >
-                    <Text style={[styles.examOptionText, exam === item && styles.examOptionTextActive]}>
-                      {item}
-                    </Text>
-                  </Pressable>
-                )}
-              />
+              {loadingExams ? (
+                <ActivityIndicator color={colors.principal} style={{ marginVertical: spacing.sm }} />
+              ) : (
+                <FlatList
+                  data={exams}
+                  keyExtractor={e => e}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.examList}
+                  ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      style={[styles.examOption, exam === item && styles.examOptionActive]}
+                      onPress={() => setExam(item)}
+                    >
+                      <Text style={[styles.examOptionText, exam === item && styles.examOptionTextActive]}>
+                        {item}
+                      </Text>
+                    </Pressable>
+                  )}
+                />
+              )}
             </View>
 
             {/* Class filter */}
@@ -287,21 +349,16 @@ export function ResultsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container:   { flex: 1, backgroundColor: colors.background },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   listContent: { padding: spacing.lg },
-  listHeader: { gap: spacing.lg, marginBottom: spacing.sm },
-  fieldLabel: {
-    ...(typography.caption as object), fontWeight: '500',
-    color: colors.textSecondary, marginBottom: spacing.xs,
-  },
+  listHeader:  { gap: spacing.lg, marginBottom: spacing.sm },
+  fieldLabel:  { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.xs },
   // Exam selector
   examList: { paddingVertical: spacing.xs },
   examOption: {
-    paddingVertical: 6, paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 0.5, borderColor: colors.border,
-    backgroundColor: colors.surface,
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999,
+    borderWidth: 0.5, borderColor: colors.border, backgroundColor: colors.surface,
   },
   examOptionActive:     { backgroundColor: colors.principal, borderColor: colors.principal },
   examOptionText:       { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
@@ -309,43 +366,35 @@ const styles = StyleSheet.create({
   // Class filter
   classFilters: { paddingVertical: spacing.xs },
   classFilter: {
-    paddingVertical: 5, paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 0.5, borderColor: colors.border,
-    backgroundColor: colors.surface,
+    paddingVertical: 5, paddingHorizontal: 14, borderRadius: 999,
+    borderWidth: 0.5, borderColor: colors.border, backgroundColor: colors.surface,
   },
   classFilterActive:     { backgroundColor: colors.principal, borderColor: 'transparent' },
   classFilterText:       { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
   classFilterTextActive: { color: colors.surface },
   // Score table
   tableCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5, borderColor: colors.border,
+    backgroundColor: colors.surface, borderWidth: 0.5, borderColor: colors.border,
     borderRadius: 14, overflow: 'hidden',
   },
   tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: colors.principal,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    flexDirection: 'row', backgroundColor: colors.principal,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
   },
   tableHeaderCell: {
-    flex: 1, ...(typography.label as object),
-    fontWeight: '600', color: colors.surface, textAlign: 'center',
+    flex: 1, ...(typography.label as object), fontWeight: '600', color: colors.surface, textAlign: 'center',
   },
   tableRow: {
-    flexDirection: 'row',
-    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
+    flexDirection: 'row', paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
     borderTopWidth: 0.5, borderTopColor: colors.border,
   },
-  tableCell:         { flex: 1, ...(typography.caption as object) },
-  tableCellSubject:  { fontWeight: '500', color: colors.textPrimary },
-  tableCellCenter:   { color: colors.textSecondary, textAlign: 'center' },
-  sectionLabel:      { ...(typography.label as object), color: colors.textMuted },
+  tableCell:        { flex: 1, ...(typography.caption as object) },
+  tableCellSubject: { fontWeight: '500', color: colors.textPrimary },
+  tableCellCenter:  { color: colors.textSecondary, textAlign: 'center' },
+  sectionLabel:     { ...(typography.label as object), color: colors.textMuted },
   // Student cards
   studentCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5, borderColor: colors.border, borderRadius: 14,
+    backgroundColor: colors.surface, borderWidth: 0.5, borderColor: colors.border, borderRadius: 14,
   },
   studentHeader: {
     flexDirection: 'row', alignItems: 'center',
@@ -355,46 +404,28 @@ const styles = StyleSheet.create({
     width: 26, height: 26, borderRadius: 13,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  rankBadgeText: { ...(typography.caption as object), fontWeight: '700', color: colors.surface },
-  studentName:   { flex: 1, ...(typography.body as object), color: colors.textPrimary },
-  studentScore:  { ...(typography.body as object), fontWeight: '600', color: colors.principal },
+  rankBadgeText:  { ...(typography.caption as object), fontWeight: '700', color: colors.surface },
+  studentName:    { flex: 1, ...(typography.body as object), color: colors.textPrimary },
+  studentScore:   { ...(typography.body as object), fontWeight: '600', color: colors.principal },
   breakdown: {
-    flexDirection: 'row',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderTopWidth: 0.5, borderTopColor: colors.border,
-    gap: spacing.md,
+    flexDirection: 'row', paddingVertical: spacing.sm, paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border, gap: spacing.md,
   },
   breakdownItem:  { flex: 1, alignItems: 'center', gap: spacing.xs },
   breakdownSub:   { ...(typography.caption as object), color: colors.textMuted },
   breakdownScore: { ...(typography.body as object), fontWeight: '600', color: colors.principal },
   // Publish bar
   publishBar: {
-    backgroundColor: colors.surface,
-    borderTopWidth: 0.5, borderTopColor: colors.border,
+    backgroundColor: colors.surface, borderTopWidth: 0.5, borderTopColor: colors.border,
     padding: spacing.md, paddingHorizontal: spacing.lg,
   },
-  publishBtn: {
-    height: 48, borderRadius: 10,
-    backgroundColor: colors.principal,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  publishBtn:     { height: 48, borderRadius: 10, backgroundColor: colors.principal, alignItems: 'center', justifyContent: 'center' },
   publishBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },
-  publishedRow: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  unpublishText: {
-    ...(typography.caption as object), color: colors.textMuted,
-    textDecorationLine: 'underline',
-  },
+  publishedRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  unpublishText:  { ...(typography.caption as object), color: colors.textMuted, textDecorationLine: 'underline' },
   // Exam creation sheet
   sheetTitle:      { ...(typography.h3 as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.md },
-  sheetFieldLabel: {
-    ...(typography.caption as object), fontWeight: '500',
-    color: colors.textSecondary, marginBottom: spacing.xs,
-  },
+  sheetFieldLabel: { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.xs },
   textInput: {
     backgroundColor: '#F5F5F5', borderRadius: 10,
     padding: spacing.md, ...(typography.body as object),
@@ -402,18 +433,16 @@ const styles = StyleSheet.create({
   },
   subjectChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
   subjectChip: {
-    paddingVertical: 6, paddingHorizontal: 14,
-    borderRadius: 999, borderWidth: 0.5, borderColor: colors.border,
-    backgroundColor: colors.surface,
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999,
+    borderWidth: 0.5, borderColor: colors.border, backgroundColor: colors.surface,
   },
   subjectChipActive:     { backgroundColor: colors.principal, borderColor: colors.principal },
   subjectChipText:       { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
   subjectChipTextActive: { color: colors.surface },
-  sheetBtns: { flexDirection: 'row', gap: spacing.sm },
+  sheetBtns:             { flexDirection: 'row', gap: spacing.sm },
   cancelBtn: {
     flex: 1, height: 48, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
   },
   cancelBtnText:         { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
   createExamBtn:         { flex: 1, height: 48, borderRadius: 10, backgroundColor: colors.principal, alignItems: 'center', justifyContent: 'center' },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, Dimensions,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, MetricCard, StatusPill } from '../shared';
+import { principalApi } from '../../services/principal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 // card content width: outer padding (16*2) + card padding (12*2)
@@ -32,7 +33,7 @@ const HOME_METRICS = [
 ];
 
 type Announcement = { id: string; title: string; date: string };
-const HOME_ANNOUNCEMENTS: Announcement[] = [
+const FALLBACK_ANNOUNCEMENTS: Announcement[] = [
   { id: '1', title: 'School Closed on 10 May for Elections', date: '3 May 2026' },
   { id: '2', title: 'Mid-Term Exam Timetable Released',       date: '3 May 2026' },
 ];
@@ -52,6 +53,23 @@ function heatColor(val: number) {
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
+  const [homeAnnouncements, setHomeAnnouncements] = useState<Announcement[]>(FALLBACK_ANNOUNCEMENTS);
+
+  useEffect(() => {
+    principalApi.getAnnouncements()
+      .then(data =>
+        setHomeAnnouncements(
+          data.slice(0, 2).map(a => ({
+            id: String(a.id),
+            title: a.title,
+            date: new Date(a.published_at).toLocaleDateString('en-IN', {
+              day: 'numeric', month: 'short', year: 'numeric',
+            }),
+          }))
+        )
+      )
+      .catch(() => {}); // keep fallback data on error
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -71,7 +89,7 @@ export function HomeScreen() {
       />
 
       <FlatList
-        data={HOME_ANNOUNCEMENTS}
+        data={homeAnnouncements}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}

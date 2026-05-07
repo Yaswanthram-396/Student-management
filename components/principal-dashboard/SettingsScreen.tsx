@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, Pressable, Modal, TextInput, StyleSheet,
+  View, Text, ScrollView, Pressable, Modal, TextInput, Alert, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, ToggleSwitch, SegmentedControl, BottomSheet } from '../shared';
+import { principalApi } from '../../services/principal';
+import { authApi } from '../../services/auth';
 
 // ─── Local sub-components ─────────────────────────────────────────────────────
 
@@ -71,24 +73,57 @@ export function SettingsScreen() {
   const [addingTeacher, setAddingTeacher]       = useState(false);
   const [teacherSuccess, setTeacherSuccess]     = useState(false);
 
-  function handleAddStudent() {
-    setAddingStudent(true);
-    setTimeout(() => {
-      setAddingStudent(false);
-      setStudentSuccess(true);
-      setTimeout(() => {
-        setStudentSuccess(false);
-        setStudentName(''); setStudentClass(''); setStudentSection('');
-        setParentName(''); setParentMobile('');
-        setShowStudentSheet(false);
-      }, 1500);
-    }, 700);
+  // ── Load config on mount ──────────────────────────────────────────────────
+  useEffect(() => {
+    principalApi.getConfig()
+      .then(cfg => {
+        setAttFreq(cfg.attendance_frequency === 'ONCE' ? 'once' : 'twice');
+        setWhatsapp(cfg.whatsapp_absent_automation_enabled);
+        setParentQuery(cfg.parent_query_enabled);
+        setSchoolUrl(cfg.subdomain + '.schoolapp.in');
+      })
+      .catch(() => {}); // keep defaults on network error
+  }, []);
+
+  // ── Toggle handlers (fire PATCH immediately) ──────────────────────────────
+  function handleAttFreqChange(i: number) {
+    const val = i === 0 ? 'once' : 'twice';
+    setAttFreq(val);
+    principalApi.updateConfig({ attendance_frequency: val === 'once' ? 'ONCE' : 'TWICE' })
+      .catch(() => {});
   }
 
-  function handleAddTeacher() {
+  function handleWhatsappToggle() {
+    const next = !whatsapp;
+    setWhatsapp(next);
+    principalApi.updateConfig({ whatsapp_absent_automation_enabled: next })
+      .catch(() => {});
+  }
+
+  function handleParentQueryToggle() {
+    const next = !parentQuery;
+    setParentQuery(next);
+    principalApi.updateConfig({ parent_query_enabled: next })
+      .catch(() => {});
+  }
+
+  // ── Teacher onboarding ────────────────────────────────────────────────────
+  async function handleAddTeacher() {
+    if (!teacherName || !teacherMobile) {
+      Alert.alert('Missing fields', 'Teacher name and mobile are required.');
+      return;
+    }
     setAddingTeacher(true);
-    setTimeout(() => {
-      setAddingTeacher(false);
+    try {
+      const username = teacherName.toLowerCase().replace(/\s+/g, '.') + '.teacher';
+      await principalApi.createTeacher({
+        name: teacherName,
+        mobile_number: teacherMobile,
+        username,
+        password: 'Welcome@123',
+        primary_subject_id: 1,    // ⚠ placeholder — needs subject picker API
+        assigned_section_ids: [1], // ⚠ placeholder — needs section picker API
+      });
       setTeacherSuccess(true);
       setTimeout(() => {
         setTeacherSuccess(false);
@@ -96,7 +131,68 @@ export function SettingsScreen() {
         setTeacherClass(''); setTeacherSection('');
         setShowTeacherSheet(false);
       }, 1500);
-    }, 700);
+    } catch (err: any) {
+      Alert.alert('Error', err.details ?? 'Failed to add teacher. Please try again.');
+    } finally {
+      setAddingTeacher(false);
+    }
+  }
+
+  // ── Student onboarding ────────────────────────────────────────────────────
+  async function handleAddStudent() {
+    if (!studentName || !studentClass || !studentSection || !parentName || !parentMobile) {
+      Alert.alert('Missing fields', 'All student fields are required.');
+      return;
+    }
+    setAddingStudent(true);
+    try {
+      // Build single-row CSV and POST as multipart
+      const csvContent =
+        `student_name,class,section,parent_name,parent_mobile_number\n` +
+        `${studentName},${studentClass},${studentSection},${parentName},${parentMobile}`;
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const formData = new FormData();
+      formData.append('csv_file', blob as any, 'student.csv');
+
+      const batch = await principalApi.bulkUploadStudents(formData);
+      pollBatchStatus(batch.batch_id);
+    } catch (err: any) {
+      Alert.alert('Error', err.details ?? 'Upload failed. Please try again.');
+      setAddingStudent(false);
+    }
+  }
+
+  function pollBatchStatus(batchId: number) {
+    const interval = setInterval(async () => {
+      try {
+        const status = await principalApi.getBulkUploadStatus(batchId);
+        if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+          clearInterval(interval);
+          setAddingStudent(false);
+          if (status.status === 'COMPLETED') {
+            setStudentSuccess(true);
+            setTimeout(() => {
+              setStudentSuccess(false);
+              setStudentName(''); setStudentClass(''); setStudentSection('');
+              setParentName(''); setParentMobile('');
+              setShowStudentSheet(false);
+            }, 1500);
+          } else {
+            Alert.alert('Upload failed', `${status.error_count} rows had errors.`);
+          }
+        }
+      } catch {
+        clearInterval(interval);
+        setAddingStudent(false);
+      }
+    }, 2000);
+  }
+
+  // ── Logout ────────────────────────────────────────────────────────────────
+  async function handleLogout() {
+    await authApi.logout();
+    setShowLogout(false);
+    router.replace('/');
   }
 
   return (
@@ -127,7 +223,7 @@ export function SettingsScreen() {
             <SegmentedControl
               options={['Once a day', 'Twice a day']}
               activeIndex={attFreq === 'once' ? 0 : 1}
-              onChange={i => setAttFreq(i === 0 ? 'once' : 'twice')}
+              onChange={handleAttFreqChange}
               accentColor={colors.principal}
             />
           </View>
@@ -137,7 +233,7 @@ export function SettingsScreen() {
             right={
               <ToggleSwitch
                 value={whatsapp}
-                onChange={() => setWhatsapp(v => !v)}
+                onChange={handleWhatsappToggle}
                 accentColor={colors.principal}
               />
             }
@@ -152,7 +248,7 @@ export function SettingsScreen() {
             right={
               <ToggleSwitch
                 value={parentQuery}
-                onChange={() => setParentQuery(v => !v)}
+                onChange={handleParentQueryToggle}
                 accentColor={colors.principal}
               />
             }
@@ -358,16 +454,10 @@ export function SettingsScreen() {
             <Text style={styles.dialogTitle}>Logout</Text>
             <Text style={styles.dialogBody}>Are you sure you want to logout?</Text>
             <View style={styles.dialogBtns}>
-              <Pressable
-                style={styles.dialogCancelBtn}
-                onPress={() => setShowLogout(false)}
-              >
+              <Pressable style={styles.dialogCancelBtn} onPress={() => setShowLogout(false)}>
                 <Text style={styles.dialogCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable
-                style={styles.dialogLogoutBtn}
-                onPress={() => { setShowLogout(false); router.replace('/'); }}
-              >
+              <Pressable style={styles.dialogLogoutBtn} onPress={handleLogout}>
                 <Text style={styles.dialogLogoutText}>Logout</Text>
               </Pressable>
             </View>
@@ -410,8 +500,7 @@ const styles = StyleSheet.create({
   // Settings row
   row: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
+    justifyContent: 'space-between', paddingVertical: spacing.md,
   },
   rowBorder:    { borderBottomWidth: 0.5, borderBottomColor: colors.border },
   rowLabel:     { ...(typography.body as object), color: colors.textPrimary, flex: 1 },
@@ -421,20 +510,15 @@ const styles = StyleSheet.create({
   logoutBtn: {
     height: 48, borderRadius: 10,
     borderWidth: 1.5, borderColor: colors.danger,
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: spacing.sm,
+    alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm,
   },
   logoutBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.danger },
   // Dialog
   dialogOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-    padding: spacing.xxl,
+    alignItems: 'center', justifyContent: 'center', padding: spacing.xxl,
   },
-  dialogCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 20, padding: spacing.xxl, width: '100%',
-  },
+  dialogCard: { backgroundColor: colors.surface, borderRadius: 20, padding: spacing.xxl, width: '100%' },
   dialogTitle: {
     ...(typography.h2 as object), fontWeight: '600',
     color: colors.textPrimary, textAlign: 'center', marginBottom: spacing.sm,
@@ -456,10 +540,7 @@ const styles = StyleSheet.create({
   sheetTitle:      { ...(typography.h3 as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.xs },
   sheetSubtext:    { ...(typography.caption as object), color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 18 },
   sheetSubheading: { ...(typography.body as object), fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
-  sheetFieldLabel: {
-    ...(typography.caption as object), fontWeight: '500',
-    color: colors.textSecondary, marginBottom: spacing.xs,
-  },
+  sheetFieldLabel: { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.xs },
   textInput: {
     backgroundColor: '#F5F5F5', borderRadius: 10,
     padding: spacing.md, ...(typography.body as object),
@@ -467,13 +548,11 @@ const styles = StyleSheet.create({
   },
   downloadLink: {
     ...(typography.body as object), color: colors.principal,
-    fontWeight: '500', textDecorationLine: 'underline',
-    marginBottom: spacing.md,
+    fontWeight: '500', textDecorationLine: 'underline', marginBottom: spacing.md,
   },
   uploadBtn: {
     flexDirection: 'row', height: 48, borderRadius: 10,
-    backgroundColor: colors.principal,
-    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.principal, alignItems: 'center', justifyContent: 'center',
     marginBottom: spacing.md,
   },
   uploadBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },
@@ -483,8 +562,7 @@ const styles = StyleSheet.create({
   sheetBtns:     { flexDirection: 'row', gap: spacing.sm },
   cancelBtn: {
     flex: 1, height: 48, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
   },
   cancelBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
   saveBtn:       { height: 48, borderRadius: 10, backgroundColor: colors.principal, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },

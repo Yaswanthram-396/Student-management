@@ -6,23 +6,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { authApi } from '../services/auth';
 
-// Demo credentials — each maps to a role dashboard
-const DEMO_ACCOUNTS: Record<string, { role: string; route: string; color: string }> = {
-  '9000000001': { role: 'Principal', route: '/(tabs)/principal/', color: '#534AB7' },
-  '9000000002': { role: 'Teacher',   route: '/(tabs)/teacher/',   color: '#185FA5' },
-  '9000000003': { role: 'Parent',    route: '/(tabs)/parent/',    color: '#1D9E75' },
+const ROLE_ROUTES: Record<string, string> = {
+  PRINCIPAL: '/(tabs)/principal/',
+  TEACHER:   '/(tabs)/teacher/',
+  PARENT:    '/(tabs)/parent/',
 };
-const DEMO_PASSWORD = '123456';
 
 export default function LoginScreen() {
-  const [phone, setPhone]           = useState('');
-  const [password, setPassword]     = useState('');
-  const [showPass, setShowPass]     = useState(false);
-  const [error, setError]           = useState('');
-  const [loading, setLoading]       = useState(false);
+  const [phone, setPhone]       = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
-  function handleLogin() {
+  async function handleLogin() {
     setError('');
     if (phone.length < 10) {
       setError('Enter a valid 10-digit phone number.');
@@ -32,24 +31,20 @@ export default function LoginScreen() {
       setError('Password cannot be empty.');
       return;
     }
-
-    const account = DEMO_ACCOUNTS[phone];
-    if (!account || password !== DEMO_PASSWORD) {
-      setError('Invalid phone number or password.');
-      return;
-    }
-
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const data = await authApi.login(phone, password);
+      const route = ROLE_ROUTES[data.role];
+      if (route) {
+        router.replace(route as any);
+      } else {
+        setError('Unknown role. Please contact your school administrator.');
+      }
+    } catch (err: any) {
+      setError(err.details ?? 'Login failed. Please try again.');
+    } finally {
       setLoading(false);
-      router.replace(account.route as any);
-    }, 600);
-  }
-
-  function fillDemo(phone: string) {
-    setPhone(phone);
-    setPassword(DEMO_PASSWORD);
-    setError('');
+    }
   }
 
   return (
@@ -63,7 +58,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo / Branding */}
+          {/* Branding */}
           <View style={styles.brandSection}>
             <View style={styles.logoCircle}>
               <Ionicons name="school" size={36} color="#FFFFFF" />
@@ -134,24 +129,12 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-          {/* Demo accounts */}
-          <View style={styles.demoSection}>
-            <Text style={styles.demoHeading}>Demo Accounts</Text>
-            <Text style={styles.demoNote}>Password for all accounts: 123456</Text>
-            {Object.entries(DEMO_ACCOUNTS).map(([ph, { role, color }]) => (
-              <Pressable
-                key={ph}
-                style={styles.demoRow}
-                onPress={() => fillDemo(ph)}
-              >
-                <View style={[styles.roleDot, { backgroundColor: color }]} />
-                <View style={styles.demoInfo}>
-                  <Text style={styles.demoRole}>{role}</Text>
-                  <Text style={styles.demoPhone}>{ph}</Text>
-                </View>
-                <Text style={[styles.demoFill, { color }]}>Use</Text>
-              </Pressable>
-            ))}
+          {/* Info section */}
+          <View style={styles.infoSection}>
+            <Ionicons name="information-circle-outline" size={16} color="#AAAAAA" />
+            <Text style={styles.infoText}>
+              Use the phone number and password provided by your school administrator to sign in.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -165,12 +148,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 48,
     paddingBottom: 32,
+    justifyContent: 'center',
   },
 
   // Branding
-  brandSection: { alignItems: 'center', marginBottom: 32 },
+  brandSection: { alignItems: 'center', marginBottom: 36 },
   logoCircle: {
     width: 72, height: 72, borderRadius: 20,
     backgroundColor: '#534AB7',
@@ -182,14 +166,8 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  appName: {
-    fontSize: 26, fontWeight: '700',
-    color: '#111111', letterSpacing: -0.5,
-  },
-  appTagline: {
-    fontSize: 13, color: '#888888',
-    marginTop: 4, textAlign: 'center',
-  },
+  appName:    { fontSize: 26, fontWeight: '700', color: '#111111', letterSpacing: -0.5 },
+  appTagline: { fontSize: 13, color: '#888888', marginTop: 4, textAlign: 'center' },
 
   // Card
   card: {
@@ -203,7 +181,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   cardTitle:    { fontSize: 20, fontWeight: '600', color: '#111111', marginBottom: 4 },
   cardSubtitle: { fontSize: 13, color: '#888888', marginBottom: 24 },
@@ -211,7 +189,8 @@ const styles = StyleSheet.create({
   // Fields
   fieldLabel: {
     fontSize: 12, fontWeight: '500',
-    color: '#666666', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4,
+    color: '#666666', marginBottom: 6,
+    textTransform: 'uppercase', letterSpacing: 0.4,
   },
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
@@ -246,25 +225,10 @@ const styles = StyleSheet.create({
   loginBtnLoading: { backgroundColor: '#1D9E75' },
   loginBtnText:    { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
 
-  // Demo section
-  demoSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16, padding: 20,
-    borderWidth: 0.5, borderColor: '#EEEEEE',
+  // Info
+  infoSection: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    gap: 8, paddingHorizontal: 4,
   },
-  demoHeading: {
-    fontSize: 11, fontWeight: '600', color: '#AAAAAA',
-    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4,
-  },
-  demoNote: { fontSize: 12, color: '#BBBBBB', marginBottom: 14 },
-  demoRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 10,
-    borderTopWidth: 0.5, borderTopColor: '#F0F0F0',
-  },
-  roleDot:  { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
-  demoInfo: { flex: 1 },
-  demoRole: { fontSize: 14, fontWeight: '500', color: '#111111' },
-  demoPhone:{ fontSize: 12, color: '#AAAAAA', marginTop: 1 },
-  demoFill: { fontSize: 13, fontWeight: '600' },
+  infoText: { flex: 1, fontSize: 12, color: '#AAAAAA', lineHeight: 18 },
 });

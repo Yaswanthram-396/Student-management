@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, StyleSheet,
+  View, Text, FlatList, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,8 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, BottomSheet } from '../shared';
+import { principalApi } from '../../services/principal';
+import type { AnnouncementResponse } from '../../types/principal';
 
 interface AnnItem {
   id: string;
@@ -17,26 +19,51 @@ interface AnnItem {
   date: string;
 }
 
+const AUDIENCE_DISPLAY: Record<string, { barColor: string; audienceBg: string; audienceText: string }> = {
+  SCHOOL:  { barColor: colors.principal, audienceBg: '#EDEDFA', audienceText: colors.principal },
+  CLASS:   { barColor: colors.warning,   audienceBg: colors.warningBg, audienceText: '#92400E' },
+  SECTION: { barColor: colors.warning,   audienceBg: colors.warningBg, audienceText: '#92400E' },
+};
+
+const AUDIENCE_LABEL: Record<string, string> = {
+  SCHOOL:  'Entire School',
+  CLASS:   'Specific Class',
+  SECTION: 'Specific Section',
+};
+
+function mapApiAnn(a: AnnouncementResponse): AnnItem {
+  const cfg = AUDIENCE_DISPLAY[a.audience] ?? AUDIENCE_DISPLAY['SCHOOL'];
+  return {
+    id: String(a.id),
+    barColor: cfg.barColor,
+    title: a.title,
+    body: a.body,
+    audience: AUDIENCE_LABEL[a.audience] ?? 'Entire School',
+    audienceBg: cfg.audienceBg,
+    audienceText: cfg.audienceText,
+    date: new Date(a.published_at).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    }),
+  };
+}
+
 const INIT_ANNOUNCEMENTS: AnnItem[] = [
   {
-    id: '1',
-    barColor: colors.principal,
+    id: '1', barColor: colors.principal,
     title: 'PTM Scheduled for 10 May',
     body: 'Dear parents, the Parent-Teacher Meeting is scheduled for Saturday, 10th May from 9 AM to 12 PM. Kindly make arrangements to attend.',
     audience: 'Entire School', audienceBg: '#EDEDFA', audienceText: colors.principal,
     date: '3 May 2026',
   },
   {
-    id: '2',
-    barColor: '#185FA5',
+    id: '2', barColor: '#185FA5',
     title: 'Staff Meeting on Friday',
     body: 'All teaching and non-teaching staff are required to attend the monthly staff meeting on Friday, 9 May at 3:30 PM in the conference hall.',
     audience: 'Teachers Only', audienceBg: '#DBEAFE', audienceText: '#185FA5',
     date: '1 May 2026',
   },
   {
-    id: '3',
-    barColor: colors.warning,
+    id: '3', barColor: colors.warning,
     title: 'Mid-Term Exam Timetable Released',
     body: 'The mid-term examination timetable for Class 8 has been shared. Students must carry their hall tickets on all exam days.',
     audience: 'Class 8', audienceBg: colors.warningBg, audienceText: '#92400E',
@@ -46,6 +73,12 @@ const INIT_ANNOUNCEMENTS: AnnItem[] = [
 
 const SEND_TO_OPTIONS = ['Entire School', 'Teachers Only', 'Specific Class'];
 const CLASS_OPTIONS   = ['Class 6', 'Class 7', 'Class 8', 'Class 9'];
+
+const SEND_TO_API: Record<string, 'SCHOOL' | 'CLASS'> = {
+  'Entire School':  'SCHOOL',
+  'Teachers Only':  'SCHOOL', // ⚠ no teacher-only audience in spec
+  'Specific Class': 'CLASS',
+};
 
 function AnnCard({ item }: { item: AnnItem }) {
   return (
@@ -69,6 +102,7 @@ function AnnCard({ item }: { item: AnnItem }) {
 
 export function AnnounceScreen() {
   const [announcements, setAnnouncements] = useState<AnnItem[]>(INIT_ANNOUNCEMENTS);
+  const [loading, setLoading]             = useState(false);
   const [showSheet, setShowSheet]         = useState(false);
   const [annTitle, setAnnTitle]           = useState('');
   const [annMsg, setAnnMsg]               = useState('');
@@ -76,31 +110,35 @@ export function AnnounceScreen() {
   const [selectedClass, setSelectedClass] = useState('Class 6');
   const [posting, setPosting]             = useState(false);
 
-  function handlePost() {
+  // ── Load announcements on mount ───────────────────────────────────────────
+  useEffect(() => {
+    setLoading(true);
+    principalApi.getAnnouncements()
+      .then(data => setAnnouncements(data.map(mapApiAnn)))
+      .catch(() => {}) // keep mock data on network error
+      .finally(() => setLoading(false));
+  }, []);
+
+  // ── Post announcement ─────────────────────────────────────────────────────
+  async function handlePost() {
     setPosting(true);
-    setTimeout(() => {
-      const isSchool   = sendTo === 'Entire School';
-      const isTeachers = sendTo === 'Teachers Only';
-
-      const audience     = isSchool ? 'Entire School' : isTeachers ? 'Teachers Only' : selectedClass;
-      const barColor     = isSchool ? colors.principal : isTeachers ? '#185FA5' : colors.warning;
-      const audienceBg   = isSchool ? '#EDEDFA' : isTeachers ? '#DBEAFE' : colors.warningBg;
-      const audienceText = isSchool ? colors.principal : isTeachers ? '#185FA5' : '#92400E';
-
-      const newItem: AnnItem = {
-        id: String(Date.now()),
-        barColor, audience, audienceBg, audienceText,
+    try {
+      const apiAudience = SEND_TO_API[sendTo] ?? 'SCHOOL';
+      const created = await principalApi.createAnnouncement({
         title: annTitle || 'New Announcement',
-        body:  annMsg   || 'No message body.',
-        date: 'Just now',
-      };
-      setAnnouncements(prev => [newItem, ...prev]);
-      setPosting(false);
+        body: annMsg || 'No message body.',
+        audience: apiAudience,
+        class_ids: apiAudience === 'CLASS' ? [1] : undefined, // ⚠ placeholder class ID
+        publish_now: true,
+      });
+      setAnnouncements(prev => [mapApiAnn(created), ...prev]);
       setShowSheet(false);
-      setAnnTitle('');
-      setAnnMsg('');
-      setSendTo('Entire School');
-    }, 700);
+      setAnnTitle(''); setAnnMsg(''); setSendTo('Entire School');
+    } catch (err: any) {
+      Alert.alert('Error', err.details ?? 'Failed to post announcement.');
+    } finally {
+      setPosting(false);
+    }
   }
 
   return (
@@ -121,6 +159,11 @@ export function AnnounceScreen() {
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          loading
+            ? <ActivityIndicator color={colors.principal} style={{ marginTop: spacing.xxl }} />
+            : <Text style={styles.emptyText}>No announcements yet.</Text>
+        }
       />
 
       <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
@@ -198,38 +241,26 @@ export function AnnounceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  listContent: { padding: spacing.lg },
+  container:    { flex: 1, backgroundColor: colors.background },
+  headerTitle:  { ...(typography.h3 as object), color: colors.textPrimary },
+  listContent:  { padding: spacing.lg },
+  emptyText:    { ...(typography.body as object), color: colors.textMuted, textAlign: 'center', marginTop: spacing.xxl },
   // Announcement card
   annCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderWidth: 0.5, borderColor: colors.border,
-    borderRadius: 14, overflow: 'hidden',
+    flexDirection: 'row', backgroundColor: colors.surface,
+    borderWidth: 0.5, borderColor: colors.border, borderRadius: 14, overflow: 'hidden',
   },
-  annAccent: { width: 3 },
-  annBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.lg },
-  annTitle: {
-    ...(typography.body as object), fontWeight: '500',
-    color: colors.textPrimary, marginBottom: spacing.xs,
-  },
-  annBodyText: {
-    ...(typography.caption as object), color: colors.textSecondary,
-    lineHeight: 18, marginBottom: spacing.sm,
-  },
-  annMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  audiencePill: {
-    borderRadius: 999, paddingVertical: spacing.xs, paddingHorizontal: spacing.md,
-  },
-  audienceLabel: { ...(typography.label as object) },
-  annDate: { ...(typography.caption as object), color: colors.textMuted },
+  annAccent:    { width: 3 },
+  annBody:      { flex: 1, padding: spacing.md, paddingLeft: spacing.lg },
+  annTitle:     { ...(typography.body as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.xs },
+  annBodyText:  { ...(typography.caption as object), color: colors.textSecondary, lineHeight: 18, marginBottom: spacing.sm },
+  annMeta:      { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  audiencePill: { borderRadius: 999, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
+  audienceLabel:{ ...(typography.label as object) },
+  annDate:      { ...(typography.caption as object), color: colors.textMuted },
   // Sheet
-  sheetTitle: { ...(typography.h3 as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.md },
-  fieldLabel: {
-    ...(typography.caption as object), fontWeight: '500',
-    color: colors.textSecondary, marginBottom: spacing.xs,
-  },
+  sheetTitle:  { ...(typography.h3 as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.md },
+  fieldLabel:  { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.xs },
   textInput: {
     backgroundColor: '#F5F5F5', borderRadius: 10,
     padding: spacing.md, ...(typography.body as object),
@@ -244,29 +275,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   sendToOptionActive: { borderColor: colors.principal, backgroundColor: '#EDEDFA' },
-  sendToText:        { ...(typography.body as object), color: colors.textSecondary },
-  sendToTextActive:  { color: colors.principal, fontWeight: '500' },
-  // Class picker chips
-  classPicker: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: spacing.xs, marginTop: spacing.xs, marginBottom: spacing.lg,
-  },
+  sendToText:         { ...(typography.body as object), color: colors.textSecondary },
+  sendToTextActive:   { color: colors.principal, fontWeight: '500' },
+  classPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, marginBottom: spacing.lg },
   classChip: {
-    paddingVertical: 6, paddingHorizontal: 14,
-    borderRadius: 999, borderWidth: 0.5, borderColor: colors.border,
-    backgroundColor: colors.surface,
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999,
+    borderWidth: 0.5, borderColor: colors.border, backgroundColor: colors.surface,
   },
   classChipActive:     { backgroundColor: colors.principal, borderColor: colors.principal },
   classChipText:       { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
   classChipTextActive: { color: colors.surface },
-  // Buttons
-  sheetBtns: { flexDirection: 'row', gap: spacing.sm },
+  sheetBtns:  { flexDirection: 'row', gap: spacing.sm },
   cancelBtn: {
     flex: 1, height: 48, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  cancelBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
+  cancelBtnText:  { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
   postBtn:        { flex: 1, height: 48, borderRadius: 10, backgroundColor: colors.principal, alignItems: 'center', justifyContent: 'center' },
   postBtnPosting: { backgroundColor: colors.success },
   postBtnText:    { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },
