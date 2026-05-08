@@ -1,7 +1,7 @@
 // School Configuration
 export interface SchoolConfig {
   school_id: number;
-  attendance_frequency: 'ONCE' | 'TWICE';
+  attendance_frequency: "ONCE" | "TWICE";
   whatsapp_absent_automation_enabled: boolean;
   parent_query_enabled: boolean;
   subdomain: string;
@@ -26,7 +26,7 @@ export interface TeacherResponse {
 // Student bulk upload
 export interface BulkUploadBatch {
   batch_id: number;
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
   total_rows: number;
   success_count: number;
   error_count: number;
@@ -38,7 +38,7 @@ export interface AnnouncementResponse {
   id: number;
   title: string;
   body: string;
-  audience: 'SCHOOL' | 'CLASS' | 'SECTION';
+  audience: "SCHOOL" | "CLASS" | "SECTION";
   published_at: string;
   attachments: string[];
 }
@@ -47,11 +47,11 @@ export interface AnnouncementResponse {
 export interface CalendarEventResponse {
   id: number;
   title: string;
-  event_type: 'HOLIDAY' | 'EXAM' | 'EVENT';
+  event_type: "HOLIDAY" | "EXAM" | "EVENT";
   start_date: string;
   end_date: string;
   description?: string;
-  visible_to: ('TEACHER' | 'STUDENT' | 'PARENT')[];
+  visible_to: ("TEACHER" | "STUDENT" | "PARENT")[];
 }
 
 // Exams
@@ -67,7 +67,7 @@ export interface ExamResponse {
   name: string;
   start_date: string;
   end_date: string;
-  status: 'DRAFT' | 'PUBLISHED';
+  status: "DRAFT" | "PUBLISHED";
   subjects: ExamSubject[];
 }
 
@@ -115,6 +115,12 @@ export interface AnalyticsResponse {
 export interface LoginResponse {
   access: string;
   refresh: string;
-  role: 'PRINCIPAL' | 'TEACHER' | 'PARENT';
-  user: { id: number; name: string };
+
+  user: {
+    id: number;
+    username: string;
+    phone_number: string;
+    email: string;
+    role: "PRINCIPAL" | "TEACHER" | "PARENT";
+  };
 }
