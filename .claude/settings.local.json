@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\" -Depth 2 -File | Where-Object { $_.Extension -in @\\('.json', '.tsx', '.ts'\\) } | Select-Object -ExpandProperty FullName | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\" -Depth 1 -Directory | Where-Object { $_.Name -notmatch \"node_modules|\\\\.expo\" } | Select-Object -ExpandProperty Name)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\index.tsx\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\homework.tsx\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\chat.tsx\" -Force)",
+      "Bash(Write-Host \"Deleted old tab files\")"
+    ]
+  }
+}

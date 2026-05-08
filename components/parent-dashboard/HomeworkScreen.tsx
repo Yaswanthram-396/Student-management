@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,8 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, StatusPill } from '../shared';
+import { parentApi } from '../../services/parent';
+import type { HomeworkItem } from '../../types/parent';
 
 type FilterKey = 'All' | 'Today' | 'This Week' | 'Overdue';
 const FILTERS: FilterKey[] = ['All', 'Today', 'This Week', 'Overdue'];
@@ -17,47 +19,51 @@ type HWItem = {
   subjectText: string;
   desc: string;
   due: string;
-  status: 'Pending' | 'Submitted';
+  status: 'Pending' | 'Overdue';
 };
 
-const HOMEWORKS: HWItem[] = [
-  {
-    id: '1',
-    subject: 'Math',
-    subjectBg: '#DBEAFE',
-    subjectText: colors.teacher,
-    desc: 'Complete Exercise 5.3 from NCERT',
-    due: '6 May 2026',
-    status: 'Pending',
-  },
-  {
-    id: '2',
-    subject: 'Science',
-    subjectBg: colors.successBg,
-    subjectText: colors.success,
-    desc: 'Draw the diagram of human digestive system',
-    due: '5 May 2026',
-    status: 'Submitted',
-  },
-  {
-    id: '3',
-    subject: 'English',
-    subjectBg: '#F3E8FF',
-    subjectText: '#7C3AED',
-    desc: 'Write a paragraph on My Best Friend (150 words)',
-    due: '7 May 2026',
-    status: 'Pending',
-  },
-  {
-    id: '4',
-    subject: 'Hindi',
-    subjectBg: '#FEF9C3',
-    subjectText: '#A16207',
-    desc: 'Learn poem on Page 45 by heart',
-    due: '8 May 2026',
-    status: 'Pending',
-  },
-];
+const SUBJECT_COLORS: Record<string, { bg: string; text: string }> = {
+  Mathematics: { bg: '#DBEAFE', text: colors.teacher },
+  Math: { bg: '#DBEAFE', text: colors.teacher },
+  Science: { bg: colors.successBg, text: colors.success },
+  English: { bg: '#F3E8FF', text: '#7C3AED' },
+  Hindi: { bg: '#FEF9C3', text: '#A16207' },
+};
+const DEFAULT_SUBJECT_COLOR = { bg: '#F3F4F6', text: colors.textSecondary };
+
+function subjectStyle(name: string) {
+  return SUBJECT_COLORS[name] ?? DEFAULT_SUBJECT_COLOR;
+}
+
+function mapHomework(hw: HomeworkItem): HWItem {
+  const deadline = new Date(hw.deadline);
+  const isPast = deadline < new Date();
+  const style = subjectStyle(hw.subject.name);
+  return {
+    id: hw.id,
+    subject: hw.subject.name,
+    subjectBg: style.bg,
+    subjectText: style.text,
+    desc: hw.description,
+    due: deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+    status: isPast ? 'Overdue' : 'Pending',
+  };
+}
+
+function applyFilter(items: HomeworkItem[], filter: FilterKey): HomeworkItem[] {
+  if (filter === 'All') return items;
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 86400000);
+  const weekEnd = new Date(todayStart.getTime() + 7 * 86400000);
+  return items.filter(hw => {
+    const d = new Date(hw.deadline);
+    if (filter === 'Today') return d >= todayStart && d < todayEnd;
+    if (filter === 'This Week') return d >= todayStart && d < weekEnd;
+    if (filter === 'Overdue') return d < todayStart;
+    return true;
+  });
+}
 
 function SubjectPill({ label, bg, text }: { label: string; bg: string; text: string }) {
   return (
@@ -73,7 +79,7 @@ function HWCard({ item }: { item: HWItem }) {
       <View style={styles.hwCardTop}>
         <SubjectPill label={item.subject} bg={item.subjectBg} text={item.subjectText} />
         <StatusPill
-          variant={item.status === 'Submitted' ? 'success' : 'warning'}
+          variant={item.status === 'Overdue' ? 'danger' : 'warning'}
           label={item.status}
         />
       </View>
@@ -88,6 +94,19 @@ function HWCard({ item }: { item: HWItem }) {
 
 export function HomeworkScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('All');
+  const [homework, setHomework] = useState<HomeworkItem[]>([]);
+
+  useEffect(() => {
+    parentApi.getProfile().then(profile => {
+      if (profile.students.length === 0) return;
+      parentApi
+        .getHomework(profile.students[0].id)
+        .then(data => setHomework(data.results))
+        .catch(() => {});
+    }).catch(() => {});
+  }, []);
+
+  const filtered = applyFilter(homework, activeFilter).map(mapHomework);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -117,12 +136,17 @@ export function HomeworkScreen() {
       </View>
 
       <FlatList
-        data={HOMEWORKS}
+        data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <HWCard item={item} />}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>No homework found</Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
@@ -185,4 +209,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   hwDue: { ...(typography.caption as object), color: colors.textMuted },
+  emptyWrap: {
+    paddingTop: spacing.xxl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+  },
 });

@@ -1,18 +1,22 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
+  Pressable,
   StyleSheet,
   Dimensions,
   ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, StatusPill } from '../shared';
+import { parentApi } from '../../services/parent';
+import type { ParentStudent, ParentAnnouncement } from '../../types/parent';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
@@ -20,16 +24,29 @@ const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
 type Child = { id: string; name: string; cls: string; present: boolean };
 type Update = { id: string; color: string; title: string; sub: string; time: string };
 
-const CHILDREN: Child[] = [
-  { id: '1', name: 'Arjun Kumar',  cls: 'Class 6 – Section B', present: true  },
-  { id: '2', name: 'Sneha Kumar',  cls: 'Class 3 – Section A', present: false },
-];
+const AUTHOR_COLORS: Record<string, string> = {
+  PRINCIPAL: colors.principal,
+  TEACHER: colors.teacher,
+};
 
-const HOME_UPDATES: Update[] = [
-  { id: '1', color: colors.teacher, title: 'Math Homework Due',       sub: 'Complete Ex 5.3 – Page 102',                  time: '2 hours ago' },
-  { id: '2', color: colors.success, title: 'School Closed Tomorrow',  sub: 'Holiday declared for state elections',         time: '4 hours ago' },
-  { id: '3', color: colors.warning, title: 'Science Exam on Friday',  sub: 'Chapters 4 and 5 — prepare well',             time: 'Yesterday'   },
-];
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function formatPublishedAt(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffH = Math.floor(diffMs / 3600000);
+  if (diffH < 1) return 'Just now';
+  if (diffH < 24) return `${diffH} hour${diffH > 1 ? 's' : ''} ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return 'Yesterday';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
 function ChildCard({ item }: { item: Child }) {
   return (
@@ -62,37 +79,98 @@ function FeedCard({ item }: { item: Update }) {
 }
 
 export function HomeScreen() {
+  const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
+  const [parentName, setParentName] = useState('');
+  const [schoolInitials, setSchoolInitials] = useState('');
+  const [students, setStudents] = useState<ParentStudent[]>([]);
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, boolean>>({});
+  const [announcements, setAnnouncements] = useState<ParentAnnouncement[]>([]);
+
+  useEffect(() => {
+    parentApi.getProfile().then(profile => {
+      setParentName(profile.name.split(' ')[0]);
+      setSchoolInitials(
+        profile.school.name
+          .split(' ')
+          .slice(0, 3)
+          .map(w => w[0])
+          .join('')
+          .toUpperCase(),
+      );
+      setStudents(profile.students);
+
+      const today = new Date().toISOString().split('T')[0];
+      profile.students.forEach(student => {
+        parentApi
+          .getAttendance(student.id, { date_from: today, date_to: today })
+          .then(att => {
+            const isPresent = att.results.some(r => r.status === 'PRESENT');
+            setAttendanceMap(prev => ({ ...prev, [student.id]: isPresent }));
+          })
+          .catch(() => {});
+      });
+
+      if (profile.students.length > 0) {
+        parentApi
+          .getAnnouncements(profile.students[0].id)
+          .then(data => setAnnouncements(data.results))
+          .catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
-    }
+    },
   ).current;
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+  const childrenData: Child[] = students.map(s => ({
+    id: s.id,
+    name: s.name,
+    cls: `${s.academic_class.name} – Section ${s.section.name}`,
+    present: attendanceMap[s.id] ?? false,
+  }));
+
+  const feedItems: Update[] = announcements.map(a => ({
+    id: a.id,
+    color: AUTHOR_COLORS[a.author_role] ?? colors.parent,
+    title: a.title,
+    sub: a.body,
+    time: formatPublishedAt(a.published_at),
+  }));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <HeaderBar
         left={
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>DPS</Text>
+            <Text style={styles.logoText}>{schoolInitials || '···'}</Text>
           </View>
         }
         center={
-          <Text style={styles.greeting} numberOfLines={1}>Good morning, Priya</Text>
+          <Text style={styles.greeting} numberOfLines={1}>
+            {getGreeting()}{parentName ? `, ${parentName}` : ''}
+          </Text>
         }
         right={
-          <View>
-            <Ionicons name="notifications-outline" size={22} color={colors.textMuted} />
-            <View style={styles.notifDot} />
+          <View style={styles.headerRight}>
+            <Pressable onPress={() => router.push('/(tabs)/parent/calendar')}>
+              <Ionicons name="calendar-outline" size={22} color={colors.parent} />
+            </Pressable>
+            <View>
+              <Ionicons name="notifications-outline" size={22} color={colors.textMuted} />
+              {announcements.length > 0 && <View style={styles.notifDot} />}
+            </View>
           </View>
         }
       />
 
       <FlatList
-        data={HOME_UPDATES}
+        data={feedItems}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.feedWrapper}>
@@ -104,31 +182,44 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <FlatList
-              data={CHILDREN}
-              keyExtractor={(c) => c.id}
-              renderItem={({ item }) => <ChildCard item={item} />}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
-            />
-            <View style={styles.dots}>
-              {CHILDREN.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    {
-                      width: i === activeIndex ? 20 : 6,
-                      backgroundColor: i === activeIndex ? colors.parent : colors.border,
-                    },
-                  ]}
+            {childrenData.length > 0 && (
+              <>
+                <FlatList
+                  data={childrenData}
+                  keyExtractor={(c) => c.id}
+                  renderItem={({ item }) => <ChildCard item={item} />}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onViewableItemsChanged={onViewableItemsChanged}
+                  viewabilityConfig={viewabilityConfig}
                 />
-              ))}
-            </View>
-            <Text style={styles.sectionLabel}>Today's Updates</Text>
+                {childrenData.length > 1 && (
+                  <View style={styles.dots}>
+                    {childrenData.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.dot,
+                          {
+                            width: i === activeIndex ? 20 : 6,
+                            backgroundColor: i === activeIndex ? colors.parent : colors.border,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+            {feedItems.length > 0 && (
+              <Text style={styles.sectionLabel}>Announcements</Text>
+            )}
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>No announcements yet</Text>
           </View>
         }
       />
@@ -155,8 +246,14 @@ const styles = StyleSheet.create({
     ...(typography.label as object),
     color: colors.surface,
     fontWeight: '700',
+    fontSize: 9,
   },
   greeting: { ...(typography.h3 as object), color: colors.textPrimary },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   notifDot: {
     position: 'absolute',
     top: 0,
@@ -227,5 +324,13 @@ const styles = StyleSheet.create({
     ...(typography.caption as object),
     color: colors.textMuted,
     marginTop: spacing.xs,
+  },
+  emptyWrap: {
+    paddingTop: spacing.xxl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...(typography.body as object),
+    color: colors.textMuted,
   },
 });

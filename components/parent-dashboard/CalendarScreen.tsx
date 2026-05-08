@@ -1,40 +1,38 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   Pressable,
-  TextInput,
   StyleSheet,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
-import { HeaderBar, BottomSheet } from '../shared';
+import { HeaderBar } from '../shared';
+import { parentApi } from '../../services/parent';
+import type { ParentCalendarEvent } from '../../types/parent';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CELL_SIZE = (SCREEN_WIDTH - spacing.lg * 2) / 7;
 
 const WEEK_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_NAMES = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const FIXED_TODAY = { day: 5, month: 4, year: 2026 };
-const EVENT_DATES = [10, 15, 22, 25];
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  HOLIDAY: colors.success,
+  EXAM: colors.warning,
+  EVENT: '#14B8A6',
+};
 
 type CalEvent = { id: string; date: string; name: string; bar: string };
-
-const INITIAL_EVENTS: CalEvent[] = [
-  { id: '1', date: '10 May', name: 'Parent-Teacher Meeting',    bar: colors.success  },
-  { id: '2', date: '15 May', name: 'Mid-Term Exams Begin',      bar: colors.warning  },
-  { id: '3', date: '22 May', name: 'Annual Sports Day',         bar: '#14B8A6'       },
-  { id: '4', date: '25 May', name: 'School Closes for Summer',  bar: colors.danger   },
-];
 
 function buildCalDays(year: number, month: number): (number | null)[] {
   const firstDay = new Date(year, month, 1).getDay();
@@ -42,6 +40,15 @@ function buildCalDays(year: number, month: number): (number | null)[] {
   const days: (number | null)[] = Array(firstDay).fill(null);
   for (let d = 1; d <= daysInMonth; d++) days.push(d);
   return days;
+}
+
+function formatEventDate(start: string, end: string) {
+  const s = new Date(start);
+  const e = new Date(end);
+  if (start === end) {
+    return s.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  }
+  return `${s.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
 }
 
 function EventRow({ item }: { item: CalEvent }) {
@@ -57,14 +64,47 @@ function EventRow({ item }: { item: CalEvent }) {
 }
 
 export function CalendarScreen() {
-  const [year, setYear]           = useState(2026);
-  const [month, setMonth]         = useState(4);
-  const [events, setEvents]       = useState<CalEvent[]>(INITIAL_EVENTS);
-  const [showAdd, setShowAdd]     = useState(false);
-  const [eventTitle, setEventTitle] = useState('');
+  const router = useRouter();
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+  const [studentId, setStudentId] = useState<string | null>(null);
+  const [calEvents, setCalEvents] = useState<ParentCalendarEvent[]>([]);
+
+  useEffect(() => {
+    parentApi.getProfile().then(profile => {
+      if (profile.students.length > 0) {
+        setStudentId(profile.students[0].id);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!studentId) return;
+    const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+    const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+    parentApi
+      .getCalendarEvents(studentId, { start_date: startDate, end_date: endDate })
+      .then(data => setCalEvents(data.results))
+      .catch(() => {});
+  }, [studentId, year, month]);
 
   const calDays = buildCalDays(year, month);
-  const isFixedMonth = month === FIXED_TODAY.month && year === FIXED_TODAY.year;
+  const isCurrentMonth = month === today.getMonth() && year === today.getFullYear();
+
+  const eventDaysInMonth = new Set(
+    calEvents
+      .map(e => new Date(e.start_date))
+      .filter(d => d.getMonth() === month && d.getFullYear() === year)
+      .map(d => d.getDate()),
+  );
+
+  const events: CalEvent[] = calEvents.map(e => ({
+    id: e.id,
+    date: formatEventDate(e.start_date, e.end_date),
+    name: e.title,
+    bar: EVENT_TYPE_COLORS[e.event_type] ?? colors.parent,
+  }));
 
   const goBack = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
@@ -75,20 +115,8 @@ export function CalendarScreen() {
     else setMonth(m => m + 1);
   };
 
-  const handleSave = () => {
-    if (eventTitle.trim()) {
-      setEvents(prev => [
-        ...prev,
-        { id: String(Date.now()), date: 'Upcoming', name: eventTitle.trim(), bar: colors.principal },
-      ]);
-    }
-    setEventTitle('');
-    setShowAdd(false);
-  };
-
   const CalHeader = (
     <View style={styles.calHeader}>
-      {/* Month nav */}
       <View style={styles.monthNav}>
         <Pressable style={styles.navBtn} onPress={goBack}>
           <Text style={styles.navArrow}>‹</Text>
@@ -99,7 +127,6 @@ export function CalendarScreen() {
         </Pressable>
       </View>
 
-      {/* Week day headers */}
       <View style={styles.weekRow}>
         {WEEK_DAYS.map((d, i) => (
           <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
@@ -108,11 +135,10 @@ export function CalendarScreen() {
         ))}
       </View>
 
-      {/* Calendar grid */}
       <View style={styles.calGrid}>
         {calDays.map((d, i) => {
-          const isToday = isFixedMonth && d === FIXED_TODAY.day;
-          const hasEvent = isFixedMonth && d !== null && EVENT_DATES.includes(d);
+          const isToday = isCurrentMonth && d === today.getDate();
+          const hasEvent = d !== null && eventDaysInMonth.has(d);
           return (
             <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
               {d !== null && (
@@ -135,12 +161,12 @@ export function CalendarScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <HeaderBar
-        center={<Text style={styles.headerTitle}>Academic Calendar</Text>}
-        right={
-          <Pressable onPress={() => setShowAdd(true)}>
-            <Ionicons name="add-circle-outline" size={24} color={colors.parent} />
+        left={
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
           </Pressable>
         }
+        center={<Text style={styles.headerTitle}>Academic Calendar</Text>}
       />
 
       <FlatList
@@ -151,23 +177,12 @@ export function CalendarScreen() {
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={CalHeader}
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>No events this month</Text>
+          </View>
+        }
       />
-
-      <BottomSheet visible={showAdd} onClose={() => setShowAdd(false)}>
-        <Text style={styles.sheetTitle}>Add Event</Text>
-        <TextInput
-          style={styles.eventInput}
-          value={eventTitle}
-          onChangeText={setEventTitle}
-          placeholder="Event name..."
-          placeholderTextColor={colors.textMuted}
-          returnKeyType="done"
-          onSubmitEditing={handleSave}
-        />
-        <Pressable style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Save</Text>
-        </Pressable>
-      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -176,7 +191,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   listContent: { paddingBottom: spacing.lg },
-  // Calendar header section
   calHeader: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
@@ -235,7 +249,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginBottom: spacing.sm,
   },
-  // Event rows
   eventCard: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -257,31 +270,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.xs,
   },
-  // Add event sheet
-  sheetTitle: {
-    ...(typography.h2 as object),
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
-  eventInput: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: spacing.md,
-    ...(typography.body as object),
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
-  saveBtn: {
-    backgroundColor: colors.parent,
-    borderRadius: 10,
-    paddingVertical: spacing.md,
+  emptyWrap: {
+    paddingTop: spacing.xl,
     alignItems: 'center',
   },
-  saveBtnText: {
+  emptyText: {
     ...(typography.body as object),
-    fontWeight: '600',
-    color: colors.surface,
+    color: colors.textMuted,
   },
 });
