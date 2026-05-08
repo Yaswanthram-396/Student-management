@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,20 +12,36 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LoadingScreen } from "../components/shared";
 import { authApi } from "../services/auth";
+import { signInWithTokens, useAuthStore } from "../store/auth-store";
+import type { UserRole } from "../types/auth";
 
-const ROLE_ROUTES: Record<string, string> = {
+const ROLE_ROUTES: Partial<Record<UserRole, string>> = {
   PRINCIPAL: "/(tabs)/principal/",
   TEACHER: "/(tabs)/teacher/",
   PARENT: "/(tabs)/parent/",
 };
 
 export default function LoginScreen() {
+  const { bootstrapped, currentUser, loadingMe } = useAuthStore();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!bootstrapped || !currentUser) return;
+    const route = ROLE_ROUTES[currentUser.role];
+    if (route) {
+      router.replace(route as any);
+    }
+  }, [bootstrapped, currentUser]);
+
+  if (!bootstrapped || loadingMe) {
+    return <LoadingScreen label="Checking your session..." />;
+  }
 
   async function handleLogin() {
     setError("");
@@ -40,8 +56,9 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const data = await authApi.login(phone, password);
-      const route = ROLE_ROUTES[data.user.role];
-      console.log("route: ", route, "data.user.role: ", data.user.role);
+      const currentUser = await signInWithTokens(data.access, data.refresh);
+      const role = currentUser?.role ?? data.user.role;
+      const route = ROLE_ROUTES[role];
       if (route) {
         router.replace(route as any);
       } else {

@@ -1,28 +1,40 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
+  Dimensions,
   FlatList,
   Pressable,
   StyleSheet,
-  Dimensions,
+  Text,
+  View,
   ViewToken,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar, StatusPill } from '../shared';
-import { parentApi } from '../../services/parent';
-import type { ParentStudent, ParentAnnouncement } from '../../types/parent';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
+import { parentApi } from "../../services/parent";
+import type { ParentAnnouncement, ParentStudent } from "../../types/parent";
+import { HeaderBar, LoadingScreen, StatusPill } from "../shared";
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const SCREEN_WIDTH = Dimensions.get("window").width;
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
 
-type Child = { id: string; name: string; cls: string; present: boolean };
-type Update = { id: string; color: string; title: string; sub: string; time: string };
+type AttendanceState = "present" | "absent" | "pending";
+type Child = {
+  id: string;
+  name: string;
+  cls: string;
+  attendance: AttendanceState;
+};
+type Update = {
+  id: string;
+  color: string;
+  title: string;
+  sub: string;
+  time: string;
+};
 
 const AUTHOR_COLORS: Record<string, string> = {
   PRINCIPAL: colors.principal,
@@ -31,9 +43,9 @@ const AUTHOR_COLORS: Record<string, string> = {
 
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 function formatPublishedAt(iso: string) {
@@ -41,11 +53,11 @@ function formatPublishedAt(iso: string) {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffH = Math.floor(diffMs / 3600000);
-  if (diffH < 1) return 'Just now';
-  if (diffH < 24) return `${diffH} hour${diffH > 1 ? 's' : ''} ago`;
+  if (diffH < 1) return "Just now";
+  if (diffH < 24) return `${diffH} hour${diffH > 1 ? "s" : ""} ago`;
   const diffD = Math.floor(diffH / 24);
-  if (diffD === 1) return 'Yesterday';
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  if (diffD === 1) return "Yesterday";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
 function ChildCard({ item }: { item: Child }) {
@@ -57,8 +69,20 @@ function ChildCard({ item }: { item: Child }) {
           <Text style={styles.childCls}>{item.cls}</Text>
         </View>
         <StatusPill
-          variant={item.present ? 'success' : 'danger'}
-          label={item.present ? 'Present Today' : 'Absent Today'}
+          variant={
+            item.attendance === "present"
+              ? "success"
+              : item.attendance === "pending"
+                ? "warning"
+                : "danger"
+          }
+          label={
+            item.attendance === "present"
+              ? "Present Today"
+              : item.attendance === "pending"
+                ? "Pending"
+                : "Absent Today"
+          }
         />
       </View>
     </View>
@@ -81,43 +105,58 @@ function FeedCard({ item }: { item: Update }) {
 export function HomeScreen() {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
-  const [parentName, setParentName] = useState('');
-  const [schoolInitials, setSchoolInitials] = useState('');
+  const [parentName, setParentName] = useState("");
+  const [schoolInitials, setSchoolInitials] = useState("");
   const [students, setStudents] = useState<ParentStudent[]>([]);
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, boolean>>({});
+  const [attendanceMap, setAttendanceMap] = useState<
+    Record<string, AttendanceState>
+  >({});
   const [announcements, setAnnouncements] = useState<ParentAnnouncement[]>([]);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   useEffect(() => {
-    parentApi.getProfile().then(profile => {
-      setParentName(profile.name.split(' ')[0]);
-      setSchoolInitials(
-        profile.school.name
-          .split(' ')
-          .slice(0, 3)
-          .map(w => w[0])
-          .join('')
-          .toUpperCase(),
-      );
-      setStudents(profile.students);
+    parentApi
+      .getProfile()
+      .then((profile) => {
+        setParentName(profile.name.split(" ")[0]);
+        setSchoolInitials(
+          profile.school.name
+            .split(" ")
+            .slice(0, 3)
+            .map((w) => w[0])
+            .join("")
+            .toUpperCase(),
+        );
+        setStudents(profile.students);
 
-      const today = new Date().toISOString().split('T')[0];
-      profile.students.forEach(student => {
-        parentApi
-          .getAttendance(student.id, { date_from: today, date_to: today })
-          .then(att => {
-            const isPresent = att.results.some(r => r.status === 'PRESENT');
-            setAttendanceMap(prev => ({ ...prev, [student.id]: isPresent }));
-          })
-          .catch(() => {});
-      });
+        const today = new Date().toISOString().split("T")[0];
+        profile.students.forEach((student) => {
+          parentApi
+            .getAttendance(student.id, { date_from: today, date_to: today })
+            .then((att) => {
+              const attendance: AttendanceState =
+                att.results.length === 0
+                  ? "pending"
+                  : att.results.some((r) => r.status === "PRESENT")
+                    ? "present"
+                    : "absent";
+              setAttendanceMap((prev) => ({
+                ...prev,
+                [student.id]: attendance,
+              }));
+            })
+            .catch(() => {});
+        });
 
-      if (profile.students.length > 0) {
-        parentApi
-          .getAnnouncements(profile.students[0].id)
-          .then(data => setAnnouncements(data.results))
-          .catch(() => {});
-      }
-    }).catch(() => {});
+        if (profile.students.length > 0) {
+          parentApi
+            .getAnnouncements(profile.students[0].id)
+            .then((data) => setAnnouncements(data.results))
+            .catch(() => {});
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingProfile(false));
   }, []);
 
   const onViewableItemsChanged = useRef(
@@ -128,14 +167,14 @@ export function HomeScreen() {
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
-  const childrenData: Child[] = students.map(s => ({
+  const childrenData: Child[] = students.map((s) => ({
     id: s.id,
     name: s.name,
     cls: `${s.academic_class.name} – Section ${s.section.name}`,
-    present: attendanceMap[s.id] ?? false,
+    attendance: attendanceMap[s.id] ?? "pending",
   }));
 
-  const feedItems: Update[] = announcements.map(a => ({
+  const feedItems: Update[] = announcements.map((a) => ({
     id: a.id,
     color: AUTHOR_COLORS[a.author_role] ?? colors.parent,
     title: a.title,
@@ -143,26 +182,39 @@ export function HomeScreen() {
     time: formatPublishedAt(a.published_at),
   }));
 
+  if (loadingProfile) {
+    return <LoadingScreen label="Loading parent profile..." />;
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <HeaderBar
         left={
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>{schoolInitials || '···'}</Text>
+            <Text style={styles.logoText}>{schoolInitials || "···"}</Text>
           </View>
         }
         center={
           <Text style={styles.greeting} numberOfLines={1}>
-            {getGreeting()}{parentName ? `, ${parentName}` : ''}
+            {getGreeting()}
+            {parentName ? `, ${parentName}` : ""}
           </Text>
         }
         right={
           <View style={styles.headerRight}>
-            <Pressable onPress={() => router.push('/(tabs)/parent/calendar')}>
-              <Ionicons name="calendar-outline" size={22} color={colors.parent} />
+            <Pressable onPress={() => router.push("/(tabs)/parent/calendar")}>
+              <Ionicons
+                name="calendar-outline"
+                size={22}
+                color={colors.parent}
+              />
             </Pressable>
             <View>
-              <Ionicons name="notifications-outline" size={22} color={colors.textMuted} />
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color={colors.textMuted}
+              />
               {announcements.length > 0 && <View style={styles.notifDot} />}
             </View>
           </View>
@@ -203,7 +255,8 @@ export function HomeScreen() {
                           styles.dot,
                           {
                             width: i === activeIndex ? 20 : 6,
-                            backgroundColor: i === activeIndex ? colors.parent : colors.border,
+                            backgroundColor:
+                              i === activeIndex ? colors.parent : colors.border,
                           },
                         ]}
                       />
@@ -239,23 +292,23 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     backgroundColor: colors.parent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoText: {
     ...(typography.label as object),
     color: colors.surface,
-    fontWeight: '700',
+    fontWeight: "700",
     fontSize: 9,
   },
   greeting: { ...(typography.h3 as object), color: colors.textPrimary },
   headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
   },
   notifDot: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     right: 0,
     width: 7,
@@ -274,9 +327,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   childRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
   },
   childInfo: { flex: 1, marginRight: spacing.sm },
   childName: { ...(typography.h2 as object), color: colors.textPrimary },
@@ -286,9 +339,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   dots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: spacing.xs,
     marginBottom: spacing.xl,
   },
@@ -300,18 +353,18 @@ const styles = StyleSheet.create({
   },
   feedWrapper: { paddingHorizontal: spacing.lg },
   feedCard: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: colors.surface,
     borderWidth: 0.5,
     borderColor: colors.border,
     borderRadius: 14,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   feedAccent: { width: 3 },
   feedBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.lg },
   feedTitle: {
     ...(typography.body as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
@@ -327,7 +380,7 @@ const styles = StyleSheet.create({
   },
   emptyWrap: {
     paddingTop: spacing.xxl,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     ...(typography.body as object),

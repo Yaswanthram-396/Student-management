@@ -1,3 +1,5 @@
+import type { UserRole } from "./auth";
+
 // School Configuration
 export interface SchoolConfig {
   school_id: number;
@@ -121,6 +123,6 @@ export interface LoginResponse {
     username: string;
     phone_number: string;
     email: string;
-    role: "PRINCIPAL" | "TEACHER" | "PARENT";
+    role: UserRole;
   };
 }

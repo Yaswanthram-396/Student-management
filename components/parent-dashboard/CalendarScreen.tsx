@@ -1,35 +1,45 @@
-import React, { useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Dimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar } from '../shared';
-import { parentApi } from '../../services/parent';
-import type { ParentCalendarEvent } from '../../types/parent';
+    Dimensions,
+    FlatList,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
+import { parentApi } from "../../services/parent";
+import type { ParentCalendarEvent } from "../../types/parent";
+import { HeaderBar, LoadingScreen } from "../shared";
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const SCREEN_WIDTH = Dimensions.get("window").width;
 const CELL_SIZE = (SCREEN_WIDTH - spacing.lg * 2) / 7;
 
-const WEEK_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEK_DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   HOLIDAY: colors.success,
   EXAM: colors.warning,
-  EVENT: '#14B8A6',
+  EVENT: "#14B8A6",
 };
 
 type CalEvent = { id: string; date: string; name: string; bar: string };
@@ -46,9 +56,9 @@ function formatEventDate(start: string, end: string) {
   const s = new Date(start);
   const e = new Date(end);
   if (start === end) {
-    return s.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return s.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   }
-  return `${s.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+  return `${s.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${e.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
 }
 
 function EventRow({ item }: { item: CalEvent }) {
@@ -70,36 +80,49 @@ export function CalendarScreen() {
   const [month, setMonth] = useState(today.getMonth());
   const [studentId, setStudentId] = useState<string | null>(null);
   const [calEvents, setCalEvents] = useState<ParentCalendarEvent[]>([]);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   useEffect(() => {
-    parentApi.getProfile().then(profile => {
-      if (profile.students.length > 0) {
-        setStudentId(profile.students[0].id);
-      }
-    }).catch(() => {});
+    parentApi
+      .getProfile()
+      .then((profile) => {
+        if (profile.students.length > 0) {
+          setStudentId(profile.students[0].id);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingProfile(false));
   }, []);
 
   useEffect(() => {
     if (!studentId) return;
-    const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-    const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+    const startDate = new Date(year, month, 1).toISOString().split("T")[0];
+    const endDate = new Date(year, month + 1, 0).toISOString().split("T")[0];
     parentApi
-      .getCalendarEvents(studentId, { start_date: startDate, end_date: endDate })
-      .then(data => setCalEvents(data.results))
+      .getCalendarEvents(studentId, {
+        start_date: startDate,
+        end_date: endDate,
+      })
+      .then((data) => setCalEvents(data.results))
       .catch(() => {});
   }, [studentId, year, month]);
 
+  if (loadingProfile) {
+    return <LoadingScreen label="Loading calendar profile..." />;
+  }
+
   const calDays = buildCalDays(year, month);
-  const isCurrentMonth = month === today.getMonth() && year === today.getFullYear();
+  const isCurrentMonth =
+    month === today.getMonth() && year === today.getFullYear();
 
   const eventDaysInMonth = new Set(
     calEvents
-      .map(e => new Date(e.start_date))
-      .filter(d => d.getMonth() === month && d.getFullYear() === year)
-      .map(d => d.getDate()),
+      .map((e) => new Date(e.start_date))
+      .filter((d) => d.getMonth() === month && d.getFullYear() === year)
+      .map((d) => d.getDate()),
   );
 
-  const events: CalEvent[] = calEvents.map(e => ({
+  const events: CalEvent[] = calEvents.map((e) => ({
     id: e.id,
     date: formatEventDate(e.start_date, e.end_date),
     name: e.title,
@@ -107,12 +130,16 @@ export function CalendarScreen() {
   }));
 
   const goBack = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
+    if (month === 0) {
+      setMonth(11);
+      setYear((y) => y - 1);
+    } else setMonth((m) => m - 1);
   };
   const goNext = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
+    if (month === 11) {
+      setMonth(0);
+      setYear((y) => y + 1);
+    } else setMonth((m) => m + 1);
   };
 
   const CalHeader = (
@@ -121,7 +148,9 @@ export function CalendarScreen() {
         <Pressable style={styles.navBtn} onPress={goBack}>
           <Text style={styles.navArrow}>‹</Text>
         </Pressable>
-        <Text style={styles.monthLabel}>{MONTH_NAMES[month]} {year}</Text>
+        <Text style={styles.monthLabel}>
+          {MONTH_NAMES[month]} {year}
+        </Text>
         <Pressable style={styles.navBtn} onPress={goNext}>
           <Text style={styles.navArrow}>›</Text>
         </Pressable>
@@ -143,8 +172,12 @@ export function CalendarScreen() {
             <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
               {d !== null && (
                 <>
-                  <View style={[styles.dayCircle, isToday && styles.todayCircle]}>
-                    <Text style={[styles.dayNum, isToday && styles.todayNum]}>{d}</Text>
+                  <View
+                    style={[styles.dayCircle, isToday && styles.todayCircle]}
+                  >
+                    <Text style={[styles.dayNum, isToday && styles.todayNum]}>
+                      {d}
+                    </Text>
                   </View>
                   {hasEvent && <View style={styles.eventDot} />}
                 </>
@@ -159,7 +192,7 @@ export function CalendarScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <HeaderBar
         left={
           <Pressable onPress={() => router.back()} hitSlop={8}>
@@ -197,9 +230,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: spacing.lg,
   },
   navBtn: {
@@ -209,34 +242,34 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   navArrow: { fontSize: 20, color: colors.textMuted, lineHeight: 24 },
   monthLabel: {
     ...(typography.h3 as object),
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.textPrimary,
   },
-  weekRow: { flexDirection: 'row', marginBottom: spacing.xs },
+  weekRow: { flexDirection: "row", marginBottom: spacing.xs },
   weekDayLabel: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textMuted,
-    textAlign: 'center',
+    textAlign: "center",
   },
-  calGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.xl },
-  dayCell: { alignItems: 'center', paddingVertical: 3 },
+  calGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: spacing.xl },
+  dayCell: { alignItems: "center", paddingVertical: 3 },
   dayCircle: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   todayCircle: { backgroundColor: colors.parent },
   dayNum: { ...(typography.caption as object), color: colors.textPrimary },
-  todayNum: { color: colors.surface, fontWeight: '600' },
+  todayNum: { color: colors.surface, fontWeight: "600" },
   eventDot: {
     width: 4,
     height: 4,
@@ -250,19 +283,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   eventCard: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: colors.surface,
     borderWidth: 0.5,
     borderColor: colors.border,
     borderRadius: 14,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginHorizontal: spacing.lg,
   },
   eventAccent: { width: 3 },
   eventBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.lg },
   eventName: {
     ...(typography.body as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
   },
   eventDate: {
@@ -272,7 +305,7 @@ const styles = StyleSheet.create({
   },
   emptyWrap: {
     paddingTop: spacing.xl,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     ...(typography.body as object),

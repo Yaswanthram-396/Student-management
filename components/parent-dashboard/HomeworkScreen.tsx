@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar, StatusPill } from '../shared';
-import { parentApi } from '../../services/parent';
-import type { HomeworkItem } from '../../types/parent';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
+import { parentApi } from "../../services/parent";
+import type { HomeworkItem } from "../../types/parent";
+import { HeaderBar, LoadingScreen, StatusPill } from "../shared";
 
-type FilterKey = 'All' | 'Today' | 'This Week' | 'Overdue';
-const FILTERS: FilterKey[] = ['All', 'Today', 'This Week', 'Overdue'];
+type FilterKey = "All" | "Today" | "This Week" | "Overdue";
+const FILTERS: FilterKey[] = ["All", "Today", "This Week", "Overdue"];
 
 type HWItem = {
   id: string;
@@ -19,17 +19,17 @@ type HWItem = {
   subjectText: string;
   desc: string;
   due: string;
-  status: 'Pending' | 'Overdue';
+  status: "Pending" | "Overdue";
 };
 
 const SUBJECT_COLORS: Record<string, { bg: string; text: string }> = {
-  Mathematics: { bg: '#DBEAFE', text: colors.teacher },
-  Math: { bg: '#DBEAFE', text: colors.teacher },
+  Mathematics: { bg: "#DBEAFE", text: colors.teacher },
+  Math: { bg: "#DBEAFE", text: colors.teacher },
   Science: { bg: colors.successBg, text: colors.success },
-  English: { bg: '#F3E8FF', text: '#7C3AED' },
-  Hindi: { bg: '#FEF9C3', text: '#A16207' },
+  English: { bg: "#F3E8FF", text: "#7C3AED" },
+  Hindi: { bg: "#FEF9C3", text: "#A16207" },
 };
-const DEFAULT_SUBJECT_COLOR = { bg: '#F3F4F6', text: colors.textSecondary };
+const DEFAULT_SUBJECT_COLOR = { bg: "#F3F4F6", text: colors.textSecondary };
 
 function subjectStyle(name: string) {
   return SUBJECT_COLORS[name] ?? DEFAULT_SUBJECT_COLOR;
@@ -45,27 +45,39 @@ function mapHomework(hw: HomeworkItem): HWItem {
     subjectBg: style.bg,
     subjectText: style.text,
     desc: hw.description,
-    due: deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-    status: isPast ? 'Overdue' : 'Pending',
+    due: deadline.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }),
+    status: isPast ? "Overdue" : "Pending",
   };
 }
 
 function applyFilter(items: HomeworkItem[], filter: FilterKey): HomeworkItem[] {
-  if (filter === 'All') return items;
+  if (filter === "All") return items;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 86400000);
   const weekEnd = new Date(todayStart.getTime() + 7 * 86400000);
-  return items.filter(hw => {
+  return items.filter((hw) => {
     const d = new Date(hw.deadline);
-    if (filter === 'Today') return d >= todayStart && d < todayEnd;
-    if (filter === 'This Week') return d >= todayStart && d < weekEnd;
-    if (filter === 'Overdue') return d < todayStart;
+    if (filter === "Today") return d >= todayStart && d < todayEnd;
+    if (filter === "This Week") return d >= todayStart && d < weekEnd;
+    if (filter === "Overdue") return d < todayStart;
     return true;
   });
 }
 
-function SubjectPill({ label, bg, text }: { label: string; bg: string; text: string }) {
+function SubjectPill({
+  label,
+  bg,
+  text,
+}: {
+  label: string;
+  bg: string;
+  text: string;
+}) {
   return (
     <View style={[styles.subjectPill, { backgroundColor: bg }]}>
       <Text style={[styles.subjectLabel, { color: text }]}>{label}</Text>
@@ -77,9 +89,13 @@ function HWCard({ item }: { item: HWItem }) {
   return (
     <View style={styles.hwCard}>
       <View style={styles.hwCardTop}>
-        <SubjectPill label={item.subject} bg={item.subjectBg} text={item.subjectText} />
+        <SubjectPill
+          label={item.subject}
+          bg={item.subjectBg}
+          text={item.subjectText}
+        />
         <StatusPill
-          variant={item.status === 'Overdue' ? 'danger' : 'warning'}
+          variant={item.status === "Overdue" ? "danger" : "warning"}
           label={item.status}
         />
       </View>
@@ -93,23 +109,32 @@ function HWCard({ item }: { item: HWItem }) {
 }
 
 export function HomeworkScreen() {
-  const [activeFilter, setActiveFilter] = useState<FilterKey>('All');
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("All");
   const [homework, setHomework] = useState<HomeworkItem[]>([]);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   useEffect(() => {
-    parentApi.getProfile().then(profile => {
-      if (profile.students.length === 0) return;
-      parentApi
-        .getHomework(profile.students[0].id)
-        .then(data => setHomework(data.results))
-        .catch(() => {});
-    }).catch(() => {});
+    parentApi
+      .getProfile()
+      .then((profile) => {
+        if (profile.students.length === 0) return;
+        parentApi
+          .getHomework(profile.students[0].id)
+          .then((data) => setHomework(data.results))
+          .catch(() => {});
+      })
+      .catch(() => {})
+      .finally(() => setLoadingProfile(false));
   }, []);
 
   const filtered = applyFilter(homework, activeFilter).map(mapHomework);
 
+  if (loadingProfile) {
+    return <LoadingScreen label="Loading homework profile..." />;
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <HeaderBar center={<Text style={styles.headerTitle}>Homework</Text>} />
 
       <View style={styles.filterBar}>
@@ -118,11 +143,17 @@ export function HomeworkScreen() {
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
             <Pressable
-              style={[styles.filterPill, activeFilter === item && styles.filterPillActive]}
+              style={[
+                styles.filterPill,
+                activeFilter === item && styles.filterPillActive,
+              ]}
               onPress={() => setActiveFilter(item)}
             >
               <Text
-                style={[styles.filterLabel, activeFilter === item && styles.filterLabelActive]}
+                style={[
+                  styles.filterLabel,
+                  activeFilter === item && styles.filterLabelActive,
+                ]}
               >
                 {item}
               </Text>
@@ -173,7 +204,7 @@ const styles = StyleSheet.create({
   filterPillActive: { backgroundColor: colors.parent },
   filterLabel: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   filterLabelActive: { color: colors.surface },
@@ -186,9 +217,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   hwCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: spacing.sm,
   },
   subjectPill: {
@@ -204,14 +235,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   hwDueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
   },
   hwDue: { ...(typography.caption as object), color: colors.textMuted },
   emptyWrap: {
     paddingTop: spacing.xxl,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     ...(typography.body as object),
