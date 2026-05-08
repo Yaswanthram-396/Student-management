@@ -1,4 +1,5 @@
 import { signOut } from "../store/auth-store";
+import { router } from "expo-router";
 import type { LoginResponse } from "../types/principal";
 import { apiRequest } from "./api";
 
@@ -23,5 +24,10 @@ export const authApi = {
   },
   logout: async () => {
     await signOut();
+    try {
+      router.replace("/");
+    } catch {
+      // ignore navigation errors in non-UI contexts
+    }
   },
 };

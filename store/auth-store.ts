@@ -107,6 +107,12 @@ export async function signInWithTokens(
 
 export async function signOut() {
   await storage.clearTokens();
-  state = initialState;
+  state = {
+    token: null,
+    currentUser: null,
+    loadingMe: false,
+    bootstrapped: true,
+    error: null,
+  };
   emit();
 }

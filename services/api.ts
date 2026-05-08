@@ -93,7 +93,6 @@ export async function apiRequest<T>(
   if (!isMultipart) headers["Content-Type"] = "application/json";
 
   const fullUrl = `${API_BASE}${path}`;
-  console.log(`[API] ${method} ${fullUrl}`);
 
   let res: Response;
   try {
@@ -114,8 +113,6 @@ export async function apiRequest<T>(
       "Cannot reach the API server. Check the backend URL and make sure the server is running.",
     );
   }
-
-  console.log(`[API] Response status: ${res.status}`);
 
   if (res.status === 401 && path !== REFRESH_ENDPOINT) {
     const newAccessToken = await tryRefreshAccessToken();

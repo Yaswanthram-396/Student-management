@@ -9,7 +9,9 @@
       "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\index.tsx\" -Force)",
       "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\homework.tsx\" -Force)",
       "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\chat.tsx\" -Force)",
-      "Bash(Write-Host \"Deleted old tab files\")"
+      "Bash(Write-Host \"Deleted old tab files\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)"
     ]
   }
 }

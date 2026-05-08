@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
-    Dimensions,
-    FlatList,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Dimensions,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -78,34 +79,42 @@ export function CalendarScreen() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const [studentId, setStudentId] = useState<string | null>(null);
   const [calEvents, setCalEvents] = useState<ParentCalendarEvent[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  useEffect(() => {
+  const loadCalendarData = useCallback(() => {
     parentApi
       .getProfile()
       .then((profile) => {
-        if (profile.students.length > 0) {
-          setStudentId(profile.students[0].id);
+        const nextStudentId = profile.students[0]?.id ?? null;
+
+        if (!nextStudentId) {
+          setCalEvents([]);
+          return;
         }
+
+        const startDate = new Date(year, month, 1).toISOString().split("T")[0];
+        const endDate = new Date(year, month + 1, 0)
+          .toISOString()
+          .split("T")[0];
+        return parentApi.getCalendarEvents(nextStudentId, {
+          start_date: startDate,
+          end_date: endDate,
+        });
+      })
+      .then((data) => {
+        if (data) setCalEvents(data.results);
       })
       .catch(() => {})
       .finally(() => setLoadingProfile(false));
-  }, []);
+  }, [month, year]);
 
-  useEffect(() => {
-    if (!studentId) return;
-    const startDate = new Date(year, month, 1).toISOString().split("T")[0];
-    const endDate = new Date(year, month + 1, 0).toISOString().split("T")[0];
-    parentApi
-      .getCalendarEvents(studentId, {
-        start_date: startDate,
-        end_date: endDate,
-      })
-      .then((data) => setCalEvents(data.results))
-      .catch(() => {});
-  }, [studentId, year, month]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoadingProfile(true);
+      loadCalendarData();
+    }, [loadCalendarData]),
+  );
 
   if (loadingProfile) {
     return <LoadingScreen label="Loading calendar profile..." />;
