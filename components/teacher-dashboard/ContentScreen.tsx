@@ -1,27 +1,20 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, StyleSheet,
+  View, Text, FlatList, Pressable, TextInput, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
-import { HeaderBar, BottomSheet } from '../shared';
+import { teacherApi } from '../../services/teacher';
+import { useTeacherStore } from '../../store/teacher-store';
+import { GetStudyMaterialParams, StudyMaterialResponse } from '../../types/teacher';
+import { BottomSheet } from '../shared';
+import { TeacherTopBar } from './TeacherTopBar';
 
-type Material = { id: string; type: string; title: string; subject: string; date: string };
-
-const MATERIALS: Material[] = [
-  { id: '1', type: 'PDF',   title: 'Chapter 6 – Light and Reflection.pdf',        subject: 'Science',       date: '4 May 2026'  },
-  { id: '2', type: 'PDF',   title: 'Algebra Formulas Sheet.pdf',                   subject: 'Math',          date: '3 May 2026'  },
-  { id: '3', type: 'Image', title: 'Digestive System Diagram.jpg',                 subject: 'Science',       date: '2 May 2026'  },
-  { id: '4', type: 'PDF',   title: 'Grammar Rules – Tenses.pdf',                   subject: 'English',       date: '1 May 2026'  },
-  { id: '5', type: 'PDF',   title: 'Chapter 5 Notes – The French Revolution.pdf',  subject: 'Social Studies',date: '30 Apr 2026' },
-];
-
-const SUBJECT_FILTERS = ['All', 'Math', 'Science', 'English', 'Hindi', 'Social Studies'];
-const SUBJECTS        = ['Math', 'Science', 'English', 'Hindi', 'Social Studies'];
-const FILE_TYPES      = ['PDF', 'Image', 'Video'];
+// No mock data needed anymore
 
 const FILE_TYPE_CFG: Record<string, { bg: string; color: string; label: string }> = {
   PDF:   { bg: colors.dangerBg,  color: '#991B1B', label: 'PDF' },
@@ -38,13 +31,21 @@ function FileTypeBox({ type }: { type: string }) {
   );
 }
 
-function MaterialRow({ item }: { item: Material }) {
+function MaterialRow({ item }: { item: StudyMaterialResponse }) {
+  let fileType = 'Unknown';
+  if (item.file_url) {
+    if (item.file_url.endsWith('.pdf')) fileType = 'PDF';
+    else if (item.file_url.match(/\.(jpeg|jpg|png|gif|webp)$/i)) fileType = 'Image';
+    else if (item.file_url.match(/\.(mp4|mov|avi)$/i)) fileType = 'Video';
+  }
+
   return (
     <View style={styles.materialCard}>
-      <FileTypeBox type={item.type} />
+      <FileTypeBox type={fileType} />
       <View style={styles.materialInfo}>
         <Text style={styles.materialTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.materialMeta}>{item.subject} · {item.date}</Text>
+        <Text style={styles.materialMeta}>{item.subject.name} · {new Date(item.material_date).toLocaleDateString()}</Text>
+        {item.description ? <Text style={[styles.materialMeta, { marginTop: 2 }]} numberOfLines={1}>{item.description}</Text> : null}
       </View>
       <Ionicons name="download-outline" size={18} color={colors.textMuted} />
     </View>
@@ -52,82 +53,188 @@ function MaterialRow({ item }: { item: Material }) {
 }
 
 export function ContentScreen() {
-  const [activeSubject, setActiveSubject] = useState('All');
+  const { selectedSection } = useTeacherStore();
+  const [activeSubjectId, setActiveSubjectId] = useState<string>('All');
+  
+  const [subjects, setSubjects] = useState<Array<{ id: string, name: string }>>([]);
+  const [materials, setMaterials] = useState<StudyMaterialResponse[]>([]);
+  const [loading, setLoading] = useState(false);
+
   const [showSheet, setShowSheet]         = useState(false);
-  const [uploaded, setUploaded]           = useState(false);
-  const [uploadSubject, setUploadSubject] = useState('Math');
-  const [fileType, setFileType]           = useState('PDF');
+  const [uploading, setUploading]         = useState(false);
+  const [uploadSubjectId, setUploadSubjectId] = useState('');
   const [matTitle, setMatTitle]           = useState('');
+  const [matDesc, setMatDesc]             = useState('');
+  const [file, setFile]                   = useState<DocumentPicker.DocumentPickerAsset | null>(null);
 
-  const filtered = activeSubject === 'All'
-    ? MATERIALS
-    : MATERIALS.filter(m => m.subject === activeSubject);
+  useEffect(() => {
+    async function loadSubjects() {
+      try {
+        const res = await teacherApi.getSubjects();
+        setSubjects(res.results || []);
+        if (res.results && res.results.length > 0) {
+          setUploadSubjectId(res.results[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load subjects", err);
+      }
+    }
+    void loadSubjects();
+  }, []);
 
-  function handleUpload() {
-    setUploaded(true);
-    setTimeout(() => {
-      setUploaded(false);
+  const fetchMaterials = useCallback(async () => {
+    if (!selectedSection?.id) return;
+    setLoading(true);
+    try {
+      const params: GetStudyMaterialParams = { section_id: selectedSection.id };
+      if (activeSubjectId !== 'All') {
+        params.subject_id = activeSubjectId;
+      }
+      const res = await teacherApi.getStudyMaterials(params);
+      setMaterials(res.results || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedSection?.id, activeSubjectId]);
+
+  useEffect(() => {
+    setActiveSubjectId('All');
+    setShowSheet(false);
+    setUploading(false);
+    setMatTitle('');
+    setMatDesc('');
+    setFile(null);
+  }, [selectedSection?.id]);
+
+  useEffect(() => {
+    void fetchMaterials();
+  }, [fetchMaterials]);
+
+  async function handlePickFile() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setFile(result.assets[0]);
+      }
+    } catch (err) {
+      console.error("File picking failed", err);
+    }
+  }
+
+  async function handleUpload() {
+    if (!selectedSection?.id || !uploadSubjectId || !matTitle.trim() || !file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('section_id', selectedSection.id);
+      formData.append('subject_id', uploadSubjectId);
+      formData.append('title', matTitle.trim());
+      formData.append('description', matDesc.trim());
+      formData.append('material_date', new Date().toISOString().split('T')[0]); // YYYY-MM-DD
+      
+      // Append file
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType || 'application/octet-stream',
+      } as any);
+
+      await teacherApi.createStudyMaterial(formData);
+      
       setShowSheet(false);
       setMatTitle('');
-    }, 1000);
+      setMatDesc('');
+      setFile(null);
+      void fetchMaterials();
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <HeaderBar
-        center={<Text style={styles.headerTitle}>Study Materials</Text>}
-        right={
-          <Pressable onPress={() => setShowSheet(true)}>
-            <Ionicons name="add-circle-outline" size={24} color={colors.teacher} />
-          </Pressable>
-        }
-      />
+      <TeacherTopBar />
+
+      {!selectedSection ? (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>Select a section first</Text>
+          <Text style={styles.emptySub}>
+            Use the header dropdown to switch class/section.
+          </Text>
+        </View>
+      ) : (
+        <>
+
+          <View style={styles.actionRow}>
+            <Text style={styles.headerTitle}>Study Materials</Text>
+            <Pressable onPress={() => setShowSheet(true)}>
+              <Ionicons name="add-circle-outline" size={24} color={colors.teacher} />
+            </Pressable>
+          </View>
 
       {/* Subject filter pills */}
-      <View style={styles.filterBar}>
+          <View style={styles.filterBar}>
         <FlatList
-          data={SUBJECT_FILTERS}
-          keyExtractor={item => item}
+          data={[{ id: 'All', name: 'All' }, ...subjects]}
+          keyExtractor={item => item.id}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterList}
           ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
           renderItem={({ item }) => (
             <Pressable
-              style={[styles.filterPill, activeSubject === item && styles.filterPillActive]}
-              onPress={() => setActiveSubject(item)}
+              style={[styles.filterPill, activeSubjectId === item.id && styles.filterPillActive]}
+              onPress={() => setActiveSubjectId(item.id)}
             >
-              <Text style={[styles.filterLabel, activeSubject === item && styles.filterLabelActive]}>
-                {item}
+              <Text style={[styles.filterLabel, activeSubjectId === item.id && styles.filterLabelActive]}>
+                {item.name}
               </Text>
             </Pressable>
           )}
         />
-      </View>
+          </View>
 
-      {/* Materials list */}
-      <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <MaterialRow item={item} />}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        showsVerticalScrollIndicator={false}
-      />
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.teacher} style={{ marginTop: spacing.xl }} />
+          ) : (
+            <FlatList
+              data={materials}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => <MaterialRow item={item} />}
+              contentContainerStyle={styles.listContent}
+              ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={() => (
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyTitle}>No materials found</Text>
+                  <Text style={styles.emptySub}>
+                    No study materials have been uploaded for this subject.
+                  </Text>
+                </View>
+              )}
+            />
+          )}
 
-      <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
+          <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
         <Text style={styles.sheetTitle}>Upload Material</Text>
 
         <Text style={styles.fieldLabel}>Subject</Text>
         <View style={styles.optionRow}>
-          {SUBJECTS.map(s => (
+          {subjects.map(s => (
             <Pressable
-              key={s}
-              style={[styles.optionPill, uploadSubject === s && styles.optionPillActive]}
-              onPress={() => setUploadSubject(s)}
+              key={s.id}
+              style={[styles.optionPill, uploadSubjectId === s.id && styles.optionPillActive]}
+              onPress={() => setUploadSubjectId(s.id)}
             >
-              <Text style={[styles.optionText, uploadSubject === s && styles.optionTextActive]}>
-                {s}
+              <Text style={[styles.optionText, uploadSubjectId === s.id && styles.optionTextActive]}>
+                {s.name}
               </Text>
             </Pressable>
           ))}
@@ -142,44 +249,64 @@ export function ContentScreen() {
           placeholderTextColor={colors.textMuted}
         />
 
-        <Text style={styles.fieldLabel}>File Type</Text>
-        <View style={styles.optionRow}>
-          {FILE_TYPES.map(t => (
-            <Pressable
-              key={t}
-              style={[styles.optionPill, fileType === t && styles.optionPillActive]}
-              onPress={() => setFileType(t)}
-            >
-              <Text style={[styles.optionText, fileType === t && styles.optionTextActive]}>
-                {t}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Text style={styles.fieldLabel}>Description (Optional)</Text>
+        <TextInput
+          style={styles.textInput}
+          value={matDesc}
+          onChangeText={setMatDesc}
+          placeholder="Brief description..."
+          placeholderTextColor={colors.textMuted}
+        />
 
-        <Text style={styles.fieldLabel}>Upload Date</Text>
-        <View style={styles.staticField}>
-          <Text style={styles.staticFieldText}>5 May 2026</Text>
-        </View>
+        <Text style={styles.fieldLabel}>File</Text>
+        <Pressable style={styles.staticField} onPress={handlePickFile}>
+          <Text style={styles.staticFieldText} numberOfLines={1}>
+            {file ? file.name : 'Tap to select a file...'}
+          </Text>
+        </Pressable>
 
         <View style={styles.sheetBtns}>
           <Pressable style={styles.cancelBtn} onPress={() => setShowSheet(false)}>
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </Pressable>
           <Pressable
-            style={[styles.uploadBtn, uploaded && styles.uploadBtnDone]}
+            style={[styles.uploadBtn, uploading && styles.uploadBtnDone, (!file || !matTitle.trim()) && { opacity: 0.5 }]}
             onPress={handleUpload}
+            disabled={!file || !matTitle.trim() || uploading}
           >
-            <Text style={styles.uploadBtnText}>{uploaded ? 'Uploaded!' : 'Upload'}</Text>
+            <Text style={styles.uploadBtnText}>{uploading ? 'Uploading...' : 'Upload'}</Text>
           </Pressable>
         </View>
-      </BottomSheet>
+          </BottomSheet>
+        </>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  emptyWrap: {
+    margin: spacing.lg,
+    padding: spacing.lg,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    gap: spacing.xs,
+  },
+  emptyTitle: { ...(typography.h3 as object), color: colors.textPrimary },
+  emptySub: { ...(typography.caption as object), color: colors.textSecondary },
+  actionRow: {
+    height: 52,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+  },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   // Filter bar
   filterBar: {

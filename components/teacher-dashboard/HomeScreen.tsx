@@ -1,52 +1,62 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
-import { HeaderBar } from '../shared';
+import { useTeacherStore } from '../../store/teacher-store';
+import { TeacherTopBar } from './TeacherTopBar';
 
 type Activity = { id: string; text: string; time: string };
 
 const HOME_ACTIVITY: Activity[] = [
-  { id: '1', text: 'Uploaded Science PDF – Ch 6',         time: '2 hours ago' },
-  { id: '2', text: 'Added Math homework',                  time: 'Yesterday'   },
-  { id: '3', text: 'Posted announcement to Class 6B',      time: '2 days ago'  },
-  { id: '4', text: 'Marked attendance – Morning',          time: '2 days ago'  },
+  { id: '1', text: 'Uploaded Science PDF – Ch 6', time: '2 hours ago' },
+  { id: '2', text: 'Added Math homework', time: 'Yesterday' },
+  { id: '3', text: 'Posted announcement to Class 6B', time: '2 days ago' },
+  { id: '4', text: 'Marked attendance – Morning', time: '2 days ago' },
 ];
 
 const STATS = [
-  { value: '4',  label: 'Homework\nthis week' },
-  { value: '12', label: 'Materials\nuploaded'  },
-  { value: '2',  label: 'Upcoming\nexams'      },
+  { value: '4', label: 'Homework\nthis week' },
+  { value: '12', label: 'Materials\nuploaded' },
+  { value: '2', label: 'Upcoming\nexams' },
 ];
 
 export function HomeScreen() {
   const [attendanceMarked, setAttendanceMarked] = useState(false);
+  const { selectedSection } = useTeacherStore();
+
+  useEffect(() => {
+    setAttendanceMarked(false);
+  }, [selectedSection?.id]);
+
+  const sectionTitle = useMemo(() => {
+    if (!selectedSection) return 'Section not selected';
+    return `${selectedSection.class_name} - Section ${selectedSection.section_name}`;
+  }, [selectedSection]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <HeaderBar
-        left={
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>SR</Text>
-          </View>
-        }
-        center={<Text style={styles.headerTitle}>Class 6 – Section B</Text>}
-        right={
-          <View>
-            <Ionicons name="notifications-outline" size={22} color={colors.textMuted} />
-            <View style={styles.notifDot} />
-          </View>
-        }
-      />
+      <TeacherTopBar />
+
+      {!selectedSection ? (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>Select a section to continue</Text>
+          <Text style={styles.emptyBody}>
+            Use the dropdown in the header to pick one of your assigned sections.
+          </Text>
+        </View>
+      ) : null}
 
       <FlatList
+        key={selectedSection?.id ?? 'no-section'}
         data={HOME_ACTIVITY}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={null}
         renderItem={({ item, index }) => (
           <View style={[
             styles.activityRow,
@@ -62,10 +72,10 @@ export function HomeScreen() {
         )}
         ListHeaderComponent={
           <View>
-            {!attendanceMarked ? (
+            {/* {!attendanceMarked ? (
               <View style={[styles.attendCard, styles.attendUnmarked]}>
                 <Text style={styles.attendTitleWarn}>Attendance not marked yet</Text>
-                <Text style={styles.attendSubWarn}>5 May 2026 · Morning Session</Text>
+                <Text style={styles.attendSubWarn}>{sectionTitle} · Morning Session</Text>
                 <Pressable style={styles.markNowBtn} onPress={() => setAttendanceMarked(true)}>
                   <Text style={styles.markNowText}>Mark Attendance Now</Text>
                 </Pressable>
@@ -78,7 +88,7 @@ export function HomeScreen() {
                   <Text style={styles.viewDetails}>View Details →</Text>
                 </Pressable>
               </View>
-            )}
+            )} */}
 
             <View style={styles.statsRow}>
               {STATS.map(({ value, label }) => (
@@ -88,6 +98,17 @@ export function HomeScreen() {
                 </View>
               ))}
             </View>
+
+            <Pressable style={styles.queriesCard} onPress={() => router.push('/teacher/parent-queries')}>
+              <View style={styles.queriesCardContent}>
+                <Ionicons name="chatbubbles-outline" size={24} color={colors.teacher} />
+                <View style={styles.queriesCardTextWrap}>
+                  <Text style={styles.queriesCardTitle}>Parent Queries</Text>
+                  <Text style={styles.queriesCardSub}>View and reply to messages from parents</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </Pressable>
 
             <Text style={styles.sectionLabel}>Recent Activity</Text>
           </View>
@@ -100,27 +121,31 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   listContent: { padding: spacing.lg, gap: spacing.lg },
-  avatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.teacher,
-    alignItems: 'center', justifyContent: 'center',
+  emptyWrap: {
+    margin: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    gap: spacing.xs,
   },
-  avatarText: { ...(typography.label as object), color: colors.surface, fontWeight: '700' },
-  headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  notifDot: {
-    position: 'absolute', top: 0, right: 0,
-    width: 7, height: 7, borderRadius: 999,
-    backgroundColor: colors.danger,
-    borderWidth: 1.5, borderColor: colors.surface,
+  emptyTitle: {
+    ...(typography.h3 as object),
+    color: colors.textPrimary,
+  },
+  emptyBody: {
+    ...(typography.caption as object),
+    color: colors.textSecondary,
   },
   // Attendance card
   attendCard: { borderWidth: 0.5, borderColor: colors.border, borderRadius: 14, padding: spacing.lg },
   attendUnmarked: { backgroundColor: colors.warningBg },
-  attendMarked:   { backgroundColor: colors.successBg   },
-  attendTitleWarn:    { ...(typography.body as object), fontWeight: '600', color: '#92400E', marginBottom: spacing.xs },
-  attendSubWarn:      { ...(typography.caption as object), color: colors.warning, marginBottom: spacing.md },
+  attendMarked: { backgroundColor: colors.successBg },
+  attendTitleWarn: { ...(typography.body as object), fontWeight: '600', color: '#92400E', marginBottom: spacing.xs },
+  attendSubWarn: { ...(typography.caption as object), color: colors.warning, marginBottom: spacing.md },
   attendTitleSuccess: { ...(typography.body as object), fontWeight: '600', color: '#0F6E56', marginBottom: spacing.xs },
-  attendSubSuccess:   { ...(typography.caption as object), color: colors.textSecondary, marginBottom: spacing.sm },
+  attendSubSuccess: { ...(typography.caption as object), color: colors.textSecondary, marginBottom: spacing.sm },
   markNowBtn: {
     height: 48, borderRadius: 10,
     backgroundColor: colors.teacher,
@@ -138,6 +163,34 @@ const styles = StyleSheet.create({
   },
   metricValue: { fontSize: 28, fontWeight: '600', color: colors.teacher, lineHeight: 34 },
   metricLabel: { ...(typography.caption as object), color: colors.textMuted },
+  queriesCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.lg,
+    marginVertical: spacing.lg,
+  },
+  queriesCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  queriesCardTextWrap: {
+    gap: 2,
+  },
+  queriesCardTitle: {
+    ...(typography.body as object),
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  queriesCardSub: {
+    ...(typography.caption as object),
+    color: colors.textSecondary,
+  },
   sectionLabel: { ...(typography.label as object), color: colors.textMuted },
   // Activity rows forming a card via borders
   activityRow: {
@@ -148,7 +201,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5, borderColor: colors.border,
   },
   activityRowFirst: { borderTopWidth: 0.5, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
-  activityRowLast:  { borderBottomLeftRadius: 14, borderBottomRightRadius: 14 },
+  activityRowLast: { borderBottomLeftRadius: 14, borderBottomRightRadius: 14 },
   activityDot: {
     width: 6, height: 6, borderRadius: 3,
     backgroundColor: colors.teacher, marginTop: 5, flexShrink: 0,

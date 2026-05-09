@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, StyleSheet,
+  FlatList, Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
-import { HeaderBar, BottomSheet } from '../shared';
+import { teacherApi } from '../../services/teacher';
+import { useTeacherStore } from '../../store/teacher-store';
+import { BottomSheet } from '../shared';
+import { TeacherTopBar } from './TeacherTopBar';
 
 interface AnnItem {
   id: string;
@@ -21,30 +28,28 @@ const INIT_ANNOUNCEMENTS: AnnItem[] = [
   {
     id: '1',
     barColor: '#7C3AED',
-    title:    'PTM Scheduled for 10 May',
-    body:     'Dear parents, the Parent-Teacher Meeting is scheduled for Saturday, 10th May from 9 AM to 12 PM. Kindly make arrangements to attend.',
+    title: 'PTM Scheduled for 10 May',
+    body: 'Dear parents, the Parent-Teacher Meeting is scheduled for Saturday, 10th May from 9 AM to 12 PM. Kindly make arrangements to attend.',
     audience: 'Entire School', audienceBg: '#F3E8FF', audienceText: '#7C3AED',
     date: '3 May 2026',
   },
   {
     id: '2',
     barColor: colors.teacher,
-    title:    'Mid-Term Exam Timetable Released',
-    body:     'The mid-term examination timetable has been shared. Students must carry their hall tickets on all exam days.',
+    title: 'Mid-Term Exam Timetable Released',
+    body: 'The mid-term examination timetable has been shared. Students must carry their hall tickets on all exam days.',
     audience: 'Class 6B', audienceBg: '#CCFBF1', audienceText: '#0F766E',
     date: '1 May 2026',
   },
   {
     id: '3',
     barColor: '#14B8A6',
-    title:    'Science Project Submission Reminder',
-    body:     'All students must submit their science projects by Friday. No submissions will be accepted after the deadline.',
+    title: 'Science Project Submission Reminder',
+    body: 'All students must submit their science projects by Friday. No submissions will be accepted after the deadline.',
     audience: 'Class 6B', audienceBg: '#CCFBF1', audienceText: '#0F766E',
     date: '28 Apr 2026',
   },
 ];
-
-const SEND_TO_OPTIONS = ['Class 6B Only', 'Entire School'];
 
 function AnnCard({ item }: { item: AnnItem }) {
   return (
@@ -67,115 +72,185 @@ function AnnCard({ item }: { item: AnnItem }) {
 }
 
 export function AnnounceScreen() {
-  const [announcements, setAnnouncements] = useState<AnnItem[]>(INIT_ANNOUNCEMENTS);
-  const [showSheet, setShowSheet]         = useState(false);
-  const [annTitle, setAnnTitle]           = useState('');
-  const [annMsg, setAnnMsg]               = useState('');
-  const [sendTo, setSendTo]               = useState('Class 6B Only');
-  const [posting, setPosting]             = useState(false);
+  const { selectedSection } = useTeacherStore();
+  const sectionLabel = selectedSection ? `${selectedSection.class_name} ${selectedSection.section_name}` : 'Class';
+  const sendToOptions = [`${sectionLabel} Only`, 'Entire School'];
 
-  function handlePost() {
+  const [announcements, setAnnouncements] = useState<AnnItem[]>(INIT_ANNOUNCEMENTS);
+  const [showSheet, setShowSheet] = useState(false);
+  const [annTitle, setAnnTitle] = useState('');
+  const [annMsg, setAnnMsg] = useState('');
+  const [sendTo, setSendTo] = useState(sendToOptions[0]);
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setShowSheet(false);
+    setAnnTitle('');
+    setAnnMsg('');
+    setSendTo(sendToOptions[0]);
+    setPosting(false);
+    setError('');
+    setAnnouncements(INIT_ANNOUNCEMENTS);
+  }, [selectedSection?.id]);
+
+  async function handlePost() {
+    if (!selectedSection?.id || !selectedSection.is_class_teacher) return;
     setPosting(true);
-    setTimeout(() => {
+    setError('');
+    try {
       const isSchool = sendTo === 'Entire School';
+      const reqTitle = annTitle.trim() || 'New Announcement';
+      const reqBody = annMsg.trim() || 'No message body.';
+
+      const res = await teacherApi.createAnnouncement({
+        section_id: selectedSection.id,
+        title: reqTitle,
+        body: reqBody,
+        publish_now: true,
+      });
+
+      console.log("Res: ", res)
+
       const newItem: AnnItem = {
-        id:          String(Date.now()),
-        barColor:    isSchool ? '#7C3AED' : colors.teacher,
-        title:       annTitle || 'New Announcement',
-        body:        annMsg   || 'No message body.',
-        audience:    isSchool ? 'Entire School' : 'Class 6B',
-        audienceBg:  isSchool ? '#F3E8FF' : '#CCFBF1',
-        audienceText:isSchool ? '#7C3AED' : '#0F766E',
+        id: res.id,
+        barColor: isSchool ? '#7C3AED' : colors.teacher,
+        title: res.title,
+        body: reqBody,
+        audience: res.audience === 'SECTION' ? sectionLabel : 'Entire School',
+        audienceBg: isSchool ? '#F3E8FF' : '#CCFBF1',
+        audienceText: isSchool ? '#7C3AED' : '#0F766E',
         date: 'Just now',
       };
       setAnnouncements(prev => [newItem, ...prev]);
-      setPosting(false);
       setShowSheet(false);
       setAnnTitle('');
       setAnnMsg('');
-    }, 700);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to post announcement. Please try again.');
+    } finally {
+      setPosting(false);
+    }
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <HeaderBar
-        center={<Text style={styles.headerTitle}>Announcements</Text>}
-        right={
-          <Pressable onPress={() => setShowSheet(true)}>
-            <Ionicons name="add-circle-outline" size={24} color={colors.teacher} />
-          </Pressable>
-        }
-      />
+      <TeacherTopBar />
 
-      <FlatList
-        data={announcements}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <AnnCard item={item} />}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        showsVerticalScrollIndicator={false}
-      />
-
-      <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
-        <Text style={styles.sheetTitle}>New Announcement</Text>
-
-        <Text style={styles.fieldLabel}>Title</Text>
-        <TextInput
-          style={styles.textInput}
-          value={annTitle}
-          onChangeText={setAnnTitle}
-          placeholder="Announcement title..."
-          placeholderTextColor={colors.textMuted}
-        />
-
-        <Text style={styles.fieldLabel}>Message</Text>
-        <TextInput
-          style={[styles.textInput, styles.textArea]}
-          value={annMsg}
-          onChangeText={setAnnMsg}
-          placeholder="Write your announcement..."
-          placeholderTextColor={colors.textMuted}
-          multiline
-          numberOfLines={5}
-          textAlignVertical="top"
-        />
-
-        <Text style={styles.fieldLabel}>Send To</Text>
-        <View style={styles.sendToRow}>
-          {SEND_TO_OPTIONS.map(opt => (
-            <Pressable
-              key={opt}
-              style={[styles.sendToOption, sendTo === opt && styles.sendToOptionActive]}
-              onPress={() => setSendTo(opt)}
-            >
-              {sendTo === opt && (
-                <Ionicons name="checkmark-circle" size={16} color={colors.teacher} style={{ marginRight: 6 }} />
-              )}
-              <Text style={[styles.sendToText, sendTo === opt && styles.sendToTextActive]}>
-                {opt}
-              </Text>
-            </Pressable>
-          ))}
+      {!selectedSection ? (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>Select a section first</Text>
+          <Text style={styles.emptySub}>
+            Use the header dropdown to switch class/section.
+          </Text>
         </View>
+      ) : (
+        <>
 
-        <View style={styles.sheetBtns}>
-          <Pressable style={styles.cancelBtn} onPress={() => setShowSheet(false)}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.postBtn, posting && styles.postBtnPosting]}
-            onPress={handlePost}
-          >
-            <Text style={styles.postBtnText}>{posting ? 'Posting...' : 'Post Announcement'}</Text>
-          </Pressable>
-        </View>
-      </BottomSheet>
+          <View style={styles.actionRow}>
+            <Text style={styles.headerTitle}>Announcements</Text>
+            {selectedSection.is_class_teacher && (
+              <Pressable onPress={() => setShowSheet(true)}>
+                <Ionicons name="add-circle-outline" size={24} color={colors.teacher} />
+              </Pressable>
+            )}
+          </View>
+
+          <FlatList
+            data={announcements}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => <AnnCard item={item} />}
+            contentContainerStyle={styles.listContent}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+            showsVerticalScrollIndicator={false}
+          />
+
+          <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
+            <Text style={styles.sheetTitle}>New Announcement</Text>
+
+            <Text style={styles.fieldLabel}>Title</Text>
+            <TextInput
+              style={styles.textInput}
+              value={annTitle}
+              onChangeText={setAnnTitle}
+              placeholder="Announcement title..."
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.fieldLabel}>Message</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              value={annMsg}
+              onChangeText={setAnnMsg}
+              placeholder="Write your announcement..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+            />
+
+            <Text style={styles.fieldLabel}>Send To</Text>
+            <View style={styles.sendToRow}>
+              {sendToOptions.map(opt => (
+                <Pressable
+                  key={opt}
+                  style={[styles.sendToOption, sendTo === opt && styles.sendToOptionActive]}
+                  onPress={() => setSendTo(opt)}
+                >
+                  {sendTo === opt && (
+                    <Ionicons name="checkmark-circle" size={16} color={colors.teacher} style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={[styles.sendToText, sendTo === opt && styles.sendToTextActive]}>
+                    {opt}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <View style={styles.sheetBtns}>
+              <Pressable style={styles.cancelBtn} onPress={() => setShowSheet(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.postBtn, posting && styles.postBtnPosting]}
+                onPress={handlePost}
+              >
+                <Text style={styles.postBtnText}>{posting ? 'Posting...' : 'Post Announcement'}</Text>
+              </Pressable>
+            </View>
+          </BottomSheet>
+        </>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  emptyWrap: {
+    margin: spacing.lg,
+    padding: spacing.lg,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    gap: spacing.xs,
+  },
+  emptyTitle: { ...(typography.h3 as object), color: colors.textPrimary },
+  emptySub: { ...(typography.caption as object), color: colors.textSecondary },
+  actionRow: {
+    height: 52,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+  },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   listContent: { padding: spacing.lg },
   // Announcement card
@@ -221,7 +296,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   sendToOptionActive: { borderColor: colors.teacher, backgroundColor: '#EFF6FF' },
-  sendToText:       { ...(typography.body as object), color: colors.textSecondary },
+  sendToText: { ...(typography.body as object), color: colors.textSecondary },
   sendToTextActive: { color: colors.teacher, fontWeight: '500' },
   sheetBtns: { flexDirection: 'row', gap: spacing.sm },
   cancelBtn: {
@@ -233,4 +308,5 @@ const styles = StyleSheet.create({
   postBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: colors.teacher, alignItems: 'center', justifyContent: 'center' },
   postBtnPosting: { backgroundColor: colors.success },
   postBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },
+  errorText: { ...(typography.caption as object), color: colors.danger, marginBottom: spacing.md, textAlign: 'center' },
 });
