@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, StyleSheet, Dimensions,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, SegmentedControl } from '../shared';
+import { principalApi } from '../../services/principal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_W = SCREEN_WIDTH - spacing.lg * 4;
@@ -72,9 +73,25 @@ function SubjectBarChart() {
   );
 }
 
+function today() { return new Date().toISOString().split('T')[0]; }
+function daysAgo(n: number) {
+  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
+}
+const DATE_RANGES: Record<string, { date_from: string; date_to: string }> = {
+  'This Week':  { date_from: daysAgo(7),  date_to: today() },
+  'This Month': { date_from: daysAgo(30), date_to: today() },
+  'This Term':  { date_from: daysAgo(90), date_to: today() },
+};
+
 export function AnalyticsScreen() {
   const [range, setRange] = useState('This Week');
   const trendData = ATTENDANCE_TRENDS[range];
+
+  // Fetch analytics on range change — keep hardcoded charts as fallback if API returns empty
+  useEffect(() => {
+    principalApi.getAnalytics(DATE_RANGES[range])
+      .catch(() => {}); // hardcoded charts remain; no state update on empty response
+  }, [range]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

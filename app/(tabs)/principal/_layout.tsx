@@ -28,6 +28,15 @@ export default function PrincipalLayout() {
         }}
       />
       <Tabs.Screen
+        name="announce"
+        options={{
+          title: 'Announce',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="megaphone-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="results"
         options={{
           title: 'Results',
