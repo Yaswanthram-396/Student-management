@@ -158,13 +158,11 @@ export default function QueriesScreen() {
             <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
               {tab.label}
             </Text>
-            {counts[tab.key] > 0 && (
-              <View style={[styles.tabCount, activeTab === tab.key && styles.tabCountActive]}>
-                <Text style={[styles.tabCountText, activeTab === tab.key && styles.tabCountTextActive]}>
-                  {counts[tab.key]}
-                </Text>
-              </View>
-            )}
+            <View style={[styles.tabCount, activeTab === tab.key && styles.tabCountActive]}>
+              <Text style={[styles.tabCountText, activeTab === tab.key && styles.tabCountTextActive]}>
+                {counts[tab.key]}
+              </Text>
+            </View>
           </Pressable>
         ))}
       </View>

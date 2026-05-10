@@ -9,7 +9,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -51,7 +50,6 @@ export default function AnnounceScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [publishNow, setPublishNow] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -78,7 +76,6 @@ export default function AnnounceScreen() {
   function openModal() {
     setTitle('');
     setBody('');
-    setPublishNow(true);
     setFormError('');
     setModalVisible(true);
   }
@@ -102,7 +99,7 @@ export default function AnnounceScreen() {
         section_id: selectedSection.id,
         title: t,
         body: b,
-        publish_now: publishNow,
+        publish_now: true,
       });
       setAnnouncements((prev) => [created, ...prev]);
       setModalVisible(false);
@@ -295,21 +292,6 @@ export default function AnnounceScreen() {
                 textAlignVertical="top"
               />
 
-              <View style={styles.toggleRow}>
-                <View>
-                  <Text style={styles.toggleLabel}>Publish immediately</Text>
-                  <Text style={styles.toggleHint}>
-                    {publishNow ? 'Visible to parents right away' : 'Saved as draft'}
-                  </Text>
-                </View>
-                <Switch
-                  value={publishNow}
-                  onValueChange={setPublishNow}
-                  trackColor={{ false: '#DDDDDD', true: '#93C5FD' }}
-                  thumbColor={publishNow ? ACCENT : '#FFFFFF'}
-                />
-              </View>
-
               {!!formError && (
                 <View style={styles.errorRow}>
                   <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
@@ -331,9 +313,7 @@ export default function AnnounceScreen() {
                 ) : (
                   <>
                     <Ionicons name="megaphone-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.submitBtnText}>
-                      {publishNow ? 'Post Announcement' : 'Save as Draft'}
-                    </Text>
+                    <Text style={styles.submitBtnText}>Post Announcement</Text>
                   </>
                 )}
               </Pressable>
@@ -498,19 +478,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   inputMulti: { minHeight: 110, paddingTop: 12 },
-
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  toggleLabel: { fontSize: 14, fontWeight: '600', color: '#111111', marginBottom: 2 },
-  toggleHint: { fontSize: 12, color: '#AAAAAA' },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   submitBtn: {
