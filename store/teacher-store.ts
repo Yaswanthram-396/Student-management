@@ -23,6 +23,11 @@ export function setSections(sections: TeacherSection[]) {
   emit();
 }
 
+export function clearSelectedTeacherSection() {
+  state = { selectedSection: null, sections: [] };
+  emit();
+}
+
 export function useTeacherStore() {
   return useSyncExternalStore(
     (l) => {
