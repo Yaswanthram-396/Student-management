@@ -44,6 +44,12 @@ function normalizeMeResponse(raw: unknown): MeResponse {
         ? (user.profile as UnknownRecord)
         : {};
 
+  // Inject phone_number from user into profile since the API keeps it on the user object
+  const normalizedProfile = {
+    ...profile,
+    phone_number: typeof user.phone_number === "string" ? user.phone_number : "",
+  };
+
   return {
     id: typeof user.id === "string" ? user.id : "",
     username: typeof user.username === "string" ? user.username : "",
@@ -52,11 +58,13 @@ function normalizeMeResponse(raw: unknown): MeResponse {
       typeof user.profile_pic_url === "string" || user.profile_pic_url === null
         ? (user.profile_pic_url as string | null)
         : null,
-    profile: profile as unknown as MeResponse["profile"],
-    school: toSchoolSummary(
-      payload.school,
-      typeof user.school_id === "string" ? user.school_id : undefined,
-    ),
+    profile: normalizedProfile as unknown as MeResponse["profile"],
+    // API returns school_name flat on user/profile, not a nested school object
+    school: {
+      id: typeof user.school_id === "string" ? user.school_id : "",
+      name: typeof user.school_name === "string" ? user.school_name : "",
+      subdomain: "",
+    },
   } as MeResponse;
 }
 

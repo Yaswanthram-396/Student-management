@@ -21,8 +21,8 @@ export interface PrincipalProfile {
 export interface TeacherProfile {
   id: string;
   name: string;
-  mobile_number: string;
-  primary_subject: {
+  phone_number: string;
+  primary_subject?: {
     id: string;
     name: string;
   };
