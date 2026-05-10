@@ -46,6 +46,8 @@ export default function TeacherLayout() {
                 color={color}
               />
             ),
+            // Only class teachers can mark attendance
+            tabBarButton: showAttendance ? undefined : () => null,
           }}
         />
         <Tabs.Screen

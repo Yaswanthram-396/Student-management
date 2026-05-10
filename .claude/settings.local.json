@@ -23,7 +23,12 @@
       "Bash(git pull *)",
       "Bash(git stash *)",
       "Bash(git fetch *)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(git checkout *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m 'fix: export clearSelectedTeacherSection from teacher-store *)",
+      "Bash(xargs grep -l \"teacher\")",
+      "Bash(git commit -m 'feat: add student search to attendance screen *)"
     ]
   }
 }
