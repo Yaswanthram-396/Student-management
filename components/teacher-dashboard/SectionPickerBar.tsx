@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
@@ -11,7 +11,9 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { notificationsApi } from '../../services/notifications';
 import { setSelectedSection, useTeacherStore } from '../../store/teacher-store';
+import { NotificationsSheet } from './NotificationsSheet';
 
 const ACCENT = '#185FA5';
 const BAR_HEIGHT = 52;
@@ -20,8 +22,23 @@ export function SectionPickerBar() {
   const { selectedSection, sections } = useTeacherStore();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [notifSheetVisible, setNotifSheetVisible] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const slideAnim = useRef(new Animated.Value(-20)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchCount() {
+      try {
+        const res = await notificationsApi.getUnreadCount();
+        if (!cancelled) setUnreadCount(res.count);
+      } catch { /* silent */ }
+    }
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   function openDropdown() {
     setOpen(true);
@@ -86,8 +103,30 @@ export function SectionPickerBar() {
               color={ACCENT}
             />
           </Pressable>
+
+          {/* Bell button */}
+          <Pressable
+            style={({ pressed }) => [styles.bellBtn, pressed && styles.bellBtnPressed]}
+            onPress={() => setNotifSheetVisible(true)}
+            hitSlop={6}
+          >
+            <Ionicons name="notifications-outline" size={20} color="#444444" />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </View>
       </View>
+
+      <NotificationsSheet
+        visible={notifSheetVisible}
+        onClose={() => setNotifSheetVisible(false)}
+        onUnreadCountChange={setUnreadCount}
+      />
 
       {/* Dropdown modal */}
       <Modal
@@ -195,6 +234,30 @@ const styles = StyleSheet.create({
   },
   selectorPressed: { opacity: 0.7 },
   selectorText: { fontSize: 13, fontWeight: '600', color: ACCENT, flexShrink: 1 },
+  bellBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  bellBtnPressed: { backgroundColor: '#F0F0F0' },
+  bellBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  bellBadgeText: { fontSize: 9, fontWeight: '700', color: '#FFFFFF' },
 
   backdrop: {
     ...StyleSheet.absoluteFillObject,
