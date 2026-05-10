@@ -19,7 +19,7 @@ import type { UserRole } from "../types/auth";
 
 const ROLE_ROUTES: Partial<Record<UserRole, string>> = {
   PRINCIPAL: "/(tabs)/principal/",
-  TEACHER: "/(tabs)/teacher/",
+  TEACHER: "/teacher",
   PARENT: "/(tabs)/parent/",
 };
 
