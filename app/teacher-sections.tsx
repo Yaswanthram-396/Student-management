@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/auth-store';
-import { setSelectedSection } from '../store/teacher-store';
+import { setSelectedSection, setSections as storeSetSections } from '../store/teacher-store';
 import { teacherSectionsApi, type TeacherSection } from '../services/teacher-sections';
 import type { TeacherMeResponse } from '../types/auth';
 
@@ -33,6 +33,7 @@ export default function SectionsScreen() {
     try {
       const data = await teacherSectionsApi.getSections();
       setSections(data.results);
+      storeSetSections(data.results);
     } catch (err: any) {
       setError(err.details ?? 'Failed to load classes. Please try again.');
     } finally {

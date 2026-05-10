@@ -11,7 +11,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View style={styles.container}>
         <Pressable style={styles.btn} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />

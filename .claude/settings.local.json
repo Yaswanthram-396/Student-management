@@ -11,7 +11,10 @@
       "Bash(Remove-Item \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\\\\app\\\\\\(tabs\\)\\\\parent\\\\chat.tsx\" -Force)",
       "Bash(Write-Host \"Deleted old tab files\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\yaswa\\\\Documents\\\\student-management-app\" -Force)",
-      "Bash(Select-Object Name, PSIsContainer)"
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

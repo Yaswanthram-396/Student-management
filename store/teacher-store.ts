@@ -3,9 +3,10 @@ import type { TeacherSection } from '../services/teacher-sections';
 
 interface TeacherState {
   selectedSection: TeacherSection | null;
+  sections: TeacherSection[];
 }
 
-let state: TeacherState = { selectedSection: null };
+let state: TeacherState = { selectedSection: null, sections: [] };
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -17,6 +18,11 @@ export function setSelectedSection(section: TeacherSection) {
   emit();
 }
 
+export function setSections(sections: TeacherSection[]) {
+  state = { ...state, sections };
+  emit();
+}
+
 export function useTeacherStore() {
   return useSyncExternalStore(
     (l) => {
@@ -24,6 +30,6 @@ export function useTeacherStore() {
       return () => listeners.delete(l);
     },
     () => state,
-    () => ({ selectedSection: null }),
+    () => ({ selectedSection: null, sections: [] }),
   );
 }
