@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -66,6 +67,7 @@ export default function ContentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [filterSubject, setFilterSubject] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // Create sheet
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -96,6 +98,35 @@ export default function ContentScreen() {
   }
 
   useFocusEffect(useCallback(() => { fetchMaterials(); }, [selectedSection?.id]));
+
+  async function handleDownload(mat: StudyMaterial) {
+    if (!mat.file_url) return;
+    setDownloadingId(mat.id);
+    try {
+      // Derive a clean filename from the URL
+      const urlParts = mat.file_url.split('/');
+      const rawName = urlParts[urlParts.length - 1].split('?')[0];
+      const ext = rawName.includes('.') ? rawName.substring(rawName.lastIndexOf('.')) : '';
+      const fileName = `${mat.title.replace(/[^a-zA-Z0-9]/g, '_')}${ext}`;
+      const localUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+      const { uri } = await FileSystem.downloadAsync(mat.file_url, localUri);
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          dialogTitle: mat.title,
+          UTI: 'public.item',
+        });
+      } else {
+        Alert.alert('Downloaded', `File saved to: ${uri}`);
+      }
+    } catch {
+      Alert.alert('Download failed', 'Could not download the file. Please try again.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   async function openSheet() {
     setTitle('');
@@ -314,12 +345,19 @@ export default function ContentScreen() {
                   <Text style={styles.uploadedBy}>by {mat.uploaded_by.name}</Text>
                   {mat.file_url && (
                     <Pressable
-                      style={({ pressed }) => [styles.downloadBtn, pressed && styles.downloadBtnPressed]}
-                      onPress={() => Linking.openURL(mat.file_url!)}
+                      style={({ pressed }) => [styles.downloadBtn, pressed && styles.downloadBtnPressed, downloadingId === mat.id && styles.downloadBtnDisabled]}
+                      onPress={() => handleDownload(mat)}
+                      disabled={downloadingId === mat.id}
                       hitSlop={6}
                     >
-                      <Ionicons name="download-outline" size={15} color={ACCENT} />
-                      <Text style={styles.downloadText}>Download</Text>
+                      {downloadingId === mat.id ? (
+                        <ActivityIndicator size="small" color={ACCENT} />
+                      ) : (
+                        <Ionicons name="download-outline" size={15} color={ACCENT} />
+                      )}
+                      <Text style={styles.downloadText}>
+                        {downloadingId === mat.id ? 'Downloading…' : 'Download'}
+                      </Text>
                     </Pressable>
                   )}
                 </View>
@@ -596,6 +634,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   downloadBtnPressed: { opacity: 0.7 },
+  downloadBtnDisabled: { opacity: 0.6 },
   downloadText: { fontSize: 12, fontWeight: '600', color: ACCENT },
 
   // Modal
