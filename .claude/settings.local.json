@@ -16,7 +16,8 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Bhaskar\\\\Desktop\\\\SchoolBackend\\\\Schools_Backend\" -Recurse -Filter \"*query*\" -ErrorAction SilentlyContinue)",
-      "Bash(Select-Object -First 50)"
+      "Bash(Select-Object -First 50)",
+      "Bash(npx expo *)"
     ]
   }
 }

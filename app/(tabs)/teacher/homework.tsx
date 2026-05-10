@@ -1,3 +1,4 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -21,7 +22,6 @@ import { useTeacherStore } from '../../../store/teacher-store';
 
 const ACCENT = '#185FA5';
 
-// Soft palette cycled by subject index
 const SUBJECT_COLORS = [
   { bg: '#EBF2FB', text: '#185FA5' },
   { bg: '#E1F5EE', text: '#1D9E75' },
@@ -64,22 +64,25 @@ const DEADLINE_CONFIG = {
 
 function formatDeadline(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
   });
 }
 
-// Build ISO deadline from date "DD/MM/YYYY" and time "HH:MM"
-function buildIso(date: string, time: string): string | null {
-  const [d, m, y] = date.split('/').map(Number);
-  const [h, min] = time.split(':').map(Number);
-  if (!d || !m || !y || isNaN(h) || isNaN(min)) return null;
-  const dt = new Date(y, m - 1, d, h, min);
-  if (isNaN(dt.getTime())) return null;
-  return dt.toISOString();
+function formatPickerDate(d: Date) {
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatPickerTime(d: Date) {
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+// Default deadline = tomorrow at 6pm
+function defaultDeadline() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(18, 0, 0, 0);
+  return d;
 }
 
 export default function HomeworkScreen() {
@@ -97,8 +100,9 @@ export default function HomeworkScreen() {
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [description, setDescription] = useState('');
-  const [deadlineDate, setDeadlineDate] = useState('');
-  const [deadlineTime, setDeadlineTime] = useState('');
+  const [deadline, setDeadline] = useState<Date>(defaultDeadline);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -126,10 +130,11 @@ export default function HomeworkScreen() {
 
   async function openSheet() {
     setDescription('');
-    setDeadlineDate('');
-    setDeadlineTime('18:00');
+    setDeadline(defaultDeadline());
     setSelectedSubject(null);
     setFormError('');
+    setShowDatePicker(false);
+    setShowTimePicker(false);
     setSheetVisible(true);
     if (subjects.length === 0) {
       setSubjectsLoading(true);
@@ -137,7 +142,7 @@ export default function HomeworkScreen() {
         const data = await subjectsApi.getAll();
         setSubjects(data.results);
       } catch {
-        // non-fatal — user will see empty subject list
+        // non-fatal
       } finally {
         setSubjectsLoading(false);
       }
@@ -146,19 +151,38 @@ export default function HomeworkScreen() {
 
   function closeSheet() {
     if (submitting) return;
+    setShowDatePicker(false);
+    setShowTimePicker(false);
     setSheetVisible(false);
+  }
+
+  function onDateChange(_: any, selected?: Date) {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (selected) {
+      setDeadline((prev) => {
+        const next = new Date(selected);
+        next.setHours(prev.getHours(), prev.getMinutes(), 0, 0);
+        return next;
+      });
+    }
+  }
+
+  function onTimeChange(_: any, selected?: Date) {
+    if (Platform.OS === 'android') setShowTimePicker(false);
+    if (selected) {
+      setDeadline((prev) => {
+        const next = new Date(prev);
+        next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+        return next;
+      });
+    }
   }
 
   async function handleCreate() {
     if (!selectedSection) return;
     if (!selectedSubject) { setFormError('Please select a subject.'); return; }
     if (!description.trim()) { setFormError('Description is required.'); return; }
-    if (!deadlineDate) { setFormError('Please enter a deadline date (DD/MM/YYYY).'); return; }
-    if (!deadlineTime) { setFormError('Please enter a deadline time (HH:MM).'); return; }
-
-    const iso = buildIso(deadlineDate, deadlineTime);
-    if (!iso) { setFormError('Invalid date or time. Use DD/MM/YYYY and HH:MM.'); return; }
-    if (new Date(iso) <= new Date()) { setFormError('Deadline must be in the future.'); return; }
+    if (deadline <= new Date()) { setFormError('Deadline must be in the future.'); return; }
 
     setFormError('');
     setSubmitting(true);
@@ -167,7 +191,7 @@ export default function HomeworkScreen() {
         section_id: selectedSection.id,
         subject_id: selectedSubject.id,
         description: description.trim(),
-        deadline: iso,
+        deadline: deadline.toISOString(),
       });
       setHomework((prev) => [created, ...prev]);
       setSheetVisible(false);
@@ -178,7 +202,6 @@ export default function HomeworkScreen() {
     }
   }
 
-  // Client-side filter
   const filtered = homework.filter((hw) => {
     if (activeFilter === 'ALL') return true;
     const status = getDeadlineStatus(hw.deadline);
@@ -259,7 +282,6 @@ export default function HomeworkScreen() {
           />
         }
       >
-        {/* Loading */}
         {loading && (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={ACCENT} />
@@ -267,7 +289,6 @@ export default function HomeworkScreen() {
           </View>
         )}
 
-        {/* Error */}
         {!loading && !!fetchError && (
           <View style={styles.errorCard}>
             <View style={styles.errorIconWrap}>
@@ -282,14 +303,15 @@ export default function HomeworkScreen() {
           </View>
         )}
 
-        {/* Empty */}
         {!loading && !fetchError && filtered.length === 0 && (
           <View style={styles.centered}>
             <View style={styles.emptyIcon}>
               <Ionicons name="book-outline" size={38} color="#CCCCCC" />
             </View>
             <Text style={styles.emptyTitle}>
-              {activeFilter === 'ALL' ? 'No homework assigned' : `No ${FILTER_TABS.find(t => t.key === activeFilter)?.label.toLowerCase()} homework`}
+              {activeFilter === 'ALL'
+                ? 'No homework assigned'
+                : `No ${FILTER_TABS.find((t) => t.key === activeFilter)?.label.toLowerCase()} homework`}
             </Text>
             <Text style={styles.emptyHint}>
               {activeFilter === 'ALL'
@@ -299,7 +321,6 @@ export default function HomeworkScreen() {
           </View>
         )}
 
-        {/* Cards */}
         {!loading && !fetchError && filtered.map((hw) => {
           const status = getDeadlineStatus(hw.deadline);
           const dlCfg = DEADLINE_CONFIG[status];
@@ -308,7 +329,6 @@ export default function HomeworkScreen() {
             <View key={hw.id} style={styles.card}>
               <View style={[styles.cardStripe, { backgroundColor: subColor.text }]} />
               <View style={styles.cardBody}>
-                {/* Subject + deadline status */}
                 <View style={styles.cardTopRow}>
                   <View style={[styles.subjectBadge, { backgroundColor: subColor.bg }]}>
                     <Text style={[styles.subjectText, { color: subColor.text }]}>
@@ -322,13 +342,7 @@ export default function HomeworkScreen() {
                     </Text>
                   </View>
                 </View>
-
-                {/* Description */}
-                <Text style={styles.cardDescription} numberOfLines={3}>
-                  {hw.description}
-                </Text>
-
-                {/* Deadline */}
+                <Text style={styles.cardDescription} numberOfLines={3}>{hw.description}</Text>
                 <View style={styles.cardDeadlineRow}>
                   <Ionicons name="time-outline" size={13} color={dlCfg.color} />
                   <Text style={[styles.cardDeadlineText, { color: dlCfg.color }]}>
@@ -356,8 +370,6 @@ export default function HomeworkScreen() {
 
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
-
-            {/* Sheet header */}
             <View style={styles.sheetHeader}>
               <View>
                 <Text style={styles.sheetTitle}>Assign Homework</Text>
@@ -377,7 +389,7 @@ export default function HomeworkScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {/* Subject selector */}
+              {/* Subject picker */}
               <Text style={styles.fieldLabel}>Subject</Text>
               {subjectsLoading ? (
                 <View style={styles.subjectsLoading}>
@@ -428,35 +440,56 @@ export default function HomeworkScreen() {
                 textAlignVertical="top"
               />
 
-              {/* Deadline */}
+              {/* Deadline pickers */}
               <Text style={styles.fieldLabel}>Deadline</Text>
               <View style={styles.deadlineRow}>
-                <View style={[styles.deadlineField, { flex: 3 }]}>
-                  <Ionicons name="calendar-outline" size={16} color="#AAAAAA" style={styles.deadlineIcon} />
-                  <TextInput
-                    style={styles.deadlineInput}
-                    value={deadlineDate}
-                    onChangeText={(v) => { setDeadlineDate(v); setFormError(''); }}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor="#AAAAAA"
-                    keyboardType="numeric"
-                    maxLength={10}
-                  />
-                </View>
-                <View style={[styles.deadlineField, { flex: 2 }]}>
-                  <Ionicons name="time-outline" size={16} color="#AAAAAA" style={styles.deadlineIcon} />
-                  <TextInput
-                    style={styles.deadlineInput}
-                    value={deadlineTime}
-                    onChangeText={(v) => { setDeadlineTime(v); setFormError(''); }}
-                    placeholder="HH:MM"
-                    placeholderTextColor="#AAAAAA"
-                    keyboardType="numeric"
-                    maxLength={5}
-                  />
-                </View>
+                {/* Date button */}
+                <Pressable
+                  style={({ pressed }) => [styles.pickerBtn, pressed && styles.pickerBtnPressed]}
+                  onPress={() => { setShowTimePicker(false); setShowDatePicker(true); }}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={ACCENT} />
+                  <Text style={styles.pickerBtnText}>{formatPickerDate(deadline)}</Text>
+                </Pressable>
+
+                {/* Time button */}
+                <Pressable
+                  style={({ pressed }) => [styles.pickerBtn, pressed && styles.pickerBtnPressed]}
+                  onPress={() => { setShowDatePicker(false); setShowTimePicker(true); }}
+                >
+                  <Ionicons name="time-outline" size={16} color={ACCENT} />
+                  <Text style={styles.pickerBtnText}>{formatPickerTime(deadline)}</Text>
+                </Pressable>
               </View>
-              <Text style={styles.deadlineHint}>Format: DD/MM/YYYY and 24-hour time</Text>
+
+              {/* Android: pickers shown inline on tap */}
+              {showDatePicker && (
+                <DateTimePicker
+                  value={deadline}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={new Date()}
+                  onChange={onDateChange}
+                />
+              )}
+              {showTimePicker && (
+                <DateTimePicker
+                  value={deadline}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onTimeChange}
+                />
+              )}
+
+              {/* iOS: Done button to dismiss picker */}
+              {Platform.OS === 'ios' && (showDatePicker || showTimePicker) && (
+                <Pressable
+                  style={styles.iosDoneBtn}
+                  onPress={() => { setShowDatePicker(false); setShowTimePicker(false); }}
+                >
+                  <Text style={styles.iosDoneBtnText}>Done</Text>
+                </Pressable>
+              )}
 
               {/* Error */}
               {!!formError && (
@@ -496,7 +529,6 @@ export default function HomeworkScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F4F8' },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -519,13 +551,7 @@ const styles = StyleSheet.create({
   },
   addBtnPressed: { opacity: 0.7 },
 
-  // Filter tabs (horizontal scroll)
-  tabScroll: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-    flexGrow: 0,
-  },
+  tabScroll: { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#EEEEEE', flexGrow: 0 },
   tabContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   tab: {
     flexDirection: 'row',
@@ -539,21 +565,14 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#EBF2FB' },
   tabText: { fontSize: 12, fontWeight: '500', color: '#888888' },
   tabTextActive: { color: ACCENT, fontWeight: '600' },
-  tabBadge: {
-    backgroundColor: '#E0E0E0',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
+  tabBadge: { backgroundColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
   tabBadgeActive: { backgroundColor: '#185FA520' },
   tabBadgeText: { fontSize: 10, fontWeight: '600', color: '#888888' },
   tabBadgeTextActive: { color: ACCENT },
 
-  // List
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
 
-  // States
   centered: { alignItems: 'center', paddingVertical: 64, gap: 12 },
   stateText: { fontSize: 14, color: '#888888' },
 
@@ -601,7 +620,6 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#444444' },
   emptyHint: { fontSize: 13, color: '#AAAAAA', textAlign: 'center', lineHeight: 20, paddingHorizontal: 32 },
 
-  // Homework card
   card: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -624,27 +642,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  subjectBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
+  subjectBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   subjectText: { fontSize: 12, fontWeight: '600' },
-  statusChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
+  statusChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusChipText: { fontSize: 11, fontWeight: '600' },
   cardDescription: { fontSize: 14, color: '#333333', lineHeight: 20, marginBottom: 12 },
   cardDeadlineRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   cardDeadlineText: { fontSize: 12, fontWeight: '500' },
 
-  // Modal
   modalWrap: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
@@ -682,21 +688,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // Subject chips
   subjectsLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   subjectsLoadingText: { fontSize: 13, color: '#888888' },
   subjectsEmpty: { paddingVertical: 10 },
   subjectsEmptyText: { fontSize: 13, color: '#AAAAAA' },
   subjectScroll: { marginHorizontal: -20 },
   subjectScrollContent: { paddingHorizontal: 20, gap: 8 },
-  subjectChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
+  subjectChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   subjectChipText: { fontSize: 13, fontWeight: '600' },
 
-  // Inputs
   input: {
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
@@ -708,18 +708,30 @@ const styles = StyleSheet.create({
   },
   inputMulti: { minHeight: 100, paddingTop: 12, textAlignVertical: 'top' },
 
-  deadlineRow: { flexDirection: 'row', gap: 10, marginBottom: 6 },
-  deadlineField: {
+  // Date/time picker buttons
+  deadlineRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  pickerBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    gap: 8,
+    backgroundColor: '#EBF2FB',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  deadlineIcon: { marginRight: 8 },
-  deadlineInput: { flex: 1, fontSize: 14, color: '#111111' },
-  deadlineHint: { fontSize: 11, color: '#AAAAAA', marginBottom: 20 },
+  pickerBtnPressed: { opacity: 0.7 },
+  pickerBtnText: { fontSize: 13, fontWeight: '600', color: ACCENT, flexShrink: 1 },
+
+  iosDoneBtn: {
+    alignSelf: 'flex-end',
+    backgroundColor: ACCENT,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  iosDoneBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
   errorRowText: { fontSize: 13, color: '#DC2626', flex: 1 },
