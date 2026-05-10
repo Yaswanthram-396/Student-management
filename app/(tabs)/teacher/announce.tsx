@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import {
   teacherAnnouncementsApi,
   type Announcement,
@@ -22,19 +24,56 @@ import { useTeacherStore } from '../../../store/teacher-store';
 
 const ACCENT = '#185FA5';
 
+const AUDIENCE_COLORS: Record<string, string> = {
+  SCHOOL: '#534AB7',
+  CLASS: '#1D9E75',
+  SECTION: '#185FA5',
+};
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export default function AnnounceScreen() {
   const { selectedSection } = useTeacherStore();
   const isClassTeacher = selectedSection?.is_class_teacher ?? false;
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState('');
 
-  // Form state
+  const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [publishNow, setPublishNow] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+
+  async function fetchAnnouncements(isRefresh = false) {
+    if (!isRefresh) setLoading(true);
+    setFetchError('');
+    try {
+      const data = await teacherAnnouncementsApi.getAll();
+      setAnnouncements(data.results);
+    } catch (err: any) {
+      setFetchError(err.details ?? 'Failed to load announcements.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAnnouncements();
+    }, []),
+  );
 
   function openModal() {
     setTitle('');
@@ -54,7 +93,7 @@ export default function AnnounceScreen() {
     const t = title.trim();
     const b = body.trim();
     if (!t) { setFormError('Title is required.'); return; }
-    if (!b) { setFormError('Body is required.'); return; }
+    if (!b) { setFormError('Message is required.'); return; }
 
     setFormError('');
     setSubmitting(true);
@@ -78,10 +117,17 @@ export default function AnnounceScreen() {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Announcements</Text>
-        {selectedSection && (
-          <Text style={styles.headerSub}>
-            {selectedSection.class_name} – {selectedSection.section_name}
+        <View>
+          <Text style={styles.headerTitle}>Announcements</Text>
+          {selectedSection && (
+            <Text style={styles.headerSub}>
+              {selectedSection.class_name} – {selectedSection.section_name}
+            </Text>
+          )}
+        </View>
+        {!loading && (
+          <Text style={styles.headerCount}>
+            {announcements.length} total
           </Text>
         )}
       </View>
@@ -89,21 +135,49 @@ export default function AnnounceScreen() {
       {/* Not a class teacher banner */}
       {!isClassTeacher && (
         <View style={styles.lockedBanner}>
-          <Ionicons name="lock-closed-outline" size={16} color="#D97706" />
+          <Ionicons name="lock-closed-outline" size={15} color="#D97706" />
           <Text style={styles.lockedText}>
             Only the class teacher can post announcements for this section.
           </Text>
         </View>
       )}
 
-      {/* Announcement list */}
+      {/* List */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); fetchAnnouncements(true); }}
+            tintColor={ACCENT}
+            colors={[ACCENT]}
+          />
+        }
       >
-        {announcements.length === 0 ? (
-          <View style={styles.empty}>
+        {/* Loading */}
+        {loading && (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={ACCENT} />
+            <Text style={styles.loadingText}>Loading announcements…</Text>
+          </View>
+        )}
+
+        {/* Error */}
+        {!loading && !!fetchError && (
+          <View style={styles.errorCard}>
+            <Ionicons name="alert-circle-outline" size={32} color="#DC2626" />
+            <Text style={styles.errorText}>{fetchError}</Text>
+            <Pressable style={styles.retryBtn} onPress={() => fetchAnnouncements()}>
+              <Text style={styles.retryBtnText}>Try Again</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Empty */}
+        {!loading && !fetchError && announcements.length === 0 && (
+          <View style={styles.centered}>
             <Ionicons name="megaphone-outline" size={52} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No announcements yet</Text>
             {isClassTeacher && (
@@ -112,37 +186,50 @@ export default function AnnounceScreen() {
               </Text>
             )}
           </View>
-        ) : (
-          announcements.map((item) => (
+        )}
+
+        {/* Cards */}
+        {!loading && !fetchError && announcements.map((item) => {
+          const accentColor = AUDIENCE_COLORS[item.audience] ?? ACCENT;
+          return (
             <View key={item.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardIcon}>
-                  <Ionicons name="megaphone" size={16} color={ACCENT} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardMeta}>
-                    {item.published_at
-                      ? `Published · ${new Date(item.published_at).toLocaleString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}`
-                      : 'Draft · Not published'}
-                  </Text>
-                </View>
-                <View
-                  style={[
+              <View style={[styles.cardStripe, { backgroundColor: accentColor }]} />
+              <View style={styles.cardContent}>
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.audienceBadge, { backgroundColor: accentColor + '18' }]}>
+                    <Text style={[styles.audienceText, { color: accentColor }]}>
+                      {item.audience}
+                    </Text>
+                  </View>
+                  <View style={[
                     styles.statusDot,
                     { backgroundColor: item.published_at ? '#1D9E75' : '#D97706' },
-                  ]}
-                />
+                  ]} />
+                </View>
+
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardBody} numberOfLines={3}>{item.body}</Text>
+
+                <View style={styles.cardFooter}>
+                  <Ionicons name="person-outline" size={11} color="#AAAAAA" />
+                  <Text style={styles.cardMeta}>
+                    {item.author_role.charAt(0) + item.author_role.slice(1).toLowerCase()}
+                    {item.published_at ? ` · ${formatDate(item.published_at)}` : ' · Draft'}
+                  </Text>
+                </View>
+
+                {item.attachments.length > 0 && (
+                  <View style={styles.attachRow}>
+                    <Ionicons name="attach-outline" size={13} color="#888888" />
+                    <Text style={styles.attachText}>
+                      {item.attachments.length} attachment{item.attachments.length > 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.cardBody}>{item.body}</Text>
             </View>
-          ))
-        )}
+          );
+        })}
       </ScrollView>
 
       {/* FAB — only for class teacher */}
@@ -151,12 +238,12 @@ export default function AnnounceScreen() {
           style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
           onPress={openModal}
         >
-          <Ionicons name="add" size={26} color="#FFFFFF" />
+          <Ionicons name="add" size={22} color="#FFFFFF" />
           <Text style={styles.fabText}>New Announcement</Text>
         </Pressable>
       )}
 
-      {/* Create announcement modal */}
+      {/* Create modal */}
       <Modal
         visible={modalVisible}
         transparent
@@ -170,14 +257,13 @@ export default function AnnounceScreen() {
           <Pressable style={styles.modalBackdrop} onPress={closeModal} />
 
           <View style={styles.sheet}>
-            {/* Sheet header */}
+            <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>New Announcement</Text>
               <Pressable onPress={closeModal} hitSlop={8}>
                 <Ionicons name="close" size={22} color="#666666" />
               </Pressable>
             </View>
-
             <Text style={styles.sheetSub}>
               {selectedSection?.class_name} – {selectedSection?.section_name}
             </Text>
@@ -187,36 +273,33 @@ export default function AnnounceScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {/* Title */}
               <Text style={styles.fieldLabel}>Title</Text>
               <TextInput
                 style={styles.input}
                 value={title}
-                onChangeText={(t) => { setTitle(t); setFormError(''); }}
+                onChangeText={(v) => { setTitle(v); setFormError(''); }}
                 placeholder="e.g. Parent-Teacher Meeting"
                 placeholderTextColor="#AAAAAA"
                 returnKeyType="next"
                 maxLength={255}
               />
 
-              {/* Body */}
               <Text style={styles.fieldLabel}>Message</Text>
               <TextInput
                 style={[styles.input, styles.inputMulti]}
                 value={body}
-                onChangeText={(t) => { setBody(t); setFormError(''); }}
+                onChangeText={(v) => { setBody(v); setFormError(''); }}
                 placeholder="Write your announcement here…"
                 placeholderTextColor="#AAAAAA"
                 multiline
                 textAlignVertical="top"
               />
 
-              {/* Publish now toggle */}
               <View style={styles.toggleRow}>
                 <View>
                   <Text style={styles.toggleLabel}>Publish immediately</Text>
                   <Text style={styles.toggleHint}>
-                    {publishNow ? 'Will be visible to parents now' : 'Saved as draft'}
+                    {publishNow ? 'Visible to parents right away' : 'Saved as draft'}
                   </Text>
                 </View>
                 <Switch
@@ -227,7 +310,6 @@ export default function AnnounceScreen() {
                 />
               </View>
 
-              {/* Error */}
               {!!formError && (
                 <View style={styles.errorRow}>
                   <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
@@ -235,7 +317,6 @@ export default function AnnounceScreen() {
                 </View>
               )}
 
-              {/* Submit */}
               <Pressable
                 style={({ pressed }) => [
                   styles.submitBtn,
@@ -268,6 +349,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F4F8' },
 
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
     paddingVertical: 14,
@@ -276,6 +360,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#111111' },
   headerSub: { fontSize: 12, color: '#AAAAAA', marginTop: 2 },
+  headerCount: { fontSize: 12, color: '#AAAAAA' },
 
   lockedBanner: {
     flexDirection: 'row',
@@ -292,15 +377,38 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 100 },
 
-  empty: { alignItems: 'center', paddingVertical: 60, gap: 10 },
+  centered: { alignItems: 'center', paddingVertical: 60, gap: 10 },
+  loadingText: { fontSize: 14, color: '#888888' },
+
+  errorCard: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 14,
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  errorText: { fontSize: 13, color: '#888888', textAlign: 'center' },
+  retryBtn: {
+    marginTop: 4,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+  },
+  retryBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#444444' },
   emptyHint: { fontSize: 13, color: '#AAAAAA', textAlign: 'center', lineHeight: 20 },
 
+  // Card
   card: {
+    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    padding: 16,
     marginBottom: 12,
+    overflow: 'hidden',
     borderWidth: 0.5,
     borderColor: '#EEEEEE',
     shadowColor: '#000',
@@ -309,20 +417,29 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  cardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#EBF2FB',
+  cardStripe: { width: 4 },
+  cardContent: { flex: 1, padding: 14 },
+  cardTopRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: '#111111', marginBottom: 2 },
+  audienceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  audienceText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  cardTitle: { fontSize: 15, fontWeight: '600', color: '#111111', marginBottom: 5 },
+  cardBody: { fontSize: 13, color: '#555555', lineHeight: 19, marginBottom: 10 },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cardMeta: { fontSize: 11, color: '#AAAAAA' },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
-  cardBody: { fontSize: 14, color: '#444444', lineHeight: 20 },
+  attachRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  attachText: { fontSize: 11, color: '#888888' },
 
+  // FAB
   fab: {
     position: 'absolute',
     bottom: 24,
@@ -344,15 +461,23 @@ const styles = StyleSheet.create({
   fabPressed: { opacity: 0.85 },
   fabText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
 
-  // Modal / sheet
+  // Modal
   modalWrap: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingTop: 20,
-    maxHeight: '85%',
+    paddingTop: 12,
+    maxHeight: '88%',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: '#DDDDDD',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -399,14 +524,7 @@ const styles = StyleSheet.create({
   toggleLabel: { fontSize: 14, fontWeight: '600', color: '#111111', marginBottom: 2 },
   toggleHint: { fontSize: 12, color: '#AAAAAA' },
 
-  errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 12,
-  },
-  errorText: { fontSize: 13, color: '#DC2626', flex: 1 },
-
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
