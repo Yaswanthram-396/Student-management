@@ -13,6 +13,20 @@ interface SectionsResponse {
   results: TeacherSection[];
 }
 
+export interface SectionStudent {
+  id: string;
+  name: string;
+  roll_number: string;
+  admission_number: string;
+}
+
+interface SectionStudentsResponse {
+  count: number;
+  results: SectionStudent[];
+}
+
 export const teacherSectionsApi = {
   getSections: () => apiRequest<SectionsResponse>('GET', '/teacher/sections/'),
+  getStudents: (sectionId: string) =>
+    apiRequest<SectionStudentsResponse>('GET', `/teacher/sections/${sectionId}/students/`),
 };

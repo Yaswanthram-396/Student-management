@@ -1,9 +1,10 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +14,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   teacherAttendanceApi,
-  type AttendanceRecord,
-  type AttendanceSession,
   type AttendanceSlot,
   type AttendanceStatus,
 } from '../../../services/teacher-attendance';
+import {
+  teacherSectionsApi,
+  type SectionStudent,
+} from '../../../services/teacher-sections';
 import { useTeacherStore } from '../../../store/teacher-store';
 
 const ACCENT = '#185FA5';
@@ -51,86 +54,123 @@ function shiftDate(d: Date, days: number) {
 export default function AttendanceScreen() {
   const { selectedSection } = useTeacherStore();
 
+  // Date & slot
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [slot, setSlot] = useState<AttendanceSlot>('MORNING');
 
-  const [session, setSession] = useState<AttendanceSession | null>(null);
+  // Students (fetched once per section)
+  const [students, setStudents] = useState<SectionStudent[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsError, setStudentsError] = useState('');
+
+  // Session & statuses
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
+  const [takenBy, setTakenBy] = useState<string>('');
   const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState('');
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionError, setSessionError] = useState('');
+
+  // Actions
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  // Track last fetched key to avoid redundant fetches
-  const fetchedKey = useRef('');
+  const lastSectionId = useRef('');
+  const lastSessionKey = useRef('');
 
-  const fetchSession = useCallback(async (d: Date, s: AttendanceSlot) => {
-    if (!selectedSection) return;
-    const key = `${selectedSection.id}_${toDateString(d)}_${s}`;
-    if (fetchedKey.current === key) return;
-    fetchedKey.current = key;
-
-    setLoading(true);
-    setFetchError('');
-    setSession(null);
-    setStatuses({});
-    try {
-      const sess = await teacherAttendanceApi.getOrCreateSession(
-        selectedSection.id,
-        toDateString(d),
-        s,
-      );
-      setSession(sess);
-      // Build local status map — null → default PRESENT
-      const map: Record<string, AttendanceStatus> = {};
-      for (const r of sess.records) {
-        map[r.student_id] = r.status ?? 'PRESENT';
-      }
-      setStatuses(map);
-    } catch (err: any) {
-      setFetchError(err.details ?? 'Failed to load attendance. Please try again.');
-      fetchedKey.current = ''; // allow retry
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedSection]);
-
+  // Fetch students whenever section changes
   useEffect(() => {
-    fetchedKey.current = '';
-    fetchSession(date, slot);
-  }, [date, slot, selectedSection?.id]);
+    if (!selectedSection || selectedSection.id === lastSectionId.current) return;
+    lastSectionId.current = selectedSection.id;
+    lastSessionKey.current = '';
+
+    setStudents([]);
+    setStudentsError('');
+    setSessionId(null);
+    setStatuses({});
+
+    async function loadStudents() {
+      setStudentsLoading(true);
+      try {
+        const data = await teacherSectionsApi.getStudents(selectedSection!.id);
+        setStudents(data.results);
+      } catch (err: any) {
+        setStudentsError(err.details ?? 'Failed to load students.');
+      } finally {
+        setStudentsLoading(false);
+      }
+    }
+    loadStudents();
+  }, [selectedSection?.id]);
+
+  // Fetch session whenever date or slot changes (students already loaded)
+  useEffect(() => {
+    if (!selectedSection || students.length === 0) return;
+    const key = `${selectedSection.id}_${toDateString(date)}_${slot}`;
+    if (lastSessionKey.current === key) return;
+    lastSessionKey.current = key;
+
+    async function loadSession() {
+      setSessionLoading(true);
+      setSessionError('');
+      setSessionId(null);
+      setConfirmedAt(null);
+      setStatuses({});
+      try {
+        const sess = await teacherAttendanceApi.getOrCreateSession(
+          selectedSection!.id,
+          toDateString(date),
+          slot,
+        );
+        setSessionId(sess.id);
+        setConfirmedAt(sess.confirmed_at);
+        setTakenBy(sess.taken_by?.name ?? '');
+
+        // Build status map: start with all students as PRESENT,
+        // then override with any existing session records
+        const map: Record<string, AttendanceStatus> = {};
+        for (const s of students) {
+          map[s.id] = 'PRESENT'; // default
+        }
+        for (const r of sess.records) {
+          if (r.status) map[r.student_id] = r.status;
+        }
+        setStatuses(map);
+      } catch (err: any) {
+        setSessionError(err.details ?? 'Failed to load session.');
+        lastSessionKey.current = ''; // allow retry
+      } finally {
+        setSessionLoading(false);
+      }
+    }
+    loadSession();
+  }, [date, slot, students]);
 
   function toggleStatus(studentId: string) {
-    if (session?.confirmed_at) return;
-    setStatuses((prev) => ({
+    if (confirmedAt) return;
+    setStatuses(prev => ({
       ...prev,
       [studentId]: prev[studentId] === 'PRESENT' ? 'ABSENT' : 'PRESENT',
     }));
   }
 
   function markAll(status: AttendanceStatus) {
-    if (session?.confirmed_at) return;
+    if (confirmedAt) return;
     const map: Record<string, AttendanceStatus> = {};
-    for (const r of session?.records ?? []) {
-      map[r.student_id] = status;
-    }
+    for (const s of students) map[s.id] = status;
     setStatuses(map);
   }
 
   async function handleSave() {
-    if (!session) return;
-    const records = Object.entries(statuses).map(([student_id, status]) => ({
-      student_id,
-      status,
+    if (!sessionId) return;
+    const records = students.map(s => ({
+      student_id: s.id,
+      status: statuses[s.id] ?? 'PRESENT',
     }));
     setSaving(true);
     try {
-      const res = await teacherAttendanceApi.markAttendance(session.id, records);
-      // Update local session records with saved data
-      setSession((prev) =>
-        prev ? { ...prev, records: res.records } : prev,
-      );
+      await teacherAttendanceApi.markAttendance(sessionId, records);
       Alert.alert('Saved', 'Attendance saved successfully.');
     } catch (err: any) {
       Alert.alert('Error', err.details ?? 'Failed to save attendance.');
@@ -139,30 +179,38 @@ export default function AttendanceScreen() {
     }
   }
 
-  function handleConfirm() {
-    if (!session) return;
+  function handleConfirmPress() {
     Alert.alert(
       'Confirm Attendance',
-      `This will lock the ${slot.toLowerCase()} attendance for ${formatDisplayDate(date)}. You cannot edit it after confirming.\n\nPresent: ${presentCount}  Absent: ${absentCount}`,
+      `Lock ${slot === 'MORNING' ? 'morning' : 'afternoon'} attendance for ${formatDisplayDate(date)}?\n\nPresent: ${presentCount}  ·  Absent: ${absentCount}\n\nThis cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'destructive',
-          onPress: doConfirm,
-        },
+        { text: 'Confirm', style: 'destructive', onPress: doConfirm },
       ],
     );
   }
 
   async function doConfirm() {
-    if (!session) return;
+    if (!sessionId) return;
+    // Save first, then confirm
+    setSaving(true);
+    try {
+      const records = students.map(s => ({
+        student_id: s.id,
+        status: statuses[s.id] ?? 'PRESENT',
+      }));
+      await teacherAttendanceApi.markAttendance(sessionId, records);
+    } catch (err: any) {
+      setSaving(false);
+      Alert.alert('Error', err.details ?? 'Failed to save attendance before confirming.');
+      return;
+    }
+    setSaving(false);
+
     setConfirming(true);
     try {
-      const res = await teacherAttendanceApi.confirmSession(session.id);
-      setSession((prev) =>
-        prev ? { ...prev, confirmed_at: res.confirmed_at } : prev,
-      );
+      const res = await teacherAttendanceApi.confirmSession(sessionId);
+      setConfirmedAt(res.confirmed_at);
       Alert.alert(
         '✓ Confirmed',
         `Attendance confirmed.\n${res.absent_count} student${res.absent_count !== 1 ? 's' : ''} marked absent.`,
@@ -174,19 +222,21 @@ export default function AttendanceScreen() {
     }
   }
 
-  const records: AttendanceRecord[] = session?.records ?? [];
-  const presentCount = Object.values(statuses).filter((s) => s === 'PRESENT').length;
-  const absentCount = Object.values(statuses).filter((s) => s === 'ABSENT').length;
-  const isConfirmed = !!session?.confirmed_at;
+  const presentCount = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'PRESENT').length;
+  const absentCount = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'ABSENT').length;
+  const isConfirmed = !!confirmedAt;
+  const isLoading = studentsLoading || sessionLoading;
+  const error = studentsError || sessionError;
   const isToday = toDateString(date) === toDateString(new Date());
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* Date navigator */}
+
+      {/* ── Date navigator ── */}
       <View style={styles.dateNav}>
         <Pressable
           style={({ pressed }) => [styles.navArrow, pressed && styles.navArrowPressed]}
-          onPress={() => setDate((d) => shiftDate(d, -1))}
+          onPress={() => { setDate(d => shiftDate(d, -1)); lastSessionKey.current = ''; }}
           hitSlop={8}
         >
           <Ionicons name="chevron-back" size={20} color="#444444" />
@@ -203,7 +253,7 @@ export default function AttendanceScreen() {
 
         <Pressable
           style={({ pressed }) => [styles.navArrow, pressed && styles.navArrowPressed]}
-          onPress={() => setDate((d) => shiftDate(d, 1))}
+          onPress={() => { setDate(d => shiftDate(d, 1)); lastSessionKey.current = ''; }}
           hitSlop={8}
         >
           <Ionicons name="chevron-forward" size={20} color="#444444" />
@@ -214,21 +264,21 @@ export default function AttendanceScreen() {
         <DateTimePicker
           value={date}
           mode="date"
-          display="default"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(_, selected) => {
             setShowDatePicker(false);
-            if (selected) setDate(selected);
+            if (selected) { lastSessionKey.current = ''; setDate(selected); }
           }}
         />
       )}
 
-      {/* Slot tabs */}
+      {/* ── Slot tabs ── */}
       <View style={styles.slotRow}>
-        {SLOTS.map((s) => (
+        {SLOTS.map(s => (
           <Pressable
             key={s}
             style={[styles.slotTab, slot === s && styles.slotTabActive]}
-            onPress={() => setSlot(s)}
+            onPress={() => { setSlot(s); lastSessionKey.current = ''; }}
           >
             <Ionicons
               name={s === 'MORNING' ? 'sunny-outline' : 'moon-outline'}
@@ -242,35 +292,39 @@ export default function AttendanceScreen() {
         ))}
       </View>
 
-      {/* Confirmed banner */}
+      {/* ── Confirmed banner ── */}
       {isConfirmed && (
         <View style={styles.confirmedBanner}>
-          <Ionicons name="lock-closed" size={14} color={GREEN} />
+          <Ionicons name="lock-closed" size={13} color={GREEN} />
           <Text style={styles.confirmedText}>
             Confirmed ·{' '}
-            {new Date(session!.confirmed_at!).toLocaleTimeString('en-IN', {
+            {new Date(confirmedAt!).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
             })}
-            {' · '}Taken by {session?.taken_by.name}
+            {takenBy ? ` · ${takenBy}` : ''}
           </Text>
         </View>
       )}
 
-      {/* Stats bar */}
-      {!loading && !fetchError && records.length > 0 && (
+      {/* ── Stats + quick actions ── */}
+      {!isLoading && !error && students.length > 0 && (
         <View style={styles.statsBar}>
-          <View style={styles.statItem}>
+          <View style={styles.statChip}>
             <View style={[styles.statDot, { backgroundColor: GREEN }]} />
-            <Text style={styles.statText}>{presentCount} Present</Text>
+            <Text style={styles.statText}>{presentCount}</Text>
+            <Text style={styles.statLabel}>Present</Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
+          <View style={styles.statChip}>
             <View style={[styles.statDot, { backgroundColor: RED }]} />
-            <Text style={styles.statText}>{absentCount} Absent</Text>
+            <Text style={styles.statText}>{absentCount}</Text>
+            <Text style={styles.statLabel}>Absent</Text>
           </View>
-          <View style={styles.statDivider} />
-          <Text style={styles.statText}>{records.length} Total</Text>
+          <View style={styles.statChip}>
+            <View style={[styles.statDot, { backgroundColor: '#AAAAAA' }]} />
+            <Text style={styles.statText}>{students.length}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </View>
 
           {!isConfirmed && (
             <View style={styles.quickBtns}>
@@ -278,44 +332,51 @@ export default function AttendanceScreen() {
                 style={[styles.quickBtn, { borderColor: GREEN }]}
                 onPress={() => markAll('PRESENT')}
               >
-                <Text style={[styles.quickBtnText, { color: GREEN }]}>All Present</Text>
+                <Text style={[styles.quickBtnText, { color: GREEN }]}>All ✓</Text>
               </Pressable>
               <Pressable
                 style={[styles.quickBtn, { borderColor: RED }]}
                 onPress={() => markAll('ABSENT')}
               >
-                <Text style={[styles.quickBtnText, { color: RED }]}>All Absent</Text>
+                <Text style={[styles.quickBtnText, { color: RED }]}>All ✗</Text>
               </Pressable>
             </View>
           )}
         </View>
       )}
 
-      {/* Content */}
+      {/* ── Content ── */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Loading */}
-        {loading && (
+        {isLoading && (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={ACCENT} />
-            <Text style={styles.stateText}>Loading attendance…</Text>
+            <Text style={styles.stateText}>
+              {studentsLoading ? 'Loading students…' : 'Loading session…'}
+            </Text>
           </View>
         )}
 
         {/* Error */}
-        {!loading && !!fetchError && (
+        {!isLoading && !!error && (
           <View style={styles.errorCard}>
             <View style={styles.errorIconWrap}>
-              <Ionicons name="alert-circle-outline" size={30} color={RED} />
+              <Ionicons name="alert-circle-outline" size={28} color={RED} />
             </View>
-            <Text style={styles.errorTitle}>Couldn't load attendance</Text>
-            <Text style={styles.errorBody}>{fetchError}</Text>
+            <Text style={styles.errorTitle}>Could not load attendance</Text>
+            <Text style={styles.errorBody}>{error}</Text>
             <Pressable
               style={styles.retryBtn}
-              onPress={() => { fetchedKey.current = ''; fetchSession(date, slot); }}
+              onPress={() => {
+                setStudentsError('');
+                setSessionError('');
+                lastSectionId.current = '';
+                lastSessionKey.current = '';
+              }}
             >
               <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />
               <Text style={styles.retryText}>Try Again</Text>
@@ -323,8 +384,8 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* No section selected */}
-        {!loading && !fetchError && !selectedSection && (
+        {/* No section */}
+        {!isLoading && !error && !selectedSection && (
           <View style={styles.centered}>
             <Ionicons name="school-outline" size={48} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No class selected</Text>
@@ -333,7 +394,7 @@ export default function AttendanceScreen() {
         )}
 
         {/* Empty students */}
-        {!loading && !fetchError && !!selectedSection && records.length === 0 && (
+        {!isLoading && !error && !!selectedSection && students.length === 0 && (
           <View style={styles.centered}>
             <Ionicons name="people-outline" size={48} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No students found</Text>
@@ -342,60 +403,64 @@ export default function AttendanceScreen() {
         )}
 
         {/* Student list */}
-        {!loading && !fetchError && records.map((record, idx) => {
-          const status = statuses[record.student_id] ?? 'PRESENT';
-          const isPresent = status === 'PRESENT';
+        {!isLoading && !error && students.length > 0 && (
+          <View style={styles.listCard}>
+            {students.map((student, idx) => {
+              const status = statuses[student.id] ?? 'PRESENT';
+              const isPresent = status === 'PRESENT';
+              const isLast = idx === students.length - 1;
 
-          return (
-            <Pressable
-              key={record.student_id}
-              style={({ pressed }) => [
-                styles.studentRow,
-                idx === records.length - 1 && styles.studentRowLast,
-                pressed && !isConfirmed && styles.studentRowPressed,
-              ]}
-              onPress={() => toggleStatus(record.student_id)}
-              disabled={isConfirmed}
-            >
-              {/* Index */}
-              <Text style={styles.studentIndex}>{idx + 1}</Text>
-
-              {/* Name */}
-              <Text style={styles.studentName} numberOfLines={1}>
-                {record.student_name}
-              </Text>
-
-              {/* Status toggle */}
-              <View
-                style={[
-                  styles.statusToggle,
-                  { backgroundColor: isPresent ? '#E1F5EE' : '#FEE2E2' },
-                ]}
-              >
-                <Ionicons
-                  name={isPresent ? 'checkmark-circle' : 'close-circle'}
-                  size={16}
-                  color={isPresent ? GREEN : RED}
-                />
-                <Text style={[styles.statusLabel, { color: isPresent ? GREEN : RED }]}>
-                  {isPresent ? 'Present' : 'Absent'}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
+              return (
+                <React.Fragment key={student.id}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.studentRow,
+                      pressed && !isConfirmed && styles.studentRowPressed,
+                    ]}
+                    onPress={() => toggleStatus(student.id)}
+                    disabled={isConfirmed}
+                  >
+                    <Text style={styles.studentIndex}>{idx + 1}</Text>
+                    <View style={styles.studentInfo}>
+                      <Text style={styles.studentName} numberOfLines={1}>
+                        {student.name}
+                      </Text>
+                      {student.roll_number ? (
+                        <Text style={styles.studentRoll}>Roll: {student.roll_number}</Text>
+                      ) : null}
+                    </View>
+                    <View style={[
+                      styles.statusPill,
+                      { backgroundColor: isPresent ? '#E1F5EE' : '#FEE2E2' },
+                    ]}>
+                      <Ionicons
+                        name={isPresent ? 'checkmark-circle' : 'close-circle'}
+                        size={15}
+                        color={isPresent ? GREEN : RED}
+                      />
+                      <Text style={[styles.statusText, { color: isPresent ? GREEN : RED }]}>
+                        {isPresent ? 'Present' : 'Absent'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {!isLast && <View style={styles.rowDivider} />}
+                </React.Fragment>
+              );
+            })}
+          </View>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Bottom actions */}
-      {!loading && !fetchError && records.length > 0 && !isConfirmed && (
+      {/* ── Bottom actions ── */}
+      {!isLoading && !error && students.length > 0 && !isConfirmed && (
         <View style={styles.actions}>
           <Pressable
             style={({ pressed }) => [
               styles.saveBtn,
               pressed && styles.saveBtnPressed,
-              saving && styles.btnDisabled,
+              (saving || confirming) && styles.btnDisabled,
             ]}
             onPress={handleSave}
             disabled={saving || confirming}
@@ -414,9 +479,9 @@ export default function AttendanceScreen() {
             style={({ pressed }) => [
               styles.confirmBtn,
               pressed && styles.confirmBtnPressed,
-              confirming && styles.btnDisabled,
+              (saving || confirming) && styles.btnDisabled,
             ]}
-            onPress={handleConfirm}
+            onPress={handleConfirmPress}
             disabled={saving || confirming}
           >
             {confirming ? (
@@ -437,7 +502,7 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F4F8' },
 
-  // Date navigator
+  // Date nav
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -467,15 +532,9 @@ const styles = StyleSheet.create({
   },
   dateBtnPressed: { opacity: 0.75 },
   dateBtnText: { fontSize: 13, fontWeight: '600', color: ACCENT },
-  todayDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: GREEN,
-    marginLeft: 2,
-  },
+  todayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GREEN },
 
-  // Slot tabs
+  // Slots
   slotRow: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -512,46 +571,53 @@ const styles = StyleSheet.create({
   },
   confirmedText: { fontSize: 12, color: '#065F46', fontWeight: '500', flex: 1 },
 
-  // Stats bar
+  // Stats
   statsBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
-    gap: 8,
+    gap: 6,
   },
-  statItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statDot: { width: 8, height: 8, borderRadius: 4 },
-  statText: { fontSize: 12, color: '#555555', fontWeight: '500' },
-  statDivider: { width: 1, height: 14, backgroundColor: '#DDDDDD' },
+  statChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  statDot: { width: 7, height: 7, borderRadius: 4 },
+  statText: { fontSize: 13, fontWeight: '700', color: '#111111' },
+  statLabel: { fontSize: 11, color: '#888888' },
   quickBtns: { flexDirection: 'row', gap: 6, marginLeft: 'auto' },
   quickBtn: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  quickBtnText: { fontSize: 11, fontWeight: '600' },
+  quickBtnText: { fontSize: 12, fontWeight: '700' },
 
   // List
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
+  scrollContent: { padding: 14, paddingBottom: 20 },
 
-  // States
   centered: { alignItems: 'center', paddingVertical: 64, gap: 12 },
   stateText: { fontSize: 14, color: '#888888' },
+
   errorCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 28,
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     borderWidth: 1,
     borderColor: '#FFCDD2',
-    marginTop: 8,
   },
   errorIconWrap: {
     width: 56,
@@ -571,42 +637,39 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 18,
     paddingVertical: 9,
+    marginTop: 4,
   },
   retryText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#444444' },
   emptyBody: { fontSize: 13, color: '#AAAAAA', textAlign: 'center' },
 
-  // Student rows (flat list inside card)
+  // List card
+  listCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: '#EEEEEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   studentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
-    borderRadius: 0,
-  },
-  studentRowLast: {
-    borderBottomWidth: 0,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
+    paddingVertical: 12,
+    gap: 10,
   },
   studentRowPressed: { backgroundColor: '#F8F8F8' },
-  studentIndex: {
-    width: 28,
-    fontSize: 12,
-    color: '#AAAAAA',
-    fontWeight: '500',
-  },
-  studentName: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111111',
-    marginRight: 10,
-  },
-  statusToggle: {
+  rowDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 48 },
+  studentIndex: { width: 24, fontSize: 12, color: '#AAAAAA', fontWeight: '500' },
+  studentInfo: { flex: 1 },
+  studentName: { fontSize: 14, fontWeight: '500', color: '#111111' },
+  studentRoll: { fontSize: 11, color: '#AAAAAA', marginTop: 1 },
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -614,13 +677,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 20,
   },
-  statusLabel: { fontSize: 12, fontWeight: '600' },
+  statusText: { fontSize: 12, fontWeight: '600' },
 
   // Bottom actions
   actions: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
