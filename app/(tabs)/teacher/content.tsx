@@ -332,8 +332,8 @@ export default function ContentScreen() {
                       disabled={downloadingId === mat.id}
                       hitSlop={6}
                     >
-                      <Ionicons name="download-outline" size={15} color={ACCENT} />
-                      <Text style={styles.downloadText}>Download</Text>
+                      <Ionicons name="eye-outline" size={15} color={ACCENT} />
+                      <Text style={styles.downloadText}>View</Text>
                     </Pressable>
                   )}
                 </View>
