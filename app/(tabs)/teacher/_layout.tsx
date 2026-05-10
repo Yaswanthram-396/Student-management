@@ -1,31 +1,35 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
-import { View } from 'react-native';
-import { SectionPickerBar } from '../../../components/teacher-dashboard/SectionPickerBar';
+import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
+import { View } from "react-native";
+import { SectionPickerBar } from "../../../components/teacher-dashboard/SectionPickerBar";
+import { useTeacherStore } from "../../../store/teacher-store";
 
-const ACCENT = '#185FA5';
+const ACCENT = "#185FA5";
 
 export default function TeacherLayout() {
+  const { selectedSection } = useTeacherStore();
+  const showAttendance = !selectedSection || selectedSection.is_class_teacher;
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#F4F4F8' }}>
+    <View style={{ flex: 1, backgroundColor: "#F4F4F8" }}>
       <SectionPickerBar />
       <Tabs
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: ACCENT,
-          tabBarInactiveTintColor: '#AAAAAA',
-          tabBarLabelStyle: { fontSize: 10, fontWeight: '500' },
+          tabBarInactiveTintColor: "#AAAAAA",
+          tabBarLabelStyle: { fontSize: 10, fontWeight: "500" },
           tabBarStyle: {
             height: 56,
             borderTopWidth: 0.5,
-            borderTopColor: '#EEEEEE',
+            borderTopColor: "#EEEEEE",
           },
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
+            title: "Home",
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="home-outline" size={size} color={color} />
             ),
@@ -34,16 +38,20 @@ export default function TeacherLayout() {
         <Tabs.Screen
           name="attendance"
           options={{
-            title: 'Attendance',
+            title: "Attendance",
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="checkmark-circle-outline" size={size} color={color} />
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={size}
+                color={color}
+              />
             ),
           }}
         />
         <Tabs.Screen
           name="homework"
           options={{
-            title: 'Homework',
+            title: "Homework",
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="book-outline" size={size} color={color} />
             ),
@@ -52,7 +60,7 @@ export default function TeacherLayout() {
         <Tabs.Screen
           name="content"
           options={{
-            title: 'Materials',
+            title: "Materials",
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="document-outline" size={size} color={color} />
             ),
@@ -61,7 +69,7 @@ export default function TeacherLayout() {
         <Tabs.Screen
           name="announce"
           options={{
-            title: 'Announce',
+            title: "Announce",
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="megaphone-outline" size={size} color={color} />
             ),
@@ -70,7 +78,7 @@ export default function TeacherLayout() {
         <Tabs.Screen
           name="queries"
           options={{
-            title: 'Queries',
+            title: "Queries",
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="chatbubbles-outline" size={size} color={color} />
             ),

@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from 'react';
-import type { TeacherSection } from '../services/teacher-sections';
+import { useSyncExternalStore } from "react";
+import type { TeacherSection } from "../services/teacher-sections";
 
 interface TeacherState {
   selectedSection: TeacherSection | null;

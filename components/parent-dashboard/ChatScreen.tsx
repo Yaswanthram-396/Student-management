@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -86,6 +87,17 @@ export function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList<Message>>(null);
+
+  const loadMessages = useCallback(() => {
+    // Fetch messages when tab comes into focus
+    setMessages(INITIAL_MESSAGES);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMessages();
+    }, [loadMessages]),
+  );
 
   const handleSend = () => {
     const text = inputText.trim();

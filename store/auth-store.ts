@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { ApiError } from "../services/api";
 import { meApi } from "../services/me";
 import { storage } from "../services/storage";
+import { clearSelectedTeacherSection } from "./teacher-store";
 import type { MeResponse } from "../types/auth";
 
 export interface AuthState {
@@ -111,6 +112,7 @@ export async function refreshCurrentUser() {
 
 export async function signOut() {
   await storage.clearTokens();
+  clearSelectedTeacherSection();
   state = {
     token: null,
     currentUser: null,
