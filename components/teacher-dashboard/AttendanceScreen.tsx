@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
-import { HeaderBar, SegmentedControl } from '../shared';
+import { HeaderBar } from '../shared';
 import {
   teacherApi,
   type Section,
@@ -35,17 +35,19 @@ type Phase =
   | 'confirmed'
   | 'error';
 
-function todayISO(): string {
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function todayISO() {
   return new Date().toISOString().split('T')[0];
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string) {
   try {
     const [y, m, d] = iso.split('-');
-    const date = new Date(Number(y), Number(m) - 1, Number(d));
-    return date.toLocaleDateString('en-IN', {
+    return new Date(+y, +m - 1, +d).toLocaleDateString('en-IN', {
+      weekday: 'short',
       day: 'numeric',
-      month: 'long',
+      month: 'short',
       year: 'numeric',
     });
   } catch {
@@ -53,20 +55,73 @@ function formatDate(iso: string): string {
   }
 }
 
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function SlotTab({
+  label,
+  icon,
+  active,
+  onPress,
+}: {
+  label: string;
+  icon: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[st.slotTab, active && st.slotTabActive]}
+      onPress={onPress}
+    >
+      <Ionicons
+        name={icon as any}
+        size={18}
+        color={active ? colors.teacher : colors.textMuted}
+      />
+      <Text style={[st.slotTabText, active && st.slotTabTextActive]}>
+        {label}
+      </Text>
+      {active && <View style={st.slotTabDot} />}
+    </Pressable>
+  );
+}
+
+function StatBadge({
+  count,
+  label,
+  color,
+}: {
+  count: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <View style={st.statBadge}>
+      <Text style={[st.statBadgeNum, { color }]}>{count}</Text>
+      <Text style={st.statBadgeLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
+
 export function AttendanceScreen() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Setup
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
   const [slot, setSlot] = useState<Slot>('MORNING');
   const date = todayISO();
 
+  // Marking
   const [session, setSession] = useState<AttendanceSession | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [marks, setMarks] = useState<Record<string, AttStatus>>({});
   const [search, setSearch] = useState('');
 
+  // Load sections on mount
   const loadSections = useCallback(async () => {
     setPhase('loading');
     try {
@@ -75,7 +130,7 @@ export function AttendanceScreen() {
       if (res.results.length > 0) setSelectedSection(res.results[0]);
       setPhase('setup');
     } catch (e: any) {
-      setErrorMsg(e?.message ?? 'Failed to load sections. Check your connection.');
+      setErrorMsg(e?.message ?? 'Could not load sections.');
       setPhase('error');
     }
   }, []);
@@ -84,6 +139,7 @@ export function AttendanceScreen() {
     loadSections();
   }, [loadSections]);
 
+  // Start session: create + fetch students in parallel
   async function handleBegin() {
     if (!selectedSection) return;
     setPhase('creating');
@@ -100,41 +156,71 @@ export function AttendanceScreen() {
       setStudents(studentsRes.results);
       const initial: Record<string, AttStatus> = {};
       studentsRes.results.forEach((s) => {
-        initial[s.id] = null;
+        initial[String(s.id)] = null;
       });
+      // Pre-fill any marks already saved on the session
       sessionRes.records.forEach((r) => {
-        initial[r.student_id] = r.status;
+        initial[String(r.student_id)] = r.status;
       });
       setMarks(initial);
       setSearch('');
       setPhase('marking');
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Could not start attendance session.');
+      Alert.alert('Error', e?.message ?? 'Could not start attendance.');
       setPhase('setup');
     }
   }
 
-  function toggleMark(studentId: string, val: 'PRESENT' | 'ABSENT') {
+  // Cycle status: null → PRESENT → ABSENT → null
+  function cycleStatus(studentId: string) {
+    setMarks((prev) => {
+      const cur = prev[studentId];
+      const next: AttStatus =
+        cur === null ? 'PRESENT' : cur === 'PRESENT' ? 'ABSENT' : null;
+      return { ...prev, [studentId]: next };
+    });
+  }
+
+  function setStatus(studentId: string, val: AttStatus) {
     setMarks((prev) => ({
       ...prev,
       [studentId]: prev[studentId] === val ? null : val,
     }));
   }
 
+  function markAll(val: 'PRESENT' | 'ABSENT') {
+    setMarks((prev) => {
+      const next = { ...prev };
+      students.forEach((s) => {
+        next[String(s.id)] = val;
+      });
+      return next;
+    });
+  }
+
+  // Build records array using original student.id values (avoids UUID/string type mismatch)
+  function buildRecords(onlyMarked = true) {
+    return students
+      .filter((s) =>
+        onlyMarked
+          ? marks[String(s.id)] !== null
+          : marks[String(s.id)] !== null,
+      )
+      .map((s) => ({
+        student_id: s.id, // preserve original type from API response
+        status: marks[String(s.id)] as 'PRESENT' | 'ABSENT',
+      }));
+  }
+
   async function handleSave() {
     if (!session) return;
     setPhase('saving');
     try {
-      const records = Object.entries(marks)
-        .filter(([, s]) => s !== null)
-        .map(([student_id, status]) => ({
-          student_id,
-          status: status as 'PRESENT' | 'ABSENT',
-        }));
+      const records = buildRecords();
       await teacherApi.updateAttendanceRecords(session.id, records);
-      Alert.alert('Saved', 'Attendance progress saved successfully.');
+      Alert.alert('Saved', 'Progress saved successfully.');
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to save progress.');
+      Alert.alert('Error', e?.message ?? 'Failed to save.');
     } finally {
       setPhase('marking');
     }
@@ -144,12 +230,7 @@ export function AttendanceScreen() {
     if (!session) return;
     setPhase('confirming');
     try {
-      const records = Object.entries(marks)
-        .filter(([, s]) => s !== null)
-        .map(([student_id, status]) => ({
-          student_id,
-          status: status as 'PRESENT' | 'ABSENT',
-        }));
+      const records = buildRecords();
       await teacherApi.updateAttendanceRecords(session.id, records);
       await teacherApi.confirmAttendanceSession(session.id);
       setPhase('confirmed');
@@ -159,206 +240,246 @@ export function AttendanceScreen() {
     }
   }
 
-  function handleMarkAnother() {
-    setSession(null);
-    setStudents([]);
-    setMarks({});
-    setSearch('');
-    setPhase('setup');
-  }
-
+  // Derived stats
+  const totalStudents = students.length;
   const present = Object.values(marks).filter((m) => m === 'PRESENT').length;
   const absent = Object.values(marks).filter((m) => m === 'ABSENT').length;
   const unmarked = Object.values(marks).filter((m) => m === null).length;
-  const canConfirm = students.length > 0 && unmarked === 0;
+  const canConfirm = totalStudents > 0 && unmarked === 0;
+  const progress = totalStudents > 0 ? ((present + absent) / totalStudents) * 100 : 0;
 
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      (s.roll_number ?? '').toLowerCase().includes(search.toLowerCase()),
+  const filteredStudents = useMemo(
+    () =>
+      students.filter(
+        (s) =>
+          s.name.toLowerCase().includes(search.toLowerCase()) ||
+          (s.roll_number ?? '').toLowerCase().includes(search.toLowerCase()),
+      ),
+    [students, search],
   );
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
+  // ── LOADING ────────────────────────────────────────────────────────────────
   if (phase === 'loading') {
     return (
-      <SafeAreaView style={s.container} edges={['top']}>
-        <HeaderBar center={<Text style={s.headerTitle}>Attendance</Text>} />
-        <View style={s.centered}>
+      <SafeAreaView style={st.root} edges={['top']}>
+        <HeaderBar center={<Text style={st.hTitle}>Attendance</Text>} />
+        <View style={st.centered}>
           <ActivityIndicator size="large" color={colors.teacher} />
-          <Text style={s.muted}>Loading your sections…</Text>
+          <Text style={st.dimText}>Loading sections…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // ── Error ────────────────────────────────────────────────────────────────────
+  // ── ERROR ──────────────────────────────────────────────────────────────────
   if (phase === 'error') {
     return (
-      <SafeAreaView style={s.container} edges={['top']}>
-        <HeaderBar center={<Text style={s.headerTitle}>Attendance</Text>} />
-        <View style={s.centered}>
-          <Ionicons name="alert-circle-outline" size={52} color={colors.danger} />
-          <Text style={s.errorTitle}>Could not load sections</Text>
-          <Text style={s.muted}>{errorMsg}</Text>
-          <Pressable style={s.retryBtn} onPress={loadSections}>
-            <Text style={s.retryBtnText}>Retry</Text>
+      <SafeAreaView style={st.root} edges={['top']}>
+        <HeaderBar center={<Text style={st.hTitle}>Attendance</Text>} />
+        <View style={st.centered}>
+          <View style={st.errorCircle}>
+            <Ionicons name="alert" size={32} color="#fff" />
+          </View>
+          <Text style={st.errorTitle}>Could not load sections</Text>
+          <Text style={st.dimText}>{errorMsg}</Text>
+          <Pressable style={st.retryBtn} onPress={loadSections}>
+            <Ionicons name="refresh" size={16} color={colors.surface} />
+            <Text style={st.retryBtnText}>Try Again</Text>
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
 
-  // ── Confirmed ────────────────────────────────────────────────────────────────
+  // ── CONFIRMED ──────────────────────────────────────────────────────────────
   if (phase === 'confirmed') {
     return (
-      <SafeAreaView style={s.container} edges={['top']}>
-        <HeaderBar center={<Text style={s.headerTitle}>Attendance</Text>} />
-        <View style={s.centered}>
-          <View style={s.successRing}>
-            <Ionicons name="checkmark-circle" size={72} color={colors.success} />
+      <SafeAreaView style={st.root} edges={['top']}>
+        <HeaderBar center={<Text style={st.hTitle}>Attendance</Text>} />
+        <View style={st.centered}>
+          <View style={st.successCircle}>
+            <Ionicons name="checkmark" size={44} color="#fff" />
           </View>
-          <Text style={s.successTitle}>Attendance Confirmed!</Text>
-          <Text style={s.muted}>
+          <Text style={st.successTitle}>All Done!</Text>
+          <Text style={st.dimText}>
             {slot === 'MORNING' ? 'Morning' : 'Afternoon'} · {formatDate(date)}
           </Text>
-          <View style={s.statsRow}>
-            <View style={s.statItem}>
-              <Text style={[s.statNum, { color: colors.success }]}>{present}</Text>
-              <Text style={s.statLabel}>Present</Text>
-            </View>
-            <View style={s.statDiv} />
-            <View style={s.statItem}>
-              <Text style={[s.statNum, { color: colors.danger }]}>{absent}</Text>
-              <Text style={s.statLabel}>Absent</Text>
-            </View>
-            <View style={s.statDiv} />
-            <View style={s.statItem}>
-              <Text style={[s.statNum, { color: colors.textSecondary }]}>
-                {students.length}
+
+          {/* Result cards */}
+          <View style={st.resultRow}>
+            <View style={[st.resultCard, st.resultCardP]}>
+              <Text style={[st.resultNum, { color: colors.success }]}>
+                {present}
               </Text>
-              <Text style={s.statLabel}>Total</Text>
+              <Text style={st.resultLabel}>Present</Text>
             </View>
-          </View>
-          <Pressable style={s.outlineBtn} onPress={handleMarkAnother}>
-            <Text style={s.outlineBtnText}>Mark Another Session</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Setup ────────────────────────────────────────────────────────────────────
-  if (phase === 'setup' || phase === 'creating') {
-    return (
-      <SafeAreaView style={s.container} edges={['top']}>
-        <HeaderBar
-          center={
-            <View style={s.hdrCenter}>
-              <Text style={s.headerTitle}>Mark Attendance</Text>
-              <Text style={s.headerSub}>{formatDate(date)}</Text>
+            <View style={[st.resultCard, st.resultCardA]}>
+              <Text style={[st.resultNum, { color: colors.danger }]}>
+                {absent}
+              </Text>
+              <Text style={st.resultLabel}>Absent</Text>
             </View>
-          }
-        />
-        <ScrollView
-          contentContainerStyle={s.setupContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Section picker — only if teacher has multiple sections */}
-          {sections.length > 1 && (
-            <View style={s.card}>
-              <Text style={s.cardLabel}>Select Section</Text>
-              <View style={s.chipGrid}>
-                {sections.map((sec) => (
-                  <Pressable
-                    key={sec.id}
-                    style={[
-                      s.sectionChip,
-                      selectedSection?.id === sec.id && s.sectionChipOn,
-                    ]}
-                    onPress={() => setSelectedSection(sec)}
-                  >
-                    {sec.is_class_teacher && (
-                      <View style={s.ctBadge}>
-                        <Text style={s.ctBadgeText}>CT</Text>
-                      </View>
-                    )}
-                    <Text
-                      style={[
-                        s.chipClass,
-                        selectedSection?.id === sec.id && s.chipClassOn,
-                      ]}
-                    >
-                      {sec.class_name}
-                    </Text>
-                    <Text
-                      style={[
-                        s.chipSec,
-                        selectedSection?.id === sec.id && s.chipSecOn,
-                      ]}
-                    >
-                      Sec {sec.section_name}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Single section display */}
-          {sections.length === 1 && selectedSection && (
-            <View style={s.card}>
-              <Text style={s.cardLabel}>Section</Text>
-              <View style={s.singleSection}>
-                <View>
-                  <Text style={s.singleClass}>{selectedSection.class_name}</Text>
-                  <Text style={s.singleSec}>
-                    Section {selectedSection.section_name}
-                  </Text>
-                </View>
-                <Text style={s.studentCount}>
-                  {selectedSection.student_count} students
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Slot selector */}
-          <View style={s.card}>
-            <Text style={s.cardLabel}>Session Slot</Text>
-            <SegmentedControl
-              options={['Morning', 'Afternoon']}
-              activeIndex={slot === 'MORNING' ? 0 : 1}
-              onChange={(i) => setSlot(i === 0 ? 'MORNING' : 'AFTERNOON')}
-              accentColor={colors.teacher}
-            />
-          </View>
-
-          {/* Date */}
-          <View style={s.card}>
-            <Text style={s.cardLabel}>Date</Text>
-            <View style={s.dateRow}>
-              <Ionicons name="calendar-outline" size={18} color={colors.teacher} />
-              <Text style={s.dateText}>{formatDate(date)}</Text>
-              <View style={s.todayBadge}>
-                <Text style={s.todayText}>Today</Text>
-              </View>
+            <View style={[st.resultCard, { borderColor: colors.border }]}>
+              <Text style={[st.resultNum, { color: colors.textSecondary }]}>
+                {totalStudents}
+              </Text>
+              <Text style={st.resultLabel}>Total</Text>
             </View>
           </View>
 
           <Pressable
+            style={st.anotherBtn}
+            onPress={() => {
+              setSession(null);
+              setStudents([]);
+              setMarks({});
+              setSearch('');
+              setPhase('setup');
+            }}
+          >
+            <Ionicons
+              name="arrow-back-outline"
+              size={16}
+              color={colors.teacher}
+            />
+            <Text style={st.anotherBtnText}>Mark Another Session</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── SETUP ──────────────────────────────────────────────────────────────────
+  if (phase === 'setup' || phase === 'creating') {
+    return (
+      <SafeAreaView style={st.root} edges={['top']}>
+        <HeaderBar
+          center={
+            <View style={st.hCenter}>
+              <Text style={st.hTitle}>Mark Attendance</Text>
+              <Text style={st.hSub}>{formatDate(date)}</Text>
+            </View>
+          }
+        />
+
+        <ScrollView
+          contentContainerStyle={st.setupScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Section ── */}
+          <Text style={st.groupLabel}>Section</Text>
+          {sections.length > 1 ? (
+            <View style={st.sectionGrid}>
+              {sections.map((sec) => {
+                const active = selectedSection?.id === sec.id;
+                return (
+                  <Pressable
+                    key={sec.id}
+                    style={[st.sectionTile, active && st.sectionTileActive]}
+                    onPress={() => setSelectedSection(sec)}
+                  >
+                    {sec.is_class_teacher && (
+                      <View style={st.ctChip}>
+                        <Text style={st.ctChipText}>Class Teacher</Text>
+                      </View>
+                    )}
+                    <Text
+                      style={[st.sectionTileClass, active && st.sectionTileClassActive]}
+                    >
+                      {sec.class_name}
+                    </Text>
+                    <Text
+                      style={[st.sectionTileSec, active && st.sectionTileSecActive]}
+                    >
+                      Section {sec.section_name}
+                    </Text>
+                    <Text
+                      style={[st.sectionTileCount, active && st.sectionTileCountActive]}
+                    >
+                      {sec.student_count} students
+                    </Text>
+                    {active && (
+                      <View style={st.sectionCheckmark}>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={colors.teacher}
+                        />
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            selectedSection && (
+              <View style={st.singleSectionCard}>
+                <View style={st.singleSectionLeft}>
+                  <Text style={st.singleSectionClass}>
+                    {selectedSection.class_name} – Section{' '}
+                    {selectedSection.section_name}
+                  </Text>
+                  <Text style={st.singleSectionCount}>
+                    {selectedSection.student_count} students
+                  </Text>
+                </View>
+                <View style={st.singleSectionIcon}>
+                  <Ionicons name="people" size={22} color={colors.teacher} />
+                </View>
+              </View>
+            )
+          )}
+
+          {/* ── Slot ── */}
+          <Text style={[st.groupLabel, { marginTop: spacing.xl }]}>
+            Session
+          </Text>
+          <View style={st.slotRow}>
+            <SlotTab
+              label="Morning"
+              icon="sunny-outline"
+              active={slot === 'MORNING'}
+              onPress={() => setSlot('MORNING')}
+            />
+            <SlotTab
+              label="Afternoon"
+              icon="partly-sunny-outline"
+              active={slot === 'AFTERNOON'}
+              onPress={() => setSlot('AFTERNOON')}
+            />
+          </View>
+
+          {/* ── Date ── */}
+          <View style={st.datePill}>
+            <Ionicons name="calendar-outline" size={15} color={colors.teacher} />
+            <Text style={st.datePillText}>{formatDate(date)}</Text>
+            <View style={st.todayChip}>
+              <Text style={st.todayChipText}>Today</Text>
+            </View>
+          </View>
+
+          {/* ── Begin button ── */}
+          <Pressable
             style={[
-              s.beginBtn,
-              (!selectedSection || phase === 'creating') && s.beginBtnDim,
+              st.beginBtn,
+              (!selectedSection || phase === 'creating') && st.beginBtnDisabled,
             ]}
             onPress={handleBegin}
             disabled={!selectedSection || phase === 'creating'}
           >
             {phase === 'creating' ? (
-              <ActivityIndicator color={colors.surface} />
+              <>
+                <ActivityIndicator color={colors.surface} size="small" />
+                <Text style={st.beginBtnText}>Starting…</Text>
+              </>
             ) : (
               <>
-                <Ionicons name="people-outline" size={20} color={colors.surface} />
-                <Text style={s.beginBtnText}>Begin Attendance</Text>
+                <Ionicons
+                  name="checkbox-outline"
+                  size={20}
+                  color={colors.surface}
+                />
+                <Text style={st.beginBtnText}>Start Marking Attendance</Text>
               </>
             )}
           </Pressable>
@@ -367,55 +488,61 @@ export function AttendanceScreen() {
     );
   }
 
-  // ── Marking ──────────────────────────────────────────────────────────────────
+  // ── MARKING ────────────────────────────────────────────────────────────────
   const isBusy = phase === 'saving' || phase === 'confirming';
 
   return (
-    <SafeAreaView style={s.container} edges={['top']}>
+    <SafeAreaView style={st.root} edges={['top']}>
+      {/* Header */}
       <HeaderBar
         center={
-          <View style={s.hdrCenter}>
-            <Text style={s.headerTitle}>
-              {selectedSection?.class_name} – Sec {selectedSection?.section_name}
+          <View style={st.hCenter}>
+            <Text style={st.hTitle}>
+              {selectedSection?.class_name} – Sec{' '}
+              {selectedSection?.section_name}
             </Text>
-            <Text style={s.headerSub}>
+            <Text style={st.hSub}>
               {slot === 'MORNING' ? 'Morning' : 'Afternoon'} · {formatDate(date)}
             </Text>
           </View>
         }
       />
 
-      {/* Live summary counters */}
-      <View style={s.summaryBar}>
-        {(
-          [
-            { label: 'Present', val: present, color: colors.success },
-            { label: 'Absent', val: absent, color: colors.danger },
-            { label: 'Unmarked', val: unmarked, color: colors.warning },
-          ] as const
-        ).map((item, i) => (
-          <React.Fragment key={item.label}>
-            {i > 0 && <View style={s.sumDiv} />}
-            <View style={s.sumItem}>
-              <Text style={[s.sumNum, { color: item.color }]}>{item.val}</Text>
-              <Text style={s.sumLabel}>{item.label}</Text>
-            </View>
-          </React.Fragment>
-        ))}
+      {/* Progress bar */}
+      <View style={st.progressTrack}>
+        <View style={[st.progressFill, { width: `${progress}%` as any }]} />
+      </View>
+
+      {/* Stats + Quick action */}
+      <View style={st.statsPanel}>
+        <StatBadge count={present} label="Present" color={colors.success} />
+        <View style={st.statsDivider} />
+        <StatBadge count={absent} label="Absent" color={colors.danger} />
+        <View style={st.statsDivider} />
+        <StatBadge count={unmarked} label="Unmarked" color={colors.warning} />
+        <View style={st.statsDivider} />
+        <Pressable
+          style={st.quickBtn}
+          onPress={() => markAll('PRESENT')}
+          disabled={isBusy}
+        >
+          <Ionicons name="checkmark-done" size={14} color={colors.teacher} />
+          <Text style={st.quickBtnText}>All P</Text>
+        </Pressable>
       </View>
 
       {/* Search */}
-      <View style={s.searchBar}>
+      <View style={st.searchBar}>
         <Ionicons name="search-outline" size={15} color={colors.textMuted} />
         <TextInput
-          style={s.searchInput}
+          style={st.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name or roll number…"
+          placeholder="Search name or roll no…"
           placeholderTextColor={colors.textMuted}
         />
         {search.length > 0 && (
-          <Pressable onPress={() => setSearch('')}>
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
             <Ionicons name="close-circle" size={16} color={colors.textMuted} />
           </Pressable>
         )}
@@ -423,38 +550,63 @@ export function AttendanceScreen() {
 
       {/* Student list */}
       <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
+        data={filteredStudents}
+        keyExtractor={(item) => String(item.id)}
         renderItem={({ item, index }) => {
-          const status = marks[item.id];
+          const status = marks[String(item.id)];
           return (
-            <View style={s.studentRow}>
-              <Text style={s.rollNo}>
+            <View
+              style={[
+                st.studentRow,
+                status === 'PRESENT' && st.studentRowP,
+                status === 'ABSENT' && st.studentRowA,
+              ]}
+            >
+              {/* Status indicator bar */}
+              <View
+                style={[
+                  st.statusBar,
+                  status === 'PRESENT' && { backgroundColor: colors.success },
+                  status === 'ABSENT' && { backgroundColor: colors.danger },
+                  status === null && { backgroundColor: colors.border },
+                ]}
+              />
+
+              {/* Roll number */}
+              <Text style={st.rollNo}>
                 {item.roll_number || String(index + 1).padStart(2, '0')}
               </Text>
-              <Text style={s.studentName}>{item.name}</Text>
-              <View style={s.btnPair}>
+
+              {/* Name */}
+              <Text style={st.studentName} numberOfLines={1}>
+                {item.name}
+              </Text>
+
+              {/* P / A buttons */}
+              <View style={st.markPair}>
                 <Pressable
-                  style={[s.markBtn, status === 'PRESENT' && s.markBtnP]}
-                  onPress={() => !isBusy && toggleMark(item.id, 'PRESENT')}
+                  style={[st.markBtn, status === 'PRESENT' && st.markBtnP]}
+                  onPress={() => !isBusy && setStatus(String(item.id), 'PRESENT')}
+                  hitSlop={4}
                 >
                   <Text
                     style={[
-                      s.markBtnTxt,
-                      status === 'PRESENT' && s.markBtnTxtOn,
+                      st.markBtnLabel,
+                      status === 'PRESENT' && st.markBtnLabelActive,
                     ]}
                   >
                     P
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[s.markBtn, status === 'ABSENT' && s.markBtnA]}
-                  onPress={() => !isBusy && toggleMark(item.id, 'ABSENT')}
+                  style={[st.markBtn, status === 'ABSENT' && st.markBtnA]}
+                  onPress={() => !isBusy && setStatus(String(item.id), 'ABSENT')}
+                  hitSlop={4}
                 >
                   <Text
                     style={[
-                      s.markBtnTxt,
-                      status === 'ABSENT' && s.markBtnTxtOn,
+                      st.markBtnLabel,
+                      status === 'ABSENT' && st.markBtnLabelActive,
                     ]}
                   >
                     A
@@ -465,351 +617,294 @@ export function AttendanceScreen() {
           );
         }}
         ItemSeparatorComponent={() => (
-          <View style={{ height: 0.5, backgroundColor: colors.border }} />
+          <View style={{ height: 1, backgroundColor: colors.border }} />
         )}
         showsVerticalScrollIndicator={false}
       />
 
       {/* Action bar */}
-      <View style={s.actionBar}>
-        <Pressable
-          style={[s.saveBtn, isBusy && s.dimBtn]}
-          onPress={handleSave}
-          disabled={isBusy}
-        >
-          {phase === 'saving' ? (
-            <ActivityIndicator size="small" color={colors.teacher} />
-          ) : (
-            <Text style={s.saveTxt}>Save Progress</Text>
+      <View style={st.actionBar}>
+        <View style={st.progressLabel}>
+          <Text style={st.progressLabelText}>
+            {present + absent}/{totalStudents} marked
+          </Text>
+          {canConfirm && (
+            <View style={st.readyBadge}>
+              <Text style={st.readyBadgeText}>Ready to confirm</Text>
+            </View>
           )}
-        </Pressable>
-        <Pressable
-          style={[
-            s.confirmBtn,
-            canConfirm && !isBusy ? s.confirmOn : s.confirmOff,
-          ]}
-          onPress={handleConfirm}
-          disabled={!canConfirm || isBusy}
-        >
-          {phase === 'confirming' ? (
-            <ActivityIndicator size="small" color={colors.surface} />
-          ) : (
-            <Text
-              style={[
-                s.confirmTxt,
-                canConfirm && !isBusy ? s.confirmTxtOn : s.confirmTxtOff,
-              ]}
-            >
-              Confirm Attendance
-            </Text>
-          )}
-        </Pressable>
+        </View>
+        <View style={st.actionBtns}>
+          <Pressable
+            style={[st.saveBtn, isBusy && st.btnDim]}
+            onPress={handleSave}
+            disabled={isBusy}
+          >
+            {phase === 'saving' ? (
+              <ActivityIndicator size="small" color={colors.teacher} />
+            ) : (
+              <Text style={st.saveBtnText}>Save</Text>
+            )}
+          </Pressable>
+          <Pressable
+            style={[
+              st.confirmBtn,
+              canConfirm && !isBusy ? st.confirmBtnReady : st.confirmBtnDisabled,
+            ]}
+            onPress={handleConfirm}
+            disabled={!canConfirm || isBusy}
+          >
+            {phase === 'confirming' ? (
+              <ActivityIndicator size="small" color={colors.surface} />
+            ) : (
+              <>
+                <Ionicons
+                  name="checkmark-done-circle-outline"
+                  size={18}
+                  color={canConfirm ? colors.surface : colors.textMuted}
+                />
+                <Text
+                  style={[
+                    st.confirmBtnText,
+                    canConfirm && !isBusy
+                      ? st.confirmBtnTextReady
+                      : st.confirmBtnTextDisabled,
+                  ]}
+                >
+                  Confirm
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const st = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.background },
+  hCenter: { alignItems: 'center' },
+  hTitle: { ...(typography.h3 as object), color: colors.textPrimary },
+  hSub: { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
+  dimText: { ...(typography.body as object), color: colors.textMuted, textAlign: 'center' },
+
   centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xxl,
-    gap: spacing.md,
-  },
-  muted: {
-    ...(typography.body as object),
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  hdrCenter: { alignItems: 'center' },
-  headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  headerSub: {
-    ...(typography.caption as object),
-    color: colors.textMuted,
-    marginTop: 2,
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    padding: spacing.xxl, gap: spacing.lg,
   },
 
   // Error
-  errorTitle: {
-    ...(typography.h2 as object),
-    color: colors.textPrimary,
-    textAlign: 'center',
+  errorCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: colors.danger,
+    alignItems: 'center', justifyContent: 'center',
   },
+  errorTitle: { ...(typography.h2 as object), color: colors.textPrimary, textAlign: 'center' },
   retryBtn: {
-    height: 44,
-    paddingHorizontal: spacing.xxl,
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    height: 44, paddingHorizontal: spacing.xl, borderRadius: 10,
     backgroundColor: colors.teacher,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   retryBtnText: { ...(typography.h3 as object), color: colors.surface },
 
   // Confirmed
-  successRing: { marginBottom: spacing.sm },
-  successTitle: {
-    ...(typography.h1 as object),
-    fontWeight: '600',
-    color: colors.textPrimary,
-    textAlign: 'center',
+  successCircle: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: colors.success,
+    alignItems: 'center', justifyContent: 'center',
   },
-  statsRow: {
-    flexDirection: 'row',
-    width: '100%',
+  successTitle: { ...(typography.h1 as object), fontWeight: '700', color: colors.textPrimary },
+  resultRow: { flexDirection: 'row', gap: spacing.sm, width: '100%' },
+  resultCard: {
+    flex: 1, alignItems: 'center', paddingVertical: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    paddingVertical: spacing.lg,
-    marginTop: spacing.md,
+    borderRadius: 14, borderWidth: 1, gap: spacing.xs,
   },
-  statItem: { flex: 1, alignItems: 'center', gap: spacing.xs },
-  statNum: { fontSize: 28, fontWeight: '700', lineHeight: 32 },
-  statLabel: { ...(typography.label as object), color: colors.textMuted },
-  statDiv: {
-    width: 0.5,
-    backgroundColor: colors.border,
-    alignSelf: 'stretch',
+  resultCardP: { borderColor: colors.success },
+  resultCardA: { borderColor: colors.danger },
+  resultNum: { fontSize: 30, fontWeight: '700' },
+  resultLabel: { ...(typography.label as object), color: colors.textMuted },
+  anotherBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    height: 48, paddingHorizontal: spacing.xl, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.teacher,
   },
-  outlineBtn: {
-    marginTop: spacing.md,
-    height: 48,
-    paddingHorizontal: spacing.xxl,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: colors.teacher,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outlineBtnText: {
-    ...(typography.h3 as object),
-    fontWeight: '500',
-    color: colors.teacher,
-  },
+  anotherBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.teacher },
 
   // Setup
-  setupContent: {
-    padding: spacing.lg,
-    gap: spacing.md,
-    paddingBottom: spacing.xxxl,
-  },
-  card: {
+  setupScroll: { padding: spacing.lg, paddingBottom: 40, gap: spacing.sm },
+  groupLabel: { ...(typography.label as object), color: colors.textMuted, marginBottom: spacing.xs },
+
+  // Section grid
+  sectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  sectionTile: {
+    minWidth: 140, flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.md,
+    borderRadius: 14, borderWidth: 1.5, borderColor: colors.border,
+    padding: spacing.md, gap: spacing.xs, position: 'relative',
   },
-  cardLabel: { ...(typography.label as object), color: colors.textMuted },
+  sectionTileActive: { borderColor: colors.teacher, backgroundColor: '#EFF6FF' },
+  ctChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#DBEAFE', borderRadius: 999,
+    paddingVertical: 2, paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  ctChipText: { fontSize: 10, fontWeight: '600', color: colors.teacher },
+  sectionTileClass: { ...(typography.h3 as object), fontWeight: '700', color: colors.textPrimary },
+  sectionTileClassActive: { color: colors.teacher },
+  sectionTileSec: { ...(typography.caption as object), color: colors.textSecondary },
+  sectionTileSecActive: { color: colors.teacher },
+  sectionTileCount: { ...(typography.label as object), color: colors.textMuted },
+  sectionTileCountActive: { color: colors.teacher },
+  sectionCheckmark: { position: 'absolute', top: spacing.sm, right: spacing.sm },
 
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  sectionChip: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    minWidth: 90,
-    position: 'relative',
+  singleSectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14, borderWidth: 1, borderColor: '#DBEAFE',
+    padding: spacing.lg, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between',
   },
-  sectionChipOn: {
-    borderColor: colors.teacher,
-    backgroundColor: '#EFF6FF',
-  },
-  ctBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: colors.teacher,
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  ctBadgeText: { fontSize: 8, fontWeight: '700', color: colors.surface },
-  chipClass: {
-    ...(typography.h3 as object),
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  chipClassOn: { color: colors.teacher },
-  chipSec: {
-    ...(typography.caption as object),
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  chipSecOn: { color: colors.teacher },
-
-  singleSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    padding: spacing.md,
-  },
-  singleClass: {
-    ...(typography.h3 as object),
-    fontWeight: '600',
-    color: colors.teacher,
-  },
-  singleSec: {
-    ...(typography.caption as object),
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  studentCount: {
-    ...(typography.body as object),
-    fontWeight: '500',
-    color: colors.teacher,
+  singleSectionLeft: { gap: spacing.xs },
+  singleSectionClass: { ...(typography.h3 as object), fontWeight: '600', color: colors.teacher },
+  singleSectionCount: { ...(typography.caption as object), color: colors.textMuted },
+  singleSectionIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center',
   },
 
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  // Slot
+  slotRow: { flexDirection: 'row', gap: spacing.sm },
+  slotTab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xs, paddingVertical: spacing.md,
+    borderRadius: 12, borderWidth: 1.5, borderColor: colors.border,
+    backgroundColor: colors.surface, position: 'relative',
   },
-  dateText: {
-    flex: 1,
-    ...(typography.body as object),
-    color: colors.textPrimary,
+  slotTabActive: { borderColor: colors.teacher, backgroundColor: '#EFF6FF' },
+  slotTabText: { ...(typography.body as object), fontWeight: '500', color: colors.textMuted },
+  slotTabTextActive: { color: colors.teacher, fontWeight: '600' },
+  slotTabDot: {
+    position: 'absolute', top: -1, right: -1,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: colors.teacher, borderWidth: 2, borderColor: colors.surface,
   },
-  todayBadge: {
-    backgroundColor: colors.successBg,
-    borderRadius: 999,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-  todayText: { ...(typography.label as object), color: colors.success },
 
+  // Date pill
+  datePill: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: 10,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
+    borderWidth: 0.5, borderColor: colors.border,
+    marginTop: spacing.xl,
+  },
+  datePillText: { flex: 1, ...(typography.body as object), color: colors.textPrimary },
+  todayChip: {
+    backgroundColor: colors.successBg, borderRadius: 999,
+    paddingVertical: 3, paddingHorizontal: spacing.sm,
+  },
+  todayChipText: { ...(typography.label as object), color: colors.success },
+
+  // Begin button
   beginBtn: {
-    height: 52,
-    borderRadius: 14,
+    marginTop: spacing.lg, height: 54, borderRadius: 14,
     backgroundColor: colors.teacher,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: spacing.sm,
-    marginTop: spacing.sm,
   },
-  beginBtnDim: { opacity: 0.7 },
-  beginBtnText: {
-    ...(typography.h3 as object),
-    fontWeight: '600',
-    color: colors.surface,
-  },
+  beginBtnDisabled: { opacity: 0.65 },
+  beginBtnText: { ...(typography.h3 as object), fontWeight: '600', color: colors.surface },
 
-  // Summary bar
-  summaryBar: {
-    flexDirection: 'row',
+  // Progress bar
+  progressTrack: { height: 3, backgroundColor: colors.border },
+  progressFill: { height: 3, backgroundColor: colors.teacher },
+
+  // Stats panel
+  statsPanel: {
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surface,
-    borderBottomWidth: 0.5,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.md,
+    borderBottomWidth: 0.5, borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
   },
-  sumItem: { flex: 1, alignItems: 'center', gap: spacing.xs },
-  sumNum: { fontSize: 22, fontWeight: '700', lineHeight: 26 },
-  sumLabel: { ...(typography.label as object), color: colors.textMuted },
-  sumDiv: {
-    width: 0.5,
-    backgroundColor: colors.border,
-    alignSelf: 'stretch',
+  statBadge: { flex: 1, alignItems: 'center', gap: 2 },
+  statBadgeNum: { fontSize: 20, fontWeight: '700', lineHeight: 24 },
+  statBadgeLabel: { ...(typography.label as object), color: colors.textMuted },
+  statsDivider: { width: 0.5, height: 32, backgroundColor: colors.border },
+  quickBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    backgroundColor: '#EFF6FF', borderRadius: 8,
+    paddingVertical: spacing.xs + 2, paddingHorizontal: spacing.md,
+    marginLeft: spacing.sm,
   },
+  quickBtnText: { ...(typography.label as object), color: colors.teacher },
 
   // Search
   searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
-    borderBottomWidth: 0.5,
-    borderBottomColor: colors.border,
+    borderBottomWidth: 0.5, borderBottomColor: colors.border,
   },
-  searchInput: {
-    flex: 1,
-    ...(typography.body as object),
-    color: colors.textPrimary,
-  },
+  searchInput: { flex: 1, ...(typography.body as object), color: colors.textPrimary },
 
   // Student rows
   studentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingRight: spacing.lg,
     backgroundColor: colors.surface,
   },
+  studentRowP: { backgroundColor: '#F0FDF4' },
+  studentRowA: { backgroundColor: '#FFF5F5' },
+  statusBar: { width: 3, alignSelf: 'stretch', marginRight: spacing.md },
   rollNo: {
-    ...(typography.label as object),
-    color: colors.textMuted,
-    minWidth: 34,
-    marginRight: spacing.md,
+    ...(typography.label as object), color: colors.textMuted,
+    minWidth: 36, textAlign: 'center', marginRight: spacing.sm,
   },
-  studentName: {
-    flex: 1,
-    ...(typography.body as object),
-    color: colors.textPrimary,
-  },
-  btnPair: { flexDirection: 'row', gap: spacing.xs },
+  studentName: { flex: 1, ...(typography.body as object), color: colors.textPrimary },
+  markPair: { flexDirection: 'row', gap: spacing.xs },
   markBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.background,
   },
-  markBtnP: { backgroundColor: colors.success, borderColor: 'transparent' },
-  markBtnA: { backgroundColor: colors.danger, borderColor: 'transparent' },
-  markBtnTxt: {
-    ...(typography.caption as object),
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
-  markBtnTxtOn: { color: colors.surface },
+  markBtnP: { backgroundColor: colors.success, borderColor: colors.success },
+  markBtnA: { backgroundColor: colors.danger, borderColor: colors.danger },
+  markBtnLabel: { ...(typography.caption as object), fontWeight: '700', color: colors.textMuted },
+  markBtnLabelActive: { color: '#fff' },
 
   // Action bar
   actionBar: {
-    flexDirection: 'row',
-    gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderTopWidth: 0.5,
-    borderTopColor: colors.border,
-    padding: spacing.lg,
+    borderTopWidth: 0.5, borderTopColor: colors.border,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.lg,
+    gap: spacing.sm,
   },
+  progressLabel: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  progressLabelText: { ...(typography.caption as object), color: colors.textMuted },
+  readyBadge: {
+    backgroundColor: colors.successBg, borderRadius: 999,
+    paddingVertical: 2, paddingHorizontal: spacing.sm,
+  },
+  readyBadgeText: { ...(typography.label as object), color: colors.success },
+  actionBtns: { flexDirection: 'row', gap: spacing.sm },
   saveBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: colors.teacher,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, height: 48, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.teacher,
+    alignItems: 'center', justifyContent: 'center',
   },
-  saveTxt: {
-    ...(typography.h3 as object),
-    fontWeight: '500',
-    color: colors.teacher,
-  },
+  saveBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.teacher },
   confirmBtn: {
-    flex: 2,
-    height: 48,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 2, height: 48, borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
   },
-  confirmOn: { backgroundColor: colors.teacher },
-  confirmOff: { backgroundColor: colors.border },
-  confirmTxt: { ...(typography.h3 as object), fontWeight: '500' },
-  confirmTxtOn: { color: colors.surface },
-  confirmTxtOff: { color: colors.textMuted },
-  dimBtn: { opacity: 0.6 },
+  confirmBtnReady: { backgroundColor: colors.teacher },
+  confirmBtnDisabled: { backgroundColor: colors.border },
+  confirmBtnText: { ...(typography.h3 as object), fontWeight: '600' },
+  confirmBtnTextReady: { color: colors.surface },
+  confirmBtnTextDisabled: { color: colors.textMuted },
+  btnDim: { opacity: 0.6 },
 });
