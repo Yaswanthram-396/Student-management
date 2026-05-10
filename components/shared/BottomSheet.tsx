@@ -1,21 +1,20 @@
-import React from "react";
-import { Modal, Pressable, View, StyleSheet } from "react-native";
-import { colors } from "../../constants/colors";
-import { spacing } from "../../constants/spacing";
+import React from 'react';
+import {
+  Modal,
+  Pressable,
+  View,
+  StyleSheet,
+} from 'react-native';
+import { colors } from '../../constants/colors';
+import { spacing } from '../../constants/spacing';
 
 interface BottomSheetProps {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  height?: string | number;
 }
 
-export function BottomSheet({
-  visible,
-  onClose,
-  children,
-  height,
-}: BottomSheetProps) {
+export function BottomSheet({ visible, onClose, children }: BottomSheetProps) {
   return (
     <Modal
       visible={visible}
@@ -24,7 +23,7 @@ export function BottomSheet({
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, height ? { height } : null]}>
+      <View style={styles.sheet}>
         <View style={styles.handle} />
         {children}
       </View>
@@ -35,7 +34,7 @@ export function BottomSheet({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
     backgroundColor: colors.surface,
@@ -44,14 +43,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxxl,
-    maxHeight: "100%",
   },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 999,
     backgroundColor: colors.border,
-    alignSelf: "center",
+    alignSelf: 'center',
     marginBottom: spacing.lg,
   },
 });

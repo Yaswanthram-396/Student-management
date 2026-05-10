@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, Alert, StyleSheet, Dimensions,
+  View, Text, FlatList, Pressable, TextInput, StyleSheet, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,6 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, BottomSheet } from '../shared';
-import { principalApi } from '../../services/principal';
-import type { CalendarEventResponse } from '../../types/principal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CELL_SIZE = (SCREEN_WIDTH - spacing.lg * 2) / 7;
@@ -53,26 +51,6 @@ const AUDIENCE_CFG: Record<string, { bg: string; text: string }> = {
 
 const AUDIENCE_OPTIONS = ['All', 'Students', 'Teachers'];
 
-const VISIBLE_TO_MAP: Record<string, string[]> = {
-  All:      ['TEACHER', 'STUDENT', 'PARENT'],
-  Students: ['STUDENT', 'PARENT'],
-  Teachers: ['TEACHER'],
-};
-
-function mapApiEvent(e: CalendarEventResponse): CalEvent {
-  const ac = AUDIENCE_CFG['All'];
-  return {
-    id: String(e.id),
-    bar: PRINCIPAL_ACCENT,
-    name: e.title,
-    date: new Date(e.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-    audience: 'All',
-    audienceBg: ac.bg,
-    audienceText: ac.text,
-    month: new Date(e.start_date).getMonth(),
-  };
-}
-
 export function CalendarScreen() {
   const [monthIdx, setMonthIdx] = useState(0);
   const [events, setEvents] = useState<CalEvent[]>(INIT_EVENTS);
@@ -88,33 +66,25 @@ export function CalendarScreen() {
   const calDays: (number | null)[] = Array(mon.firstDay).fill(null);
   for (let d = 1; d <= mon.days; d++) calDays.push(d);
 
-  // ── Load events on mount ──────────────────────────────────────────────────
-  useEffect(() => {
-    principalApi.getCalendarEvents()
-      .then(data => setEvents(data.map(mapApiEvent)))
-      .catch(() => {}); // keep mock events on network error
-  }, []);
-
-  // ── Add event ─────────────────────────────────────────────────────────────
-  async function handleAddEvent() {
+  function handleAddEvent() {
     setAdding(true);
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const created = await principalApi.createCalendarEvent({
-        title: evtName || 'New Event',
-        event_type: 'EVENT',
-        start_date: today,
-        end_date: today,
-        visible_to: VISIBLE_TO_MAP[audience] ?? ['TEACHER', 'STUDENT', 'PARENT'],
-      });
-      setEvents(prev => [mapApiEvent(created), ...prev]);
-      setShowSheet(false);
-      setEvtName(''); setAudience('All');
-    } catch (err: any) {
-      Alert.alert('Error', err.details ?? 'Failed to add event.');
-    } finally {
+    setTimeout(() => {
+      const ac = AUDIENCE_CFG[audience] ?? AUDIENCE_CFG.All;
+      const newEvt: CalEvent = {
+        id: String(Date.now()),
+        bar: barColor,
+        name: evtName || 'New Event',
+        date: 'Upcoming',
+        audience,
+        audienceBg: ac.bg,
+        audienceText: ac.text,
+        month: mon.month,
+      };
+      setEvents(prev => [newEvt, ...prev]);
       setAdding(false);
-    }
+      setShowSheet(false);
+      setEvtName('');
+    }, 600);
   }
 
   const CalHeader = (
