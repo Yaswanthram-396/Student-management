@@ -19,7 +19,9 @@
       "Bash(Select-Object -First 50)",
       "Bash(npx expo *)",
       "Bash(git commit -m 'fix: remove stale useSafeAreaInsets call after import cleanup *)",
-      "Bash(dir \"C:\\\\Users\\\\Bhaskar\\\\Desktop\\\\Student-management\\\\.claude\\\\worktrees\\\\inspiring-noyce-6bc4a9\\\\app\\\\teacher\" /b)"
+      "Bash(dir \"C:\\\\Users\\\\Bhaskar\\\\Desktop\\\\Student-management\\\\.claude\\\\worktrees\\\\inspiring-noyce-6bc4a9\\\\app\\\\teacher\" /b)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }

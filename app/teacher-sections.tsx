@@ -81,7 +81,7 @@ export default function SectionsScreen() {
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
             <Text style={styles.schoolName} numberOfLines={1}>
-              {teacher?.school.name ?? 'School'}
+              {teacher?.school.name || teacher?.school.id?.slice(0, 8) || 'School'}
             </Text>
             <Text style={styles.headerTitle}>My Classes</Text>
           </View>
@@ -222,7 +222,7 @@ export default function SectionsScreen() {
                 <Text style={styles.panelName} numberOfLines={1}>
                   {teacher?.profile.name ?? 'Teacher'}
                 </Text>
-                <Text style={styles.panelRole}>{teacher?.school.name}</Text>
+                <Text style={styles.panelRole}>Teacher</Text>
               </View>
               <View style={styles.panelRoleBadge}>
                 <Text style={styles.panelRoleBadgeText}>Teacher</Text>
