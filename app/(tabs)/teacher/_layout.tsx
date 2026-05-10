@@ -1,9 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTeacherStore } from '../../../store/teacher-store';
 
 const ACCENT = '#185FA5';
 
 export default function TeacherLayout() {
+  const { selectedSection } = useTeacherStore();
+  const showAttendance = !selectedSection || selectedSection.is_class_teacher;
+
   return (
     <Tabs
       screenOptions={{
@@ -30,6 +34,7 @@ export default function TeacherLayout() {
       <Tabs.Screen
         name="attendance"
         options={{
+          href: showAttendance ? '/(tabs)/teacher/attendance' : null,
           title: 'Attendance',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="checkmark-circle-outline" size={size} color={color} />

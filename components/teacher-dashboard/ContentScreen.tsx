@@ -1,50 +1,60 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  TextInput,
-  StyleSheet,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Pressable,
   ScrollView,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar, BottomSheet } from '../shared';
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
 import {
   teacherApi,
-  type StudyMaterial,
   type Section,
+  type StudyMaterial,
   type SubjectItem,
-} from '../../services/teacher';
+} from "../../services/teacher";
+import { BottomSheet, HeaderBar } from "../shared";
 
-const FILE_ICONS: Record<string, { icon: string; bg: string; color: string }> = {
-  pdf:  { icon: 'document-text-outline', bg: colors.dangerBg,  color: '#991B1B' },
-  img:  { icon: 'image-outline',          bg: '#DBEAFE',        color: colors.teacher },
-  vid:  { icon: 'videocam-outline',       bg: '#F3E8FF',        color: '#7C3AED' },
-  file: { icon: 'document-outline',       bg: colors.border,    color: colors.textMuted },
-};
+const FILE_ICONS: Record<string, { icon: string; bg: string; color: string }> =
+  {
+    pdf: {
+      icon: "document-text-outline",
+      bg: colors.dangerBg,
+      color: "#991B1B",
+    },
+    img: { icon: "image-outline", bg: "#DBEAFE", color: colors.teacher },
+    vid: { icon: "videocam-outline", bg: "#F3E8FF", color: "#7C3AED" },
+    file: {
+      icon: "document-outline",
+      bg: colors.border,
+      color: colors.textMuted,
+    },
+  };
 
 function fileIcon(url: string | null) {
   if (!url) return FILE_ICONS.file;
-  const ext = url.split('.').pop()?.toLowerCase() ?? '';
-  if (['pdf'].includes(ext)) return FILE_ICONS.pdf;
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return FILE_ICONS.img;
-  if (['mp4', 'mov', 'avi'].includes(ext)) return FILE_ICONS.vid;
+  const ext = url.split(".").pop()?.toLowerCase() ?? "";
+  if (["pdf"].includes(ext)) return FILE_ICONS.pdf;
+  if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext))
+    return FILE_ICONS.img;
+  if (["mp4", "mov", "avi"].includes(ext)) return FILE_ICONS.vid;
   return FILE_ICONS.file;
 }
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
     });
   } catch {
     return iso;
@@ -67,7 +77,7 @@ function MaterialRow({ item }: { item: StudyMaterial }) {
         </Text>
       </View>
       <Ionicons
-        name={item.file_url ? 'download-outline' : 'alert-circle-outline'}
+        name={item.file_url ? "download-outline" : "alert-circle-outline"}
         size={18}
         color={item.file_url ? colors.textMuted : colors.warning}
       />
@@ -83,10 +93,10 @@ export function ContentScreen() {
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
 
-  const [formSectionId, setFormSectionId] = useState('');
-  const [formSubjectId, setFormSubjectId] = useState('');
-  const [formTitle, setFormTitle] = useState('');
-  const [formDesc, setFormDesc] = useState('');
+  const [formSectionId, setFormSectionId] = useState("");
+  const [formSubjectId, setFormSubjectId] = useState("");
+  const [formTitle, setFormTitle] = useState("");
+  const [formDesc, setFormDesc] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -103,7 +113,7 @@ export function ContentScreen() {
       if (sectRes.results.length > 0) setFormSectionId(sectRes.results[0].id);
       if (active.length > 0) setFormSubjectId(active[0].id);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to load materials.');
+      Alert.alert("Error", e?.message ?? "Failed to load materials.");
     } finally {
       setLoading(false);
     }
@@ -119,18 +129,18 @@ export function ContentScreen() {
 
   function handleUploadTap() {
     if (!formTitle.trim() || !formSectionId || !formSubjectId) {
-      Alert.alert('Validation', 'Please fill in title, section, and subject.');
+      Alert.alert("Validation", "Please fill in title, section, and subject.");
       return;
     }
     Alert.alert(
-      'File Upload',
-      'File upload requires expo-document-picker.\n\nInstall it with:\nnpx expo install expo-document-picker\n\nThen update ContentScreen to use DocumentPicker.getDocumentAsync().',
-      [{ text: 'OK' }],
+      "File Upload",
+      "File upload requires expo-document-picker.\n\nInstall it with:\nnpx expo install expo-document-picker\n\nThen update ContentScreen to use DocumentPicker.getDocumentAsync().",
+      [{ text: "OK" }],
     );
   }
 
   return (
-    <SafeAreaView style={st.container} edges={['top']}>
+    <SafeAreaView style={st.container} edges={["top"]}>
       <HeaderBar
         center={<Text style={st.headerTitle}>Study Materials</Text>}
         right={
@@ -148,8 +158,11 @@ export function ContentScreen() {
       {subjects.length > 0 && (
         <View style={st.filterBar}>
           <FlatList
-            data={[{ id: null as string | null, name: 'All' }, ...subjects.map(s => ({ id: s.id, name: s.name }))]}
-            keyExtractor={(item) => item.id ?? 'all'}
+            data={[
+              { id: null as string | null, name: "All" },
+              ...subjects.map((s) => ({ id: s.id, name: s.name })),
+            ]}
+            keyExtractor={(item) => item.id ?? "all"}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={st.filterList}
@@ -184,7 +197,11 @@ export function ContentScreen() {
         </View>
       ) : filtered.length === 0 ? (
         <View style={st.centered}>
-          <Ionicons name="document-outline" size={52} color={colors.textMuted} />
+          <Ionicons
+            name="document-outline"
+            size={52}
+            color={colors.textMuted}
+          />
           <Text style={st.emptyTitle}>No Materials Yet</Text>
           <Text style={st.emptyBody}>
             Tap + to upload study materials for your students.
@@ -196,9 +213,7 @@ export function ContentScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <MaterialRow item={item} />}
           contentContainerStyle={st.listContent}
-          ItemSeparatorComponent={() => (
-            <View style={{ height: spacing.sm }} />
-          )}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
           showsVerticalScrollIndicator={false}
           onRefresh={loadData}
           refreshing={loading}
@@ -291,10 +306,7 @@ export function ContentScreen() {
           </Pressable>
 
           <View style={st.sheetBtns}>
-            <Pressable
-              style={st.cancelBtn}
-              onPress={() => setShowSheet(false)}
-            >
+            <Pressable style={st.cancelBtn} onPress={() => setShowSheet(false)}>
               <Text style={st.cancelTxt}>Cancel</Text>
             </Pressable>
             <Pressable style={st.uploadBtn} onPress={handleUploadTap}>
@@ -312,8 +324,8 @@ const st = StyleSheet.create({
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
     padding: spacing.xxl,
   },
@@ -321,7 +333,7 @@ const st = StyleSheet.create({
   emptyBody: {
     ...(typography.body as object),
     color: colors.textMuted,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   filterBar: {
@@ -339,15 +351,15 @@ const st = StyleSheet.create({
   filterPillOn: { backgroundColor: colors.teacher },
   filterLabel: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   filterLabelOn: { color: colors.surface },
   listContent: { padding: spacing.lg },
 
   materialCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
     backgroundColor: colors.surface,
     borderWidth: 0.5,
@@ -360,14 +372,14 @@ const st = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   materialInfo: { flex: 1, minWidth: 0 },
   materialTitle: {
     ...(typography.body as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
   },
   materialMeta: {
@@ -378,21 +390,21 @@ const st = StyleSheet.create({
 
   sheetTitle: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
     marginBottom: spacing.md,
   },
   fieldLabel: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
   hScroll: { marginBottom: spacing.md },
   hScrollContent: { gap: spacing.xs, paddingRight: spacing.md },
   wrapRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
@@ -407,38 +419,38 @@ const st = StyleSheet.create({
   chipOn: { backgroundColor: colors.teacher, borderColor: colors.teacher },
   chipText: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   chipTextOn: { color: colors.surface },
   textInput: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: "#F5F5F5",
     borderRadius: 10,
     padding: spacing.md,
     ...(typography.body as object),
     color: colors.textPrimary,
     marginBottom: spacing.md,
   },
-  textArea: { height: 80, textAlignVertical: 'top' },
+  textArea: { height: 80, textAlignVertical: "top" },
   filePicker: {
     borderWidth: 1.5,
     borderColor: colors.teacher,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     borderRadius: 12,
     paddingVertical: spacing.xl,
-    alignItems: 'center',
+    alignItems: "center",
     gap: spacing.xs,
     marginBottom: spacing.lg,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: "#EFF6FF",
   },
   filePickerTitle: {
     ...(typography.body as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.teacher,
   },
   filePickerSub: { ...(typography.caption as object), color: colors.textMuted },
   sheetBtns: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
@@ -448,12 +460,12 @@ const st = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelTxt: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   uploadBtn: {
@@ -461,12 +473,12 @@ const st = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     backgroundColor: colors.teacher,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   uploadTxt: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.surface,
   },
 });

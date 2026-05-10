@@ -1,54 +1,54 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  TextInput,
-  StyleSheet,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Pressable,
   ScrollView,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar } from '../shared';
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
 import {
   teacherApi,
+  type AttendanceSession,
   type Section,
   type Student,
-  type AttendanceSession,
-} from '../../services/teacher';
+} from "../../services/teacher";
+import { HeaderBar } from "../shared";
 
-type AttStatus = 'PRESENT' | 'ABSENT' | null;
-type Slot = 'MORNING' | 'AFTERNOON';
+type AttStatus = "PRESENT" | "ABSENT" | null;
+type Slot = "MORNING" | "AFTERNOON";
 type Phase =
-  | 'loading'
-  | 'setup'
-  | 'creating'
-  | 'marking'
-  | 'saving'
-  | 'confirming'
-  | 'confirmed'
-  | 'error';
+  | "loading"
+  | "setup"
+  | "creating"
+  | "marking"
+  | "saving"
+  | "confirming"
+  | "confirmed"
+  | "error";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function todayISO() {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toISOString().split("T")[0];
 }
 
 function formatDate(iso: string) {
   try {
-    const [y, m, d] = iso.split('-');
-    return new Date(+y, +m - 1, +d).toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
+    const [y, m, d] = iso.split("-");
+    return new Date(+y, +m - 1, +d).toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
     });
   } catch {
     return iso;
@@ -106,32 +106,32 @@ function StatBadge({
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function AttendanceScreen() {
-  const [phase, setPhase] = useState<Phase>('loading');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [errorMsg, setErrorMsg] = useState("");
 
   // Setup
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
-  const [slot, setSlot] = useState<Slot>('MORNING');
+  const [slot, setSlot] = useState<Slot>("MORNING");
   const date = todayISO();
 
   // Marking
   const [session, setSession] = useState<AttendanceSession | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [marks, setMarks] = useState<Record<string, AttStatus>>({});
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
 
   // Load sections on mount
   const loadSections = useCallback(async () => {
-    setPhase('loading');
+    setPhase("loading");
     try {
       const res = await teacherApi.getSections();
       setSections(res.results);
       if (res.results.length > 0) setSelectedSection(res.results[0]);
-      setPhase('setup');
+      setPhase("setup");
     } catch (e: any) {
-      setErrorMsg(e?.message ?? 'Could not load sections.');
-      setPhase('error');
+      setErrorMsg(e?.message ?? "Could not load sections.");
+      setPhase("error");
     }
   }, []);
 
@@ -142,7 +142,7 @@ export function AttendanceScreen() {
   // Start session: create + fetch students in parallel
   async function handleBegin() {
     if (!selectedSection) return;
-    setPhase('creating');
+    setPhase("creating");
     try {
       const [sessionRes, studentsRes] = await Promise.all([
         teacherApi.createAttendanceSession({
@@ -163,11 +163,11 @@ export function AttendanceScreen() {
         initial[String(r.student_id)] = r.status;
       });
       setMarks(initial);
-      setSearch('');
-      setPhase('marking');
+      setSearch("");
+      setPhase("marking");
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Could not start attendance.');
-      setPhase('setup');
+      Alert.alert("Error", e?.message ?? "Could not start attendance.");
+      setPhase("setup");
     }
   }
 
@@ -176,7 +176,7 @@ export function AttendanceScreen() {
     setMarks((prev) => {
       const cur = prev[studentId];
       const next: AttStatus =
-        cur === null ? 'PRESENT' : cur === 'PRESENT' ? 'ABSENT' : null;
+        cur === null ? "PRESENT" : cur === "PRESENT" ? "ABSENT" : null;
       return { ...prev, [studentId]: next };
     });
   }
@@ -188,7 +188,7 @@ export function AttendanceScreen() {
     }));
   }
 
-  function markAll(val: 'PRESENT' | 'ABSENT') {
+  function markAll(val: "PRESENT" | "ABSENT") {
     setMarks((prev) => {
       const next = { ...prev };
       students.forEach((s) => {
@@ -208,60 +208,61 @@ export function AttendanceScreen() {
       )
       .map((s) => ({
         student_id: s.id, // preserve original type from API response
-        status: marks[String(s.id)] as 'PRESENT' | 'ABSENT',
+        status: marks[String(s.id)] as "PRESENT" | "ABSENT",
       }));
   }
 
   async function handleSave() {
     if (!session) return;
-    setPhase('saving');
+    setPhase("saving");
     try {
       const records = buildRecords();
       await teacherApi.updateAttendanceRecords(session.id, records);
-      Alert.alert('Saved', 'Progress saved successfully.');
+      Alert.alert("Saved", "Progress saved successfully.");
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to save.');
+      Alert.alert("Error", e?.message ?? "Failed to save.");
     } finally {
-      setPhase('marking');
+      setPhase("marking");
     }
   }
 
   async function handleConfirm() {
     if (!session) return;
-    setPhase('confirming');
+    setPhase("confirming");
     try {
       const records = buildRecords();
       await teacherApi.updateAttendanceRecords(session.id, records);
       await teacherApi.confirmAttendanceSession(session.id);
-      setPhase('confirmed');
+      setPhase("confirmed");
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to confirm attendance.');
-      setPhase('marking');
+      Alert.alert("Error", e?.message ?? "Failed to confirm attendance.");
+      setPhase("marking");
     }
   }
 
   // Derived stats
   const totalStudents = students.length;
-  const present = Object.values(marks).filter((m) => m === 'PRESENT').length;
-  const absent = Object.values(marks).filter((m) => m === 'ABSENT').length;
+  const present = Object.values(marks).filter((m) => m === "PRESENT").length;
+  const absent = Object.values(marks).filter((m) => m === "ABSENT").length;
   const unmarked = Object.values(marks).filter((m) => m === null).length;
   const canConfirm = totalStudents > 0 && unmarked === 0;
-  const progress = totalStudents > 0 ? ((present + absent) / totalStudents) * 100 : 0;
+  const progress =
+    totalStudents > 0 ? ((present + absent) / totalStudents) * 100 : 0;
 
   const filteredStudents = useMemo(
     () =>
       students.filter(
         (s) =>
           s.name.toLowerCase().includes(search.toLowerCase()) ||
-          (s.roll_number ?? '').toLowerCase().includes(search.toLowerCase()),
+          (s.roll_number ?? "").toLowerCase().includes(search.toLowerCase()),
       ),
     [students, search],
   );
 
   // ── LOADING ────────────────────────────────────────────────────────────────
-  if (phase === 'loading') {
+  if (phase === "loading") {
     return (
-      <SafeAreaView style={st.root} edges={['top']}>
+      <SafeAreaView style={st.root} edges={["top"]}>
         <HeaderBar center={<Text style={st.hTitle}>Attendance</Text>} />
         <View style={st.centered}>
           <ActivityIndicator size="large" color={colors.teacher} />
@@ -272,9 +273,9 @@ export function AttendanceScreen() {
   }
 
   // ── ERROR ──────────────────────────────────────────────────────────────────
-  if (phase === 'error') {
+  if (phase === "error") {
     return (
-      <SafeAreaView style={st.root} edges={['top']}>
+      <SafeAreaView style={st.root} edges={["top"]}>
         <HeaderBar center={<Text style={st.hTitle}>Attendance</Text>} />
         <View style={st.centered}>
           <View style={st.errorCircle}>
@@ -292,9 +293,9 @@ export function AttendanceScreen() {
   }
 
   // ── CONFIRMED ──────────────────────────────────────────────────────────────
-  if (phase === 'confirmed') {
+  if (phase === "confirmed") {
     return (
-      <SafeAreaView style={st.root} edges={['top']}>
+      <SafeAreaView style={st.root} edges={["top"]}>
         <HeaderBar center={<Text style={st.hTitle}>Attendance</Text>} />
         <View style={st.centered}>
           <View style={st.successCircle}>
@@ -302,7 +303,7 @@ export function AttendanceScreen() {
           </View>
           <Text style={st.successTitle}>All Done!</Text>
           <Text style={st.dimText}>
-            {slot === 'MORNING' ? 'Morning' : 'Afternoon'} · {formatDate(date)}
+            {slot === "MORNING" ? "Morning" : "Afternoon"} · {formatDate(date)}
           </Text>
 
           {/* Result cards */}
@@ -333,8 +334,8 @@ export function AttendanceScreen() {
               setSession(null);
               setStudents([]);
               setMarks({});
-              setSearch('');
-              setPhase('setup');
+              setSearch("");
+              setPhase("setup");
             }}
           >
             <Ionicons
@@ -350,9 +351,9 @@ export function AttendanceScreen() {
   }
 
   // ── SETUP ──────────────────────────────────────────────────────────────────
-  if (phase === 'setup' || phase === 'creating') {
+  if (phase === "setup" || phase === "creating") {
     return (
-      <SafeAreaView style={st.root} edges={['top']}>
+      <SafeAreaView style={st.root} edges={["top"]}>
         <HeaderBar
           center={
             <View style={st.hCenter}>
@@ -384,17 +385,26 @@ export function AttendanceScreen() {
                       </View>
                     )}
                     <Text
-                      style={[st.sectionTileClass, active && st.sectionTileClassActive]}
+                      style={[
+                        st.sectionTileClass,
+                        active && st.sectionTileClassActive,
+                      ]}
                     >
                       {sec.class_name}
                     </Text>
                     <Text
-                      style={[st.sectionTileSec, active && st.sectionTileSecActive]}
+                      style={[
+                        st.sectionTileSec,
+                        active && st.sectionTileSecActive,
+                      ]}
                     >
                       Section {sec.section_name}
                     </Text>
                     <Text
-                      style={[st.sectionTileCount, active && st.sectionTileCountActive]}
+                      style={[
+                        st.sectionTileCount,
+                        active && st.sectionTileCountActive,
+                      ]}
                     >
                       {sec.student_count} students
                     </Text>
@@ -416,7 +426,7 @@ export function AttendanceScreen() {
               <View style={st.singleSectionCard}>
                 <View style={st.singleSectionLeft}>
                   <Text style={st.singleSectionClass}>
-                    {selectedSection.class_name} – Section{' '}
+                    {selectedSection.class_name} – Section{" "}
                     {selectedSection.section_name}
                   </Text>
                   <Text style={st.singleSectionCount}>
@@ -438,20 +448,24 @@ export function AttendanceScreen() {
             <SlotTab
               label="Morning"
               icon="sunny-outline"
-              active={slot === 'MORNING'}
-              onPress={() => setSlot('MORNING')}
+              active={slot === "MORNING"}
+              onPress={() => setSlot("MORNING")}
             />
             <SlotTab
               label="Afternoon"
               icon="partly-sunny-outline"
-              active={slot === 'AFTERNOON'}
-              onPress={() => setSlot('AFTERNOON')}
+              active={slot === "AFTERNOON"}
+              onPress={() => setSlot("AFTERNOON")}
             />
           </View>
 
           {/* ── Date ── */}
           <View style={st.datePill}>
-            <Ionicons name="calendar-outline" size={15} color={colors.teacher} />
+            <Ionicons
+              name="calendar-outline"
+              size={15}
+              color={colors.teacher}
+            />
             <Text style={st.datePillText}>{formatDate(date)}</Text>
             <View style={st.todayChip}>
               <Text style={st.todayChipText}>Today</Text>
@@ -462,12 +476,12 @@ export function AttendanceScreen() {
           <Pressable
             style={[
               st.beginBtn,
-              (!selectedSection || phase === 'creating') && st.beginBtnDisabled,
+              (!selectedSection || phase === "creating") && st.beginBtnDisabled,
             ]}
             onPress={handleBegin}
-            disabled={!selectedSection || phase === 'creating'}
+            disabled={!selectedSection || phase === "creating"}
           >
-            {phase === 'creating' ? (
+            {phase === "creating" ? (
               <>
                 <ActivityIndicator color={colors.surface} size="small" />
                 <Text style={st.beginBtnText}>Starting…</Text>
@@ -489,20 +503,21 @@ export function AttendanceScreen() {
   }
 
   // ── MARKING ────────────────────────────────────────────────────────────────
-  const isBusy = phase === 'saving' || phase === 'confirming';
+  const isBusy = phase === "saving" || phase === "confirming";
 
   return (
-    <SafeAreaView style={st.root} edges={['top']}>
+    <SafeAreaView style={st.root} edges={["top"]}>
       {/* Header */}
       <HeaderBar
         center={
           <View style={st.hCenter}>
             <Text style={st.hTitle}>
-              {selectedSection?.class_name} – Sec{' '}
+              {selectedSection?.class_name} – Sec{" "}
               {selectedSection?.section_name}
             </Text>
             <Text style={st.hSub}>
-              {slot === 'MORNING' ? 'Morning' : 'Afternoon'} · {formatDate(date)}
+              {slot === "MORNING" ? "Morning" : "Afternoon"} ·{" "}
+              {formatDate(date)}
             </Text>
           </View>
         }
@@ -523,7 +538,7 @@ export function AttendanceScreen() {
         <View style={st.statsDivider} />
         <Pressable
           style={st.quickBtn}
-          onPress={() => markAll('PRESENT')}
+          onPress={() => markAll("PRESENT")}
           disabled={isBusy}
         >
           <Ionicons name="checkmark-done" size={14} color={colors.teacher} />
@@ -542,7 +557,7 @@ export function AttendanceScreen() {
           placeholderTextColor={colors.textMuted}
         />
         {search.length > 0 && (
-          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+          <Pressable onPress={() => setSearch("")} hitSlop={8}>
             <Ionicons name="close-circle" size={16} color={colors.textMuted} />
           </Pressable>
         )}
@@ -558,23 +573,23 @@ export function AttendanceScreen() {
             <View
               style={[
                 st.studentRow,
-                status === 'PRESENT' && st.studentRowP,
-                status === 'ABSENT' && st.studentRowA,
+                status === "PRESENT" && st.studentRowP,
+                status === "ABSENT" && st.studentRowA,
               ]}
             >
               {/* Status indicator bar */}
               <View
                 style={[
                   st.statusBar,
-                  status === 'PRESENT' && { backgroundColor: colors.success },
-                  status === 'ABSENT' && { backgroundColor: colors.danger },
+                  status === "PRESENT" && { backgroundColor: colors.success },
+                  status === "ABSENT" && { backgroundColor: colors.danger },
                   status === null && { backgroundColor: colors.border },
                 ]}
               />
 
               {/* Roll number */}
               <Text style={st.rollNo}>
-                {item.roll_number || String(index + 1).padStart(2, '0')}
+                {item.roll_number || String(index + 1).padStart(2, "0")}
               </Text>
 
               {/* Name */}
@@ -585,28 +600,32 @@ export function AttendanceScreen() {
               {/* P / A buttons */}
               <View style={st.markPair}>
                 <Pressable
-                  style={[st.markBtn, status === 'PRESENT' && st.markBtnP]}
-                  onPress={() => !isBusy && setStatus(String(item.id), 'PRESENT')}
+                  style={[st.markBtn, status === "PRESENT" && st.markBtnP]}
+                  onPress={() =>
+                    !isBusy && setStatus(String(item.id), "PRESENT")
+                  }
                   hitSlop={4}
                 >
                   <Text
                     style={[
                       st.markBtnLabel,
-                      status === 'PRESENT' && st.markBtnLabelActive,
+                      status === "PRESENT" && st.markBtnLabelActive,
                     ]}
                   >
                     P
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[st.markBtn, status === 'ABSENT' && st.markBtnA]}
-                  onPress={() => !isBusy && setStatus(String(item.id), 'ABSENT')}
+                  style={[st.markBtn, status === "ABSENT" && st.markBtnA]}
+                  onPress={() =>
+                    !isBusy && setStatus(String(item.id), "ABSENT")
+                  }
                   hitSlop={4}
                 >
                   <Text
                     style={[
                       st.markBtnLabel,
-                      status === 'ABSENT' && st.markBtnLabelActive,
+                      status === "ABSENT" && st.markBtnLabelActive,
                     ]}
                   >
                     A
@@ -640,7 +659,7 @@ export function AttendanceScreen() {
             onPress={handleSave}
             disabled={isBusy}
           >
-            {phase === 'saving' ? (
+            {phase === "saving" ? (
               <ActivityIndicator size="small" color={colors.teacher} />
             ) : (
               <Text style={st.saveBtnText}>Save</Text>
@@ -649,12 +668,14 @@ export function AttendanceScreen() {
           <Pressable
             style={[
               st.confirmBtn,
-              canConfirm && !isBusy ? st.confirmBtnReady : st.confirmBtnDisabled,
+              canConfirm && !isBusy
+                ? st.confirmBtnReady
+                : st.confirmBtnDisabled,
             ]}
             onPress={handleConfirm}
             disabled={!canConfirm || isBusy}
           >
-            {phase === 'confirming' ? (
+            {phase === "confirming" ? (
               <ActivityIndicator size="small" color={colors.surface} />
             ) : (
               <>
@@ -686,137 +707,258 @@ export function AttendanceScreen() {
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  hCenter: { alignItems: 'center' },
+  hCenter: { alignItems: "center" },
   hTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  hSub: { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
-  dimText: { ...(typography.body as object), color: colors.textMuted, textAlign: 'center' },
+  hSub: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  dimText: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    textAlign: "center",
+  },
 
   centered: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    padding: spacing.xxl, gap: spacing.lg,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xxl,
+    gap: spacing.lg,
   },
 
   // Error
   errorCircle: {
-    width: 72, height: 72, borderRadius: 36,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: colors.danger,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  errorTitle: { ...(typography.h2 as object), color: colors.textPrimary, textAlign: 'center' },
+  errorTitle: {
+    ...(typography.h2 as object),
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
   retryBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    height: 44, paddingHorizontal: spacing.xl, borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    height: 44,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 10,
     backgroundColor: colors.teacher,
   },
   retryBtnText: { ...(typography.h3 as object), color: colors.surface },
 
   // Confirmed
   successCircle: {
-    width: 88, height: 88, borderRadius: 44,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: colors.success,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  successTitle: { ...(typography.h1 as object), fontWeight: '700', color: colors.textPrimary },
-  resultRow: { flexDirection: 'row', gap: spacing.sm, width: '100%' },
+  successTitle: {
+    ...(typography.h1 as object),
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  resultRow: { flexDirection: "row", gap: spacing.sm, width: "100%" },
   resultCard: {
-    flex: 1, alignItems: 'center', paddingVertical: spacing.lg,
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: 14, borderWidth: 1, gap: spacing.xs,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: spacing.xs,
   },
   resultCardP: { borderColor: colors.success },
   resultCardA: { borderColor: colors.danger },
-  resultNum: { fontSize: 30, fontWeight: '700' },
+  resultNum: { fontSize: 30, fontWeight: "700" },
   resultLabel: { ...(typography.label as object), color: colors.textMuted },
   anotherBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    height: 48, paddingHorizontal: spacing.xl, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.teacher,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    height: 48,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.teacher,
   },
-  anotherBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.teacher },
+  anotherBtnText: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.teacher,
+  },
 
   // Setup
   setupScroll: { padding: spacing.lg, paddingBottom: 40, gap: spacing.sm },
-  groupLabel: { ...(typography.label as object), color: colors.textMuted, marginBottom: spacing.xs },
-
-  // Section grid
-  sectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  sectionTile: {
-    minWidth: 140, flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 14, borderWidth: 1.5, borderColor: colors.border,
-    padding: spacing.md, gap: spacing.xs, position: 'relative',
-  },
-  sectionTileActive: { borderColor: colors.teacher, backgroundColor: '#EFF6FF' },
-  ctChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#DBEAFE', borderRadius: 999,
-    paddingVertical: 2, paddingHorizontal: spacing.sm,
+  groupLabel: {
+    ...(typography.label as object),
+    color: colors.textMuted,
     marginBottom: spacing.xs,
   },
-  ctChipText: { fontSize: 10, fontWeight: '600', color: colors.teacher },
-  sectionTileClass: { ...(typography.h3 as object), fontWeight: '700', color: colors.textPrimary },
+
+  // Section grid
+  sectionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  sectionTile: {
+    minWidth: 140,
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.xs,
+    position: "relative",
+  },
+  sectionTileActive: {
+    borderColor: colors.teacher,
+    backgroundColor: "#EFF6FF",
+  },
+  ctChip: {
+    alignSelf: "flex-start",
+    backgroundColor: "#DBEAFE",
+    borderRadius: 999,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  ctChipText: { fontSize: 10, fontWeight: "600", color: colors.teacher },
+  sectionTileClass: {
+    ...(typography.h3 as object),
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
   sectionTileClassActive: { color: colors.teacher },
-  sectionTileSec: { ...(typography.caption as object), color: colors.textSecondary },
+  sectionTileSec: {
+    ...(typography.caption as object),
+    color: colors.textSecondary,
+  },
   sectionTileSecActive: { color: colors.teacher },
-  sectionTileCount: { ...(typography.label as object), color: colors.textMuted },
+  sectionTileCount: {
+    ...(typography.label as object),
+    color: colors.textMuted,
+  },
   sectionTileCountActive: { color: colors.teacher },
-  sectionCheckmark: { position: 'absolute', top: spacing.sm, right: spacing.sm },
+  sectionCheckmark: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+  },
 
   singleSectionCard: {
     backgroundColor: colors.surface,
-    borderRadius: 14, borderWidth: 1, borderColor: '#DBEAFE',
-    padding: spacing.lg, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'space-between',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    padding: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   singleSectionLeft: { gap: spacing.xs },
-  singleSectionClass: { ...(typography.h3 as object), fontWeight: '600', color: colors.teacher },
-  singleSectionCount: { ...(typography.caption as object), color: colors.textMuted },
+  singleSectionClass: {
+    ...(typography.h3 as object),
+    fontWeight: "600",
+    color: colors.teacher,
+  },
+  singleSectionCount: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+  },
   singleSectionIcon: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Slot
-  slotRow: { flexDirection: 'row', gap: spacing.sm },
+  slotRow: { flexDirection: "row", gap: spacing.sm },
   slotTab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.xs, paddingVertical: spacing.md,
-    borderRadius: 12, borderWidth: 1.5, borderColor: colors.border,
-    backgroundColor: colors.surface, position: 'relative',
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    position: "relative",
   },
-  slotTabActive: { borderColor: colors.teacher, backgroundColor: '#EFF6FF' },
-  slotTabText: { ...(typography.body as object), fontWeight: '500', color: colors.textMuted },
-  slotTabTextActive: { color: colors.teacher, fontWeight: '600' },
+  slotTabActive: { borderColor: colors.teacher, backgroundColor: "#EFF6FF" },
+  slotTabText: {
+    ...(typography.body as object),
+    fontWeight: "500",
+    color: colors.textMuted,
+  },
+  slotTabTextActive: { color: colors.teacher, fontWeight: "600" },
   slotTabDot: {
-    position: 'absolute', top: -1, right: -1,
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: colors.teacher, borderWidth: 2, borderColor: colors.surface,
+    position: "absolute",
+    top: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.teacher,
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
 
   // Date pill
   datePill: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.surface, borderRadius: 10,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
-    borderWidth: 0.5, borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderWidth: 0.5,
+    borderColor: colors.border,
     marginTop: spacing.xl,
   },
-  datePillText: { flex: 1, ...(typography.body as object), color: colors.textPrimary },
+  datePillText: {
+    flex: 1,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+  },
   todayChip: {
-    backgroundColor: colors.successBg, borderRadius: 999,
-    paddingVertical: 3, paddingHorizontal: spacing.sm,
+    backgroundColor: colors.successBg,
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm,
   },
   todayChipText: { ...(typography.label as object), color: colors.success },
 
   // Begin button
   beginBtn: {
-    marginTop: spacing.lg, height: 54, borderRadius: 14,
+    marginTop: spacing.lg,
+    height: 54,
+    borderRadius: 14,
     backgroundColor: colors.teacher,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.sm,
   },
   beginBtnDisabled: { opacity: 0.65 },
-  beginBtnText: { ...(typography.h3 as object), fontWeight: '600', color: colors.surface },
+  beginBtnText: {
+    ...(typography.h3 as object),
+    fontWeight: "600",
+    color: colors.surface,
+  },
 
   // Progress bar
   progressTrack: { height: 3, backgroundColor: colors.border },
@@ -824,86 +966,143 @@ const st = StyleSheet.create({
 
   // Stats panel
   statsPanel: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.surface,
-    borderBottomWidth: 0.5, borderBottomColor: colors.border,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  statBadge: { flex: 1, alignItems: 'center', gap: 2 },
-  statBadgeNum: { fontSize: 20, fontWeight: '700', lineHeight: 24 },
+  statBadge: { flex: 1, alignItems: "center", gap: 2 },
+  statBadgeNum: { fontSize: 20, fontWeight: "700", lineHeight: 24 },
   statBadgeLabel: { ...(typography.label as object), color: colors.textMuted },
   statsDivider: { width: 0.5, height: 32, backgroundColor: colors.border },
   quickBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    backgroundColor: '#EFF6FF', borderRadius: 8,
-    paddingVertical: spacing.xs + 2, paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
     marginLeft: spacing.sm,
   },
   quickBtnText: { ...(typography.label as object), color: colors.teacher },
 
   // Search
   searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
-    borderBottomWidth: 0.5, borderBottomColor: colors.border,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
   },
-  searchInput: { flex: 1, ...(typography.body as object), color: colors.textPrimary },
+  searchInput: {
+    flex: 1,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+  },
 
   // Student rows
   studentRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingRight: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingRight: spacing.lg,
     backgroundColor: colors.surface,
   },
-  studentRowP: { backgroundColor: '#F0FDF4' },
-  studentRowA: { backgroundColor: '#FFF5F5' },
-  statusBar: { width: 3, alignSelf: 'stretch', marginRight: spacing.md },
+  studentRowP: { backgroundColor: "#F0FDF4" },
+  studentRowA: { backgroundColor: "#FFF5F5" },
+  statusBar: { width: 3, alignSelf: "stretch", marginRight: spacing.md },
   rollNo: {
-    ...(typography.label as object), color: colors.textMuted,
-    minWidth: 36, textAlign: 'center', marginRight: spacing.sm,
+    ...(typography.label as object),
+    color: colors.textMuted,
+    minWidth: 36,
+    textAlign: "center",
+    marginRight: spacing.sm,
   },
-  studentName: { flex: 1, ...(typography.body as object), color: colors.textPrimary },
-  markPair: { flexDirection: 'row', gap: spacing.xs },
+  studentName: {
+    flex: 1,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+  },
+  markPair: { flexDirection: "row", gap: spacing.xs },
   markBtn: {
-    width: 40, height: 40, borderRadius: 10,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.background,
   },
   markBtnP: { backgroundColor: colors.success, borderColor: colors.success },
   markBtnA: { backgroundColor: colors.danger, borderColor: colors.danger },
-  markBtnLabel: { ...(typography.caption as object), fontWeight: '700', color: colors.textMuted },
-  markBtnLabelActive: { color: '#fff' },
+  markBtnLabel: {
+    ...(typography.caption as object),
+    fontWeight: "700",
+    color: colors.textMuted,
+  },
+  markBtnLabelActive: { color: "#fff" },
 
   // Action bar
   actionBar: {
     backgroundColor: colors.surface,
-    borderTopWidth: 0.5, borderTopColor: colors.border,
-    paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.lg,
+    borderTopWidth: 0.5,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
     gap: spacing.sm,
   },
-  progressLabel: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  progressLabelText: { ...(typography.caption as object), color: colors.textMuted },
+  progressLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  progressLabelText: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+  },
   readyBadge: {
-    backgroundColor: colors.successBg, borderRadius: 999,
-    paddingVertical: 2, paddingHorizontal: spacing.sm,
+    backgroundColor: colors.successBg,
+    borderRadius: 999,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
   },
   readyBadgeText: { ...(typography.label as object), color: colors.success },
-  actionBtns: { flexDirection: 'row', gap: spacing.sm },
+  actionBtns: { flexDirection: "row", gap: spacing.sm },
   saveBtn: {
-    flex: 1, height: 48, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.teacher,
-    alignItems: 'center', justifyContent: 'center',
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.teacher,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  saveBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.teacher },
+  saveBtnText: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.teacher,
+  },
   confirmBtn: {
-    flex: 2, height: 48, borderRadius: 10,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    flex: 2,
+    height: 48,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
   },
   confirmBtnReady: { backgroundColor: colors.teacher },
   confirmBtnDisabled: { backgroundColor: colors.border },
-  confirmBtnText: { ...(typography.h3 as object), fontWeight: '600' },
+  confirmBtnText: { ...(typography.h3 as object), fontWeight: "600" },
   confirmBtnTextReady: { color: colors.surface },
   confirmBtnTextDisabled: { color: colors.textMuted },
   btnDim: { opacity: 0.6 },

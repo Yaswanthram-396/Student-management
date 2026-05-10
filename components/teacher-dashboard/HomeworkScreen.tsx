@@ -1,50 +1,50 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  TextInput,
-  StyleSheet,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Pressable,
   ScrollView,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar, BottomSheet, StatusPill } from '../shared';
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
 import {
   teacherApi,
   type HomeworkItem,
   type Section,
   type SubjectItem,
-} from '../../services/teacher';
+} from "../../services/teacher";
+import { BottomSheet, HeaderBar, StatusPill } from "../shared";
 
 const COLOR_PALETTE = [
-  { bg: '#DBEAFE', text: '#1D4ED8' },
-  { bg: '#D1FAE5', text: '#065F46' },
-  { bg: '#F3E8FF', text: '#7C3AED' },
-  { bg: '#FEF3C7', text: '#92400E' },
-  { bg: '#FCE7F3', text: '#9D174D' },
-  { bg: '#E0F2FE', text: '#0369A1' },
+  { bg: "#DBEAFE", text: "#1D4ED8" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#F3E8FF", text: "#7C3AED" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#E0F2FE", text: "#0369A1" },
 ];
 
 function subjectColor(id: string) {
-  const hash = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const hash = id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return COLOR_PALETTE[hash % COLOR_PALETTE.length];
 }
 
 function formatDeadline(iso: string | null): string {
-  if (!iso) return 'No deadline';
+  if (!iso) return "No deadline";
   try {
-    const d = new Date(iso.split('T')[0]);
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
+    const d = new Date(iso.split("T")[0]);
+    return d.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
     });
   } catch {
     return iso;
@@ -54,19 +54,21 @@ function formatDeadline(iso: string | null): string {
 function addDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return d.toISOString().split("T")[0];
 }
 
 const DEADLINE_OPTS = [
-  { label: 'Tomorrow', days: 1 },
-  { label: '+3 Days', days: 3 },
-  { label: '+7 Days', days: 7 },
-  { label: '+14 Days', days: 14 },
+  { label: "Tomorrow", days: 1 },
+  { label: "+3 Days", days: 3 },
+  { label: "+7 Days", days: 7 },
+  { label: "+14 Days", days: 14 },
 ];
 
 function HWCard({ item }: { item: HomeworkItem }) {
   const clr = subjectColor(item.subject.id);
-  const isOverdue = item.deadline ? new Date(item.deadline) < new Date() : false;
+  const isOverdue = item.deadline
+    ? new Date(item.deadline) < new Date()
+    : false;
 
   return (
     <View style={st.hwCard}>
@@ -77,14 +79,18 @@ function HWCard({ item }: { item: HomeworkItem }) {
           </Text>
         </View>
         <StatusPill
-          variant={isOverdue ? 'warning' : 'info'}
-          label={isOverdue ? 'Overdue' : 'Active'}
+          variant={isOverdue ? "warning" : "info"}
+          label={isOverdue ? "Overdue" : "Active"}
         />
       </View>
       <Text style={st.hwDesc}>{item.description}</Text>
       {item.deadline && (
         <View style={st.dueRow}>
-          <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+          <Ionicons
+            name="calendar-outline"
+            size={11}
+            color={colors.textMuted}
+          />
           <Text style={st.hwDue}>Due: {formatDeadline(item.deadline)}</Text>
         </View>
       )}
@@ -99,9 +105,9 @@ export function HomeworkScreen() {
   const [loading, setLoading] = useState(true);
   const [showSheet, setShowSheet] = useState(false);
 
-  const [formSectionId, setFormSectionId] = useState('');
-  const [formSubjectId, setFormSubjectId] = useState('');
-  const [desc, setDesc] = useState('');
+  const [formSectionId, setFormSectionId] = useState("");
+  const [formSubjectId, setFormSubjectId] = useState("");
+  const [desc, setDesc] = useState("");
   const [deadlineDays, setDeadlineDays] = useState(7);
   const [posting, setPosting] = useState(false);
 
@@ -120,7 +126,7 @@ export function HomeworkScreen() {
       if (sectRes.results.length > 0) setFormSectionId(sectRes.results[0].id);
       if (active.length > 0) setFormSubjectId(active[0].id);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to load data.');
+      Alert.alert("Error", e?.message ?? "Failed to load data.");
     } finally {
       setLoading(false);
     }
@@ -132,7 +138,7 @@ export function HomeworkScreen() {
 
   async function handlePost() {
     if (!formSectionId || !formSubjectId || !desc.trim()) {
-      Alert.alert('Validation', 'Please fill in all fields.');
+      Alert.alert("Validation", "Please fill in all fields.");
       return;
     }
     setPosting(true);
@@ -145,16 +151,16 @@ export function HomeworkScreen() {
       });
       setHomework((prev) => [res, ...prev]);
       setShowSheet(false);
-      setDesc('');
+      setDesc("");
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to post homework.');
+      Alert.alert("Error", e?.message ?? "Failed to post homework.");
     } finally {
       setPosting(false);
     }
   }
 
   return (
-    <SafeAreaView style={st.container} edges={['top']}>
+    <SafeAreaView style={st.container} edges={["top"]}>
       <HeaderBar
         center={<Text style={st.headerTitle}>Homework</Text>}
         right={
@@ -186,9 +192,7 @@ export function HomeworkScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <HWCard item={item} />}
           contentContainerStyle={st.listContent}
-          ItemSeparatorComponent={() => (
-            <View style={{ height: spacing.sm }} />
-          )}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
           showsVerticalScrollIndicator={false}
           onRefresh={loadData}
           refreshing={loading}
@@ -280,17 +284,18 @@ export function HomeworkScreen() {
             ))}
           </View>
           <View style={st.deadlinePreview}>
-            <Ionicons name="calendar-outline" size={13} color={colors.teacher} />
+            <Ionicons
+              name="calendar-outline"
+              size={13}
+              color={colors.teacher}
+            />
             <Text style={st.deadlinePreviewText}>
               {formatDeadline(addDays(deadlineDays))}
             </Text>
           </View>
 
           <View style={st.sheetBtns}>
-            <Pressable
-              style={st.cancelBtn}
-              onPress={() => setShowSheet(false)}
-            >
+            <Pressable style={st.cancelBtn} onPress={() => setShowSheet(false)}>
               <Text style={st.cancelTxt}>Cancel</Text>
             </Pressable>
             <Pressable
@@ -316,8 +321,8 @@ const st = StyleSheet.create({
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
     padding: spacing.xxl,
   },
@@ -325,7 +330,7 @@ const st = StyleSheet.create({
   emptyBody: {
     ...(typography.body as object),
     color: colors.textMuted,
-    textAlign: 'center',
+    textAlign: "center",
   },
   listContent: { padding: spacing.lg },
 
@@ -337,9 +342,9 @@ const st = StyleSheet.create({
     padding: spacing.lg,
   },
   hwTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: spacing.sm,
   },
   subjectPill: {
@@ -354,32 +359,32 @@ const st = StyleSheet.create({
     lineHeight: 22,
     marginBottom: spacing.sm,
   },
-  dueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  dueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   hwDue: { ...(typography.caption as object), color: colors.textMuted },
 
   sheetTitle: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
     marginBottom: spacing.md,
   },
   fieldLabel: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
   hScroll: { marginBottom: spacing.md },
   hScrollContent: { gap: spacing.xs, paddingRight: spacing.md },
   wrapRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
   deadlineRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.xs,
     marginBottom: spacing.xs,
   },
@@ -394,13 +399,13 @@ const st = StyleSheet.create({
   chipOn: { backgroundColor: colors.teacher, borderColor: colors.teacher },
   chipText: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   chipTextOn: { color: colors.surface },
   deadlinePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
     marginBottom: spacing.lg,
     paddingVertical: spacing.xs,
@@ -408,20 +413,20 @@ const st = StyleSheet.create({
   deadlinePreviewText: {
     ...(typography.body as object),
     color: colors.teacher,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   descInput: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: "#F5F5F5",
     borderRadius: 10,
     padding: spacing.md,
     ...(typography.body as object),
     color: colors.textPrimary,
     height: 100,
     marginBottom: spacing.md,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
   sheetBtns: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
@@ -431,12 +436,12 @@ const st = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelTxt: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   postBtn: {
@@ -444,13 +449,13 @@ const st = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     backgroundColor: colors.teacher,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   postBtnBusy: { backgroundColor: colors.success },
   postTxt: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.surface,
   },
 });

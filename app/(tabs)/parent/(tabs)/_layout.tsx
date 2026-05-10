@@ -1,14 +1,12 @@
-import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
-const ACCENT = "#1D9E75";
+import { Tabs } from "expo-router";
 
 export default function ParentTabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: ACCENT,
+        tabBarActiveTintColor: "#1D9E75",
         tabBarInactiveTintColor: "#AAAAAA",
         tabBarLabelStyle: { fontSize: 10, fontWeight: "500" },
         tabBarStyle: {

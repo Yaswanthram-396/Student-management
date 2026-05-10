@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../../constants/colors';
 import { spacing } from '../../../constants/spacing';
 import { typography } from '../../../constants/typography';
@@ -10,16 +10,16 @@ import { HeaderBar } from '../../shared';
 type Activity = { id: string; text: string; time: string };
 
 const HOME_ACTIVITY: Activity[] = [
-  { id: '1', text: 'Uploaded Science PDF – Ch 6',         time: '2 hours ago' },
-  { id: '2', text: 'Added Math homework',                  time: 'Yesterday'   },
-  { id: '3', text: 'Posted announcement to Class 6B',      time: '2 days ago'  },
-  { id: '4', text: 'Marked attendance – Morning',          time: '2 days ago'  },
+  { id: '1', text: 'Uploaded Science PDF – Ch 6', time: '2 hours ago' },
+  { id: '2', text: 'Added Math homework', time: 'Yesterday' },
+  { id: '3', text: 'Posted announcement to Class 6B', time: '2 days ago' },
+  { id: '4', text: 'Marked attendance – Morning', time: '2 days ago' },
 ];
 
 const STATS = [
-  { value: '4',  label: 'Homework\nthis week' },
-  { value: '12', label: 'Materials\nuploaded'  },
-  { value: '2',  label: 'Upcoming\nexams'      },
+  { value: '4', label: 'Homework\nthis week' },
+  { value: '12', label: 'Materials\nuploaded' },
+  { value: '2', label: 'Upcoming\nexams' },
 ];
 
 export function HomeScreen() {
@@ -60,38 +60,38 @@ export function HomeScreen() {
             </View>
           </View>
         )}
-        ListHeaderComponent={
-          <View>
-            {!attendanceMarked ? (
-              <View style={[styles.attendCard, styles.attendUnmarked]}>
-                <Text style={styles.attendTitleWarn}>Attendance not marked yet</Text>
-                <Text style={styles.attendSubWarn}>5 May 2026 · Morning Session</Text>
-                <Pressable style={styles.markNowBtn} onPress={() => setAttendanceMarked(true)}>
-                  <Text style={styles.markNowText}>Mark Attendance Now</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={[styles.attendCard, styles.attendMarked]}>
-                <Text style={styles.attendTitleSuccess}>Attendance marked</Text>
-                <Text style={styles.attendSubSuccess}>32 Present · 3 Absent · 0 Unmarked</Text>
-                <Pressable onPress={() => setAttendanceMarked(false)}>
-                  <Text style={styles.viewDetails}>View Details →</Text>
-                </Pressable>
-              </View>
-            )}
+      // ListHeaderComponent={
+      //   <View>
+      //     {!attendanceMarked ? (
+      //       <View style={[styles.attendCard, styles.attendUnmarked]}>
+      //         <Text style={styles.attendTitleWarn}>Attendance not marked yet</Text>
+      //         <Text style={styles.attendSubWarn}>5 May 2026 · Morning Session</Text>
+      //         <Pressable style={styles.markNowBtn} onPress={() => setAttendanceMarked(true)}>
+      //           <Text style={styles.markNowText}>Mark Attendance Now</Text>
+      //         </Pressable>
+      //       </View>
+      //     ) : (
+      //       <View style={[styles.attendCard, styles.attendMarked]}>
+      //         <Text style={styles.attendTitleSuccess}>Attendance marked</Text>
+      //         <Text style={styles.attendSubSuccess}>32 Present · 3 Absent · 0 Unmarked</Text>
+      //         <Pressable onPress={() => setAttendanceMarked(false)}>
+      //           <Text style={styles.viewDetails}>View Details →</Text>
+      //         </Pressable>
+      //       </View>
+      //     )}
 
-            <View style={styles.statsRow}>
-              {STATS.map(({ value, label }) => (
-                <View key={label} style={styles.metricCard}>
-                  <Text style={styles.metricValue}>{value}</Text>
-                  <Text style={styles.metricLabel}>{label}</Text>
-                </View>
-              ))}
-            </View>
+      //     <View style={styles.statsRow}>
+      //       {STATS.map(({ value, label }) => (
+      //         <View key={label} style={styles.metricCard}>
+      //           <Text style={styles.metricValue}>{value}</Text>
+      //           <Text style={styles.metricLabel}>{label}</Text>
+      //         </View>
+      //       ))}
+      //     </View>
 
-            <Text style={styles.sectionLabel}>Recent Activity</Text>
-          </View>
-        }
+      //     <Text style={styles.sectionLabel}>Recent Activity</Text>
+      //   </View>
+      // }
       />
     </SafeAreaView>
   );
@@ -116,11 +116,11 @@ const styles = StyleSheet.create({
   // Attendance card
   attendCard: { borderWidth: 0.5, borderColor: colors.border, borderRadius: 14, padding: spacing.lg },
   attendUnmarked: { backgroundColor: colors.warningBg },
-  attendMarked:   { backgroundColor: colors.successBg   },
-  attendTitleWarn:    { ...(typography.body as object), fontWeight: '600', color: '#92400E', marginBottom: spacing.xs },
-  attendSubWarn:      { ...(typography.caption as object), color: colors.warning, marginBottom: spacing.md },
+  attendMarked: { backgroundColor: colors.successBg },
+  attendTitleWarn: { ...(typography.body as object), fontWeight: '600', color: '#92400E', marginBottom: spacing.xs },
+  attendSubWarn: { ...(typography.caption as object), color: colors.warning, marginBottom: spacing.md },
   attendTitleSuccess: { ...(typography.body as object), fontWeight: '600', color: '#0F6E56', marginBottom: spacing.xs },
-  attendSubSuccess:   { ...(typography.caption as object), color: colors.textSecondary, marginBottom: spacing.sm },
+  attendSubSuccess: { ...(typography.caption as object), color: colors.textSecondary, marginBottom: spacing.sm },
   markNowBtn: {
     height: 48, borderRadius: 10,
     backgroundColor: colors.teacher,
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5, borderColor: colors.border,
   },
   activityRowFirst: { borderTopWidth: 0.5, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
-  activityRowLast:  { borderBottomLeftRadius: 14, borderBottomRightRadius: 14 },
+  activityRowLast: { borderBottomLeftRadius: 14, borderBottomRightRadius: 14 },
   activityDot: {
     width: 6, height: 6, borderRadius: 3,
     backgroundColor: colors.teacher, marginTop: 5, flexShrink: 0,

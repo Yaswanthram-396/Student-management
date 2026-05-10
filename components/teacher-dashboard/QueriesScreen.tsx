@@ -1,28 +1,28 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  Pressable,
-  TextInput,
-  StyleSheet,
   ActivityIndicator,
   Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { HeaderBar, BottomSheet, SegmentedControl } from '../shared';
-import { teacherApi, type ParentQuery } from '../../services/teacher';
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
+import { teacherApi, type ParentQuery } from "../../services/teacher";
+import { BottomSheet, HeaderBar, SegmentedControl } from "../shared";
 
-type Filter = 'ALL' | 'OPEN' | 'REPLIED';
+type Filter = "ALL" | "OPEN" | "REPLIED";
 
 const STATUS_CFG = {
-  OPEN:    { bg: colors.warningBg,  text: colors.warning,       label: 'Open'    },
-  REPLIED: { bg: colors.successBg,  text: colors.success,       label: 'Replied' },
-  CLOSED:  { bg: colors.border,     text: colors.textMuted,     label: 'Closed'  },
+  OPEN: { bg: colors.warningBg, text: colors.warning, label: "Open" },
+  REPLIED: { bg: colors.successBg, text: colors.success, label: "Replied" },
+  CLOSED: { bg: colors.border, text: colors.textMuted, label: "Closed" },
 } as const;
 
 function relativeTime(iso: string): string {
@@ -31,11 +31,11 @@ function relativeTime(iso: string): string {
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     const days = Math.floor(diff / 86400);
-    if (days === 1) return 'Yesterday';
+    if (days === 1) return "Yesterday";
     if (days < 7) return `${days} days ago`;
-    return new Date(iso).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
     });
   } catch {
     return iso;
@@ -45,20 +45,19 @@ function relativeTime(iso: string): string {
 export function QueriesScreen() {
   const [queries, setQueries] = useState<ParentQuery[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const [filter, setFilter] = useState<Filter>("ALL");
   const [selectedQuery, setSelectedQuery] = useState<ParentQuery | null>(null);
-  const [replyText, setReplyText] = useState('');
+  const [replyText, setReplyText] = useState("");
   const [replying, setReplying] = useState(false);
 
   const loadQueries = useCallback(async () => {
     setLoading(true);
     try {
-      const params =
-        filter !== 'ALL' ? { status: filter } : undefined;
+      const params = filter !== "ALL" ? { status: filter } : undefined;
       const res = await teacherApi.getParentQueries(params);
       setQueries(res.results);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to load queries.');
+      Alert.alert("Error", e?.message ?? "Failed to load queries.");
     } finally {
       setLoading(false);
     }
@@ -70,7 +69,7 @@ export function QueriesScreen() {
 
   async function handleReply() {
     if (!selectedQuery || !replyText.trim()) {
-      Alert.alert('Validation', 'Please enter a reply message.');
+      Alert.alert("Validation", "Please enter a reply message.");
       return;
     }
     setReplying(true);
@@ -82,32 +81,32 @@ export function QueriesScreen() {
       setQueries((prev) =>
         prev.map((q) =>
           q.id === selectedQuery.id
-            ? { ...q, status: res.query_status as ParentQuery['status'] }
+            ? { ...q, status: res.query_status as ParentQuery["status"] }
             : q,
         ),
       );
       setSelectedQuery(null);
-      setReplyText('');
+      setReplyText("");
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to send reply.');
+      Alert.alert("Error", e?.message ?? "Failed to send reply.");
     } finally {
       setReplying(false);
     }
   }
 
   const displayed =
-    filter === 'ALL' ? queries : queries.filter((q) => q.status === filter);
+    filter === "ALL" ? queries : queries.filter((q) => q.status === filter);
 
   function renderItem({ item }: { item: ParentQuery }) {
     const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.CLOSED;
-    const isOpen = item.status === 'OPEN';
+    const isOpen = item.status === "OPEN";
 
     return (
       <Pressable
         style={[st.queryCard, isOpen && st.queryCardOpen]}
         onPress={() => {
           setSelectedQuery(item);
-          setReplyText('');
+          setReplyText("");
         }}
       >
         <View style={st.queryHeader}>
@@ -128,7 +127,11 @@ export function QueriesScreen() {
 
         <View style={st.queryFooter}>
           <View style={st.queryFrom}>
-            <Ionicons name="person-outline" size={11} color={colors.textMuted} />
+            <Ionicons
+              name="person-outline"
+              size={11}
+              color={colors.textMuted}
+            />
             <Text style={st.queryFromText}>
               {item.parent.name} · {item.student.name}
             </Text>
@@ -149,16 +152,16 @@ export function QueriesScreen() {
   }
 
   return (
-    <SafeAreaView style={st.container} edges={['top']}>
+    <SafeAreaView style={st.container} edges={["top"]}>
       <HeaderBar center={<Text style={st.headerTitle}>Parent Queries</Text>} />
 
       {/* Filter */}
       <View style={st.filterBar}>
         <SegmentedControl
-          options={['All', 'Open', 'Replied']}
-          activeIndex={filter === 'ALL' ? 0 : filter === 'OPEN' ? 1 : 2}
+          options={["All", "Open", "Replied"]}
+          activeIndex={filter === "ALL" ? 0 : filter === "OPEN" ? 1 : 2}
           onChange={(i) =>
-            setFilter((['ALL', 'OPEN', 'REPLIED'] as Filter[])[i])
+            setFilter((["ALL", "OPEN", "REPLIED"] as Filter[])[i])
           }
           accentColor={colors.teacher}
         />
@@ -177,9 +180,9 @@ export function QueriesScreen() {
           />
           <Text style={st.emptyTitle}>No Queries</Text>
           <Text style={st.emptyBody}>
-            {filter === 'OPEN'
-              ? 'No open queries from parents right now.'
-              : 'No queries found.'}
+            {filter === "OPEN"
+              ? "No open queries from parents right now."
+              : "No queries found."}
           </Text>
         </View>
       ) : (
@@ -188,9 +191,7 @@ export function QueriesScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={st.listContent}
-          ItemSeparatorComponent={() => (
-            <View style={{ height: spacing.sm }} />
-          )}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
           showsVerticalScrollIndicator={false}
           onRefresh={loadQueries}
           refreshing={loading}
@@ -272,8 +273,8 @@ const st = StyleSheet.create({
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
   centered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
     padding: spacing.xxl,
   },
@@ -281,7 +282,7 @@ const st = StyleSheet.create({
   emptyBody: {
     ...(typography.body as object),
     color: colors.textMuted,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   filterBar: {
@@ -305,15 +306,15 @@ const st = StyleSheet.create({
     borderWidth: 1,
   },
   queryHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     marginBottom: spacing.xs,
   },
   queryHeaderLeft: { flex: 1, marginRight: spacing.sm },
   querySubject: {
     ...(typography.body as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
   },
   queryTime: {
@@ -335,50 +336,50 @@ const st = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   queryFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  queryFrom: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  queryFrom: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   queryFromText: { ...(typography.caption as object), color: colors.textMuted },
   replyHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
   },
   replyHintText: {
     ...(typography.caption as object),
     color: colors.teacher,
-    fontWeight: '500',
+    fontWeight: "500",
   },
 
   sheetTitle: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
     marginBottom: spacing.md,
   },
   fieldLabel: {
     ...(typography.caption as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
   queryPreview: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: "#F5F5F5",
     borderRadius: 10,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
   previewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: spacing.xs,
   },
   previewSubject: {
     ...(typography.body as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textPrimary,
     flex: 1,
   },
@@ -390,34 +391,37 @@ const st = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   previewFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
   },
-  previewStudent: { ...(typography.caption as object), color: colors.textMuted },
+  previewStudent: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+  },
   replyInput: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: "#F5F5F5",
     borderRadius: 10,
     padding: spacing.md,
     ...(typography.body as object),
     color: colors.textPrimary,
     height: 110,
     marginBottom: spacing.lg,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
-  sheetBtns: { flexDirection: 'row', gap: spacing.sm },
+  sheetBtns: { flexDirection: "row", gap: spacing.sm },
   cancelBtn: {
     flex: 1,
     height: 48,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelTxt: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.textSecondary,
   },
   sendBtn: {
@@ -425,15 +429,15 @@ const st = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     backgroundColor: colors.teacher,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.xs,
   },
   sendBtnBusy: { backgroundColor: colors.success },
   sendTxt: {
     ...(typography.h3 as object),
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.surface,
   },
 });

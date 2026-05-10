@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,15 +22,16 @@ import { typography } from "../../constants/typography";
 import { parentApi } from "../../services/parent";
 import { formatQueryDate } from "../../src/lib/formatDate";
 import {
-  createQuery,
   getQueryById,
   QueryDetail,
   QueryReply,
   QueryStatus,
   replyToQuery,
 } from "../../src/lib/parentQueryApi";
-import type { ParentAnnouncement } from "../../types/parent";
+import type { ParentAnnouncement, ParentProfile } from "../../types/parent";
 import { BottomSheet, HeaderBar, StatusPill } from "../shared";
+import { QuerySheet } from "./QuerySheet";
+import { useParentQuery } from "./hooks/useParentQuery";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
@@ -85,17 +86,6 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function resolveQueryError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes("UNLINKED_STUDENT"))
-    return "This student is not linked to your account.";
-  if (msg.includes("queries") && msg.includes("disabled"))
-    return "Queries are currently disabled by the school.";
-  if (msg.includes("class teacher"))
-    return "No class teacher assigned to this section yet.";
-  return "Something went wrong. Please try again.";
-}
-
 function statusVariant(
   status: QueryStatus,
 ): "warning" | "info" | "success" | "danger" {
@@ -109,6 +99,8 @@ function statusLabel(status: QueryStatus): string {
   if (status === "ANSWERED") return "Answered";
   return "Closed";
 }
+
+// ─── Child Card Component ────────────────────────────────────────────────────
 
 function ChildCard({ item }: { item: Child }) {
   return (
@@ -140,6 +132,8 @@ function ChildCard({ item }: { item: Child }) {
   );
 }
 
+// ─── Feed Card Component ─────────────────────────────────────────────────────
+
 function FeedCard({ item }: { item: Update }) {
   return (
     <View style={styles.feedCard}>
@@ -153,7 +147,70 @@ function FeedCard({ item }: { item: Update }) {
   );
 }
 
-// ─── Query Detail Sheet ──────────────────────────────────────────────────────
+// ─── Reply Bubble Component ──────────────────────────────────────────────────
+
+function ReplyBubble({
+  reply,
+  teacherName,
+}: {
+  reply: QueryReply;
+  teacherName: string;
+}) {
+  const isTeacher = reply.sender_role === "TEACHER";
+  return (
+    <View
+      style={[
+        styles.replyBubbleWrap,
+        isTeacher ? styles.replyLeft : styles.replyRight,
+      ]}
+    >
+      {isTeacher && (
+        <View style={styles.teacherAvatar}>
+          <Text style={styles.teacherAvatarText}>
+            {getInitials(teacherName)}
+          </Text>
+        </View>
+      )}
+      <View style={{ maxWidth: "75%" }}>
+        <Text
+          style={[
+            styles.replyMeta,
+            isTeacher ? { textAlign: "left" } : { textAlign: "right" },
+          ]}
+        >
+          {isTeacher ? teacherName : "You"}
+        </Text>
+        <View
+          style={[
+            styles.bubble,
+            isTeacher ? styles.bubbleTeacher : styles.bubbleParent,
+          ]}
+        >
+          <Text
+            style={[
+              styles.bubbleText,
+              isTeacher
+                ? { color: colors.textPrimary }
+                : { color: colors.surface },
+            ]}
+          >
+            {reply.message}
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.replyTime,
+            isTeacher ? { textAlign: "left" } : { textAlign: "right" },
+          ]}
+        >
+          {formatQueryDate(reply.created_at)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Query Detail Sheet Component ────────────────────────────────────────────
 
 function QueryDetailSheet({
   visible,
@@ -326,94 +383,38 @@ function QueryDetailSheet({
   );
 }
 
-function ReplyBubble({
-  reply,
-  teacherName,
-}: {
-  reply: QueryReply;
-  teacherName: string;
-}) {
-  const isTeacher = reply.sender_role === "TEACHER";
-  return (
-    <View
-      style={[
-        styles.replyBubbleWrap,
-        isTeacher ? styles.replyLeft : styles.replyRight,
-      ]}
-    >
-      {isTeacher && (
-        <View style={styles.teacherAvatar}>
-          <Text style={styles.teacherAvatarText}>
-            {getInitials(teacherName)}
-          </Text>
-        </View>
-      )}
-      <View style={{ maxWidth: "75%" }}>
-        <Text
-          style={[
-            styles.replyMeta,
-            isTeacher ? { textAlign: "left" } : { textAlign: "right" },
-          ]}
-        >
-          {isTeacher ? teacherName : "You"}
-        </Text>
-        <View
-          style={[
-            styles.bubble,
-            isTeacher ? styles.bubbleTeacher : styles.bubbleParent,
-          ]}
-        >
-          <Text
-            style={[
-              styles.bubbleText,
-              isTeacher
-                ? { color: colors.textPrimary }
-                : { color: colors.surface },
-            ]}
-          >
-            {reply.message}
-          </Text>
-        </View>
-        <Text
-          style={[
-            styles.replyTime,
-            isTeacher ? { textAlign: "left" } : { textAlign: "right" },
-          ]}
-        >
-          {formatQueryDate(reply.created_at)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-// ─── Main Screen ─────────────────────────────────────────────────────────────
+// ─── Main Home Screen Component ──────────────────────────────────────────────
 
 export function HomeScreen() {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
   const [announcements, setAnnouncements] = useState<ParentAnnouncement[]>([]);
-
-  // Query sheet state
-  const [showQuerySheet, setShowQuerySheet] = useState(false);
-  const [queryStudent, setQueryStudent] = useState(
-    PARENT_PROFILE.students[0]?.id ?? "",
+  const [parentProfileState, setParentProfileState] =
+    useState<ParentProfile>(PARENT_PROFILE);
+  const [childrenData, setChildrenData] = useState<Child[]>(() =>
+    parentProfileState.students.map((s) => ({
+      id: s.id,
+      name: s.name,
+      cls: `${s.academic_class.name} · Section ${s.section.name}`,
+      rollNo: s.roll_number,
+      attendance: "pending" as const,
+    })),
   );
-  const [querySubject, setQuerySubject] = useState("");
-  const [queryMessage, setQueryMessage] = useState("");
-  const [queryLoading, setQueryLoading] = useState(false);
-  const [queryError, setQueryError] = useState<string | null>(null);
-  const [subjectError, setSubjectError] = useState(false);
-  const [messageError, setMessageError] = useState(false);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
+
+  // Query sheet state & actions (memoize to prevent infinite updates)
+  const memoizedProfile = React.useMemo(
+    () => parentProfileState,
+    [parentProfileState],
+  );
+  const [queryState, queryActions] = useParentQuery(memoizedProfile);
 
   // Detail sheet state
   const [selectedQueryId, setSelectedQueryId] = useState<string | null>(null);
   const [showDetailSheet, setShowDetailSheet] = useState(false);
 
   const parentFirstName =
-    PARENT_PROFILE.name.split(" ")[0] ?? PARENT_PROFILE.name;
-  const schoolInitials = PARENT_PROFILE.school.name
+    parentProfileState.name.split(" ")[0] ?? parentProfileState.name;
+  const schoolInitials = parentProfileState.school.name
     .split(" ")
     .slice(0, 3)
     .map((w) => w[0])
@@ -421,18 +422,63 @@ export function HomeScreen() {
     .toUpperCase();
 
   const loadAnnouncements = useCallback(() => {
-    const firstStudent = PARENT_PROFILE.students[0];
-    if (!firstStudent) return;
+    // Fetch announcements for the school (no student ID needed)
     parentApi
-      .getAnnouncements(firstStudent.id)
+      .getAnnouncements()
       .then((data) => setAnnouncements(data.results))
-      .catch(() => {});
+      .catch(() => {
+        // silently ignore announcements fetch errors
+      });
+  }, []);
+
+  const loadProfileAndAttendance = useCallback(async () => {
+    try {
+      const profile = await parentApi.getProfile();
+      setParentProfileState(profile);
+
+      // Fetch attendance for all students
+      const today = new Date().toISOString().split("T")[0];
+      const attendancePromises = profile.students.map((s) =>
+        parentApi
+          .getAttendance(s.id, { date_from: today, date_to: today })
+          .then((res) => ({ id: s.id, records: res.results }))
+          .catch(() => ({ id: s.id, records: [] })),
+      );
+
+      const attendanceResults = await Promise.all(attendancePromises);
+
+      // Map attendance to children data
+      const children = profile.students.map((s) => {
+        const rec = attendanceResults.find((r) => r.id === s.id)?.records ?? [];
+        let attendance: AttendanceState = "pending";
+        if (rec.length > 0) {
+          const status = rec[0].status as string;
+          attendance = status === "PRESENT" ? "present" : "absent";
+        }
+        return {
+          id: s.id,
+          name: s.name,
+          cls: `${s.academic_class.name} · Section ${s.section.name}`,
+          rollNo: s.roll_number,
+          attendance,
+        };
+      });
+
+      setChildrenData(children);
+    } catch {
+      // keep defaults on error
+    }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadAnnouncements();
-    }, [loadAnnouncements]),
+      void loadProfileAndAttendance();
+      // Load announcements after profile is fetched
+      const timer = setTimeout(() => {
+        loadAnnouncements();
+      }, 100);
+      return () => clearTimeout(timer);
+    }, [loadProfileAndAttendance, loadAnnouncements]),
   );
 
   const onViewableItemsChanged = useRef(
@@ -443,14 +489,6 @@ export function HomeScreen() {
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
-  const childrenData: Child[] = PARENT_PROFILE.students.map((s, index) => ({
-    id: s.id,
-    name: s.name,
-    cls: `${s.academic_class.name} · Section ${s.section.name}`,
-    rollNo: s.roll_number,
-    attendance: index % 2 === 0 ? "present" : "absent",
-  }));
-
   const feedItems: Update[] = announcements.map((a) => ({
     id: a.id,
     color: AUTHOR_COLORS[a.author_role] ?? colors.parent,
@@ -458,43 +496,6 @@ export function HomeScreen() {
     sub: a.body,
     time: formatPublishedAt(a.published_at),
   }));
-
-  function openQuerySheet() {
-    setQueryStudent(PARENT_PROFILE.students[0]?.id ?? "");
-    setQuerySubject("");
-    setQueryMessage("");
-    setQueryError(null);
-    setSubjectError(false);
-    setMessageError(false);
-    setShowQuerySheet(true);
-  }
-
-  async function handleSendQuery() {
-    const subEmpty = !querySubject.trim();
-    const msgEmpty = !queryMessage.trim();
-    setSubjectError(subEmpty);
-    setMessageError(msgEmpty);
-    if (subEmpty || msgEmpty) return;
-
-    setQueryLoading(true);
-    setQueryError(null);
-    try {
-      await createQuery({
-        student_id: queryStudent,
-        subject: querySubject.trim(),
-        message: queryMessage.trim(),
-      });
-      setShowQuerySheet(false);
-      setQuerySubject("");
-      setQueryMessage("");
-      setShowSuccessToast(true);
-      setTimeout(() => setShowSuccessToast(false), 3000);
-    } catch (err) {
-      setQueryError(resolveQueryError(err));
-    } finally {
-      setQueryLoading(false);
-    }
-  }
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -510,7 +511,7 @@ export function HomeScreen() {
               {getGreeting()}, {parentFirstName}
             </Text>
             <Text style={styles.schoolSub} numberOfLines={1}>
-              {PARENT_PROFILE.school.name}
+              {parentProfileState.school.name}
             </Text>
           </View>
         }
@@ -583,7 +584,7 @@ export function HomeScreen() {
               <View style={styles.announcementsHeader}>
                 <Text style={styles.sectionLabel}>Announcements</Text>
                 <Pressable
-                  onPress={openQuerySheet}
+                  onPress={queryActions.openQuerySheet}
                   style={styles.raiseQueryInline}
                 >
                   <Text style={styles.raiseQueryTextInline}>Raise a Query</Text>
@@ -606,126 +607,20 @@ export function HomeScreen() {
       />
 
       {/* Success toast */}
-      {showSuccessToast && (
+      {queryState.showSuccessToast && (
         <View style={styles.successToast} pointerEvents="none">
           <Text style={styles.successToastText}>Query sent successfully!</Text>
         </View>
       )}
 
       {/* Raise Query Sheet */}
-      <BottomSheet
-        visible={showQuerySheet}
-        onClose={() => setShowQuerySheet(false)}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.sheetTitle}>Raise a Query</Text>
-          <Text style={styles.sheetSubtitle}>
-            Your query will be sent to the class teacher
-          </Text>
-
-          {/* Student selector (only when multiple students) */}
-          {PARENT_PROFILE.students.length > 1 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}
-              contentContainerStyle={{ gap: spacing.sm }}
-            >
-              {PARENT_PROFILE.students.map((s) => (
-                <Pressable
-                  key={s.id}
-                  style={[
-                    styles.studentPill,
-                    queryStudent === s.id && styles.studentPillActive,
-                  ]}
-                  onPress={() => setQueryStudent(s.id)}
-                >
-                  <Text
-                    style={[
-                      styles.studentPillText,
-                      queryStudent === s.id && styles.studentPillTextActive,
-                    ]}
-                  >
-                    {s.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
-
-          {/* Subject field */}
-          <View style={styles.fieldWrap}>
-            <Text style={styles.fieldLabel}>Subject</Text>
-            <TextInput
-              style={[styles.textInput, subjectError && styles.textInputError]}
-              placeholder="e.g. Homework doubt, Exam clarification"
-              placeholderTextColor={colors.textMuted}
-              value={querySubject}
-              onChangeText={(t) => {
-                setQuerySubject(t);
-                if (t.trim()) setSubjectError(false);
-              }}
-              maxLength={100}
-            />
-            <View style={styles.charCountRow}>
-              {subjectError && (
-                <Text style={styles.fieldError}>Subject is required</Text>
-              )}
-              <Text style={styles.charCount}>{querySubject.length}/100</Text>
-            </View>
-          </View>
-
-          {/* Message field */}
-          <View style={styles.fieldWrap}>
-            <Text style={styles.fieldLabel}>Message</Text>
-            <TextInput
-              style={[
-                styles.textInput,
-                styles.textArea,
-                messageError && styles.textInputError,
-              ]}
-              placeholder="Describe your query in detail..."
-              placeholderTextColor={colors.textMuted}
-              value={queryMessage}
-              onChangeText={(t) => {
-                setQueryMessage(t);
-                if (t.trim()) setMessageError(false);
-              }}
-              multiline
-              numberOfLines={4}
-              maxLength={500}
-              textAlignVertical="top"
-            />
-            <View style={styles.charCountRow}>
-              {messageError && (
-                <Text style={styles.fieldError}>Message is required</Text>
-              )}
-              <Text style={styles.charCount}>{queryMessage.length}/500</Text>
-            </View>
-          </View>
-
-          {queryError && <Text style={styles.submitError}>{queryError}</Text>}
-
-          <Pressable
-            style={[
-              styles.sendQueryBtn,
-              queryLoading && styles.sendQueryBtnDisabled,
-            ]}
-            onPress={handleSendQuery}
-            disabled={queryLoading}
-          >
-            {queryLoading ? (
-              <ActivityIndicator color={colors.surface} />
-            ) : (
-              <Text style={styles.sendQueryBtnText}>Send Query</Text>
-            )}
-          </Pressable>
-          <View style={{ height: spacing.lg }} />
-        </ScrollView>
-      </BottomSheet>
+      <QuerySheet
+        visible={queryState.showQuerySheet}
+        onClose={() => queryActions.setShowQuerySheet(false)}
+        profile={parentProfileState}
+        state={queryState}
+        actions={queryActions}
+      />
 
       {/* Query Detail Sheet */}
       <QueryDetailSheet
@@ -859,7 +754,6 @@ const styles = StyleSheet.create({
     ...(typography.body as object),
     color: colors.textMuted,
   },
-
   announcementsHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -879,28 +773,7 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
     fontWeight: "500",
   },
-
   raiseQueryIcon: { marginLeft: spacing.xs },
-  // Raise Query button
-  raiseQueryWrap: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  raiseQueryBtn: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: ACCENT,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  raiseQueryText: {
-    ...(typography.body as object),
-    fontWeight: "500",
-    color: ACCENT,
-  },
 
   // Success toast
   successToast: {
@@ -920,149 +793,83 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Sheet
-  sheetTitle: {
-    ...(typography.h3 as object),
-    fontSize: 16,
-    fontWeight: "500",
-    color: colors.textPrimary,
-  },
-  sheetSubtitle: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-    marginBottom: spacing.lg,
-  },
-  studentPill: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  studentPillActive: {
-    backgroundColor: ACCENT,
-    borderColor: ACCENT,
-  },
-  studentPillText: {
-    ...(typography.caption as object),
-    fontWeight: "500",
-    color: colors.textSecondary,
-  },
-  studentPillTextActive: {
-    color: colors.surface,
-  },
-  fieldWrap: { marginTop: spacing.lg },
-  fieldLabel: {
-    ...(typography.caption as object),
-    fontWeight: "500",
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  textInput: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    ...(typography.body as object),
-    color: colors.textPrimary,
-  },
-  textArea: { minHeight: 96, textAlignVertical: "top" },
-  textInputError: { borderColor: colors.danger },
-  charCountRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.xs,
-  },
-  charCount: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginLeft: "auto",
-  },
-  fieldError: { fontSize: 12, color: colors.danger },
-  submitError: {
-    fontSize: 13,
-    color: colors.danger,
-    marginTop: spacing.md,
-    textAlign: "center",
-  },
-  sendQueryBtn: {
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: ACCENT,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: spacing.lg,
-  },
-  sendQueryBtnDisabled: { opacity: 0.6 },
-  sendQueryBtnText: {
-    ...(typography.body as object),
-    fontWeight: "600",
-    color: colors.surface,
-  },
-
   // Detail sheet
-  detailSheetInner: { flex: 1 },
+  detailSheetInner: { flex: 1, position: "relative" },
   detailClose: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    zIndex: 10,
-    padding: spacing.xs,
+    alignSelf: "flex-end",
+    padding: spacing.md,
   },
-  detailCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+  detailCenter: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   detailHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingRight: spacing.xl,
-    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   detailSubject: {
     ...(typography.h3 as object),
-    fontSize: 16,
-    fontWeight: "500",
-    color: colors.textPrimary,
     flex: 1,
-    marginRight: spacing.sm,
+    marginRight: spacing.md,
+    color: colors.textPrimary,
   },
   detailMeta: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
+  teacherAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.parent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  teacherAvatarText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.surface,
+  },
   detailMetaText: {
-    ...(typography.caption as object),
-    color: colors.textSecondary,
+    ...(typography.body as object),
+    fontWeight: "500",
+    color: colors.textPrimary,
   },
   detailMetaTime: {
     ...(typography.caption as object),
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: spacing.xs,
   },
   divider: {
-    height: 0.5,
+    height: 1,
     backgroundColor: colors.border,
-    marginBottom: spacing.md,
+    marginVertical: spacing.md,
   },
   sectionChip: {
-    ...(typography.label as object),
+    fontSize: 11,
+    fontWeight: "700",
     color: colors.textMuted,
     marginBottom: spacing.sm,
+    letterSpacing: 0.5,
   },
   originalMsgCard: {
-    backgroundColor: "#F9F9F9",
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
     borderRadius: 10,
     padding: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
   },
   originalMsgText: {
-    fontSize: 14,
-    color: "#444444",
-    lineHeight: 22,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+    lineHeight: 20,
   },
   noRepliesText: {
     ...(typography.caption as object),
@@ -1070,84 +877,91 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: spacing.lg,
   },
-
-  // Reply bubbles
   replyBubbleWrap: {
     flexDirection: "row",
     marginBottom: spacing.md,
-    alignItems: "flex-end",
   },
-  replyLeft: { justifyContent: "flex-start" },
-  replyRight: { justifyContent: "flex-end" },
+  replyLeft: {
+    justifyContent: "flex-start",
+  },
+  replyRight: {
+    justifyContent: "flex-end",
+  },
   replyMeta: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: "600",
     color: colors.textMuted,
     marginBottom: spacing.xs,
   },
   bubble: {
-    borderRadius: 14,
+    borderRadius: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
-  bubbleTeacher: { backgroundColor: "#F3F4F6" },
-  bubbleParent: { backgroundColor: ACCENT },
-  bubbleText: { fontSize: 14, lineHeight: 20 },
-  replyTime: { fontSize: 11, color: colors.textMuted, marginTop: spacing.xs },
-  teacherAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.principal,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.sm,
+  bubbleTeacher: {
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
   },
-  teacherAvatarText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.surface,
+  bubbleParent: {
+    backgroundColor: colors.parent,
   },
-
-  // Reply input
-  replyInputRow: { paddingTop: spacing.sm },
-  replyErrorText: {
-    fontSize: 12,
-    color: colors.danger,
-    marginBottom: spacing.xs,
+  bubbleText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
-  replyRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  replyInput: {
-    flex: 1,
-    backgroundColor: "#F5F5F5",
-    borderRadius: 20,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 14,
-    ...(typography.body as object),
-    color: colors.textPrimary,
-    maxHeight: 96,
+  replyTime: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
   },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: ACCENT,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendBtnDisabled: { backgroundColor: colors.border },
-
-  // Closed banner
   closedBanner: {
-    backgroundColor: colors.background,
-    borderRadius: 10,
+    backgroundColor: colors.border,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    alignItems: "center",
+    borderRadius: 8,
+    marginTop: spacing.md,
   },
   closedBannerText: {
     fontSize: 13,
     color: colors.textMuted,
     textAlign: "center",
+  },
+  replyInputRow: {
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  replyRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: spacing.sm,
+  },
+  replyInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontSize: 14,
+    color: colors.textPrimary,
+    maxHeight: 100,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.parent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendBtnDisabled: {
+    opacity: 0.5,
+  },
+  replyErrorText: {
+    fontSize: 12,
+    color: "#e53935",
+    marginBottom: spacing.sm,
   },
 });

@@ -1,4 +1,4 @@
-import { apiRequest } from './api';
+import { apiRequest } from "./api";
 
 export interface Section {
   id: string;
@@ -18,14 +18,14 @@ export interface Student {
 export interface AttendanceRecord {
   student_id: string;
   student_name: string;
-  status: 'PRESENT' | 'ABSENT';
+  status: "PRESENT" | "ABSENT";
 }
 
 export interface AttendanceSession {
   id: string;
   section_id: string;
   date: string;
-  slot: 'MORNING' | 'AFTERNOON';
+  slot: "MORNING" | "AFTERNOON";
   taken_by: { id: string; name: string };
   confirmed_at: string | null;
   records: AttendanceRecord[];
@@ -56,19 +56,19 @@ export interface AnnouncementItem {
   audience: string;
   section_id: string;
   published_at: string | null;
-  attachments: Array<{
+  attachments: {
     id: string;
     filename: string;
     content_type: string;
     file_url: string | null;
-  }>;
+  }[];
 }
 
 export interface ParentQuery {
   id: string;
   subject: string;
   message: string;
-  status: 'OPEN' | 'REPLIED' | 'CLOSED';
+  status: "OPEN" | "REPLIED" | "CLOSED";
   parent: { id: string; name: string };
   student: { id: string; name: string };
   section_id: string;
@@ -83,33 +83,44 @@ export interface SubjectItem {
 }
 
 function buildQS(params: Record<string, string | undefined>): string {
-  const entries = Object.entries(params).filter(([, v]) => v !== undefined) as [string, string][];
-  if (!entries.length) return '';
-  return '?' + new URLSearchParams(entries).toString();
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined) as [
+    string,
+    string,
+  ][];
+  if (!entries.length) return "";
+  return "?" + new URLSearchParams(entries).toString();
 }
 
 export const teacherApi = {
   getSections: () =>
-    apiRequest<{ count: number; results: Section[] }>('GET', '/teacher/sections/'),
+    apiRequest<{ count: number; results: Section[] }>(
+      "GET",
+      "/teacher/sections/",
+    ),
 
   getSectionStudents: (sectionId: string) =>
     apiRequest<{ count: number; results: Student[] }>(
-      'GET',
+      "GET",
       `/teacher/sections/${sectionId}/students/`,
     ),
 
   createAttendanceSession: (body: {
     section_id: string;
-    date: string;
-    slot: 'MORNING' | 'AFTERNOON';
-  }) => apiRequest<AttendanceSession>('POST', '/teacher/attendance-sessions/', body),
+    date: str[]
+    slot: "MORNING" | "AFTERNOON";
+  }) =>
+    apiRequest<AttendanceSession>(
+      "POST",
+      "/teacher/attendance-sessions/",
+      body,
+    ),
 
   updateAttendanceRecords: (
     sessionId: string,
-    records: Array<{ student_id: string; status: 'PRESENT' | 'ABSENT' }>,
+    records: Array<{ student_id: string; status: "PRESENT" | "ABSENT" }>,
   ) =>
     apiRequest<{ session_id: string; records: AttendanceRecord[] }>(
-      'PUT',
+      "PUT",
       `/teacher/attendance-sessions/${sessionId}/students/`,
       { records },
     ),
@@ -120,23 +131,28 @@ export const teacherApi = {
       confirmed_at: string;
       absent_count: number;
       notification_logs_created: number;
-    }>('POST', `/teacher/attendance-sessions/${sessionId}/confirm/`),
+    }>("POST", `/teacher/attendance-sessions/${sessionId}/confirm/`),
 
   createAnnouncement: (body: {
     section_id: string;
     title: string;
     body: string;
     publish_now?: boolean;
-  }) => apiRequest<AnnouncementItem>('POST', '/teacher/announcements/', body),
+  }) => apiRequest<AnnouncementItem>("POST", "/teacher/announcements/", body),
 
   getStudyMaterials: (params?: { section_id?: string; subject_id?: string }) =>
     apiRequest<{ count: number; results: StudyMaterial[] }>(
-      'GET',
+      "GET",
       `/teacher/study-materials/${buildQS(params ?? {})}`,
     ),
 
   createStudyMaterial: (formData: FormData) =>
-    apiRequest<StudyMaterial>('POST', '/teacher/study-materials/', formData, true),
+    apiRequest<StudyMaterial>(
+      "POST",
+      "/teacher/study-materials/",
+      formData,
+      true,
+    ),
 
   getHomework: (params?: {
     section_id?: string;
@@ -145,7 +161,7 @@ export const teacherApi = {
     deadline_to?: string;
   }) =>
     apiRequest<{ count: number; results: HomeworkItem[] }>(
-      'GET',
+      "GET",
       `/teacher/homework/${buildQS(params ?? {})}`,
     ),
 
@@ -154,11 +170,11 @@ export const teacherApi = {
     subject_id: string;
     description: string;
     deadline: string;
-  }) => apiRequest<HomeworkItem>('POST', '/teacher/homework/', body),
+  }) => apiRequest<HomeworkItem>("POST", "/teacher/homework/", body),
 
   getParentQueries: (params?: { status?: string; section_id?: string }) =>
     apiRequest<{ count: number; results: ParentQuery[] }>(
-      'GET',
+      "GET",
       `/teacher/parent-queries/${buildQS(params ?? {})}`,
     ),
 
@@ -170,11 +186,16 @@ export const teacherApi = {
       message: string;
       query_status: string;
       created_at: string;
-    }>('POST', `/teacher/parent-queries/${queryId}/replies/`, { message }),
+    }>("POST", `/teacher/parent-queries/${queryId}/replies/`, { message }),
 
   getSubjects: () =>
-    apiRequest<{ count: number; results: SubjectItem[] }>('GET', '/subjects/'),
+    apiRequest<{ count: number; results: SubjectItem[] }>("GET", "/subjects/"),
 
   updateProfilePic: (formData: FormData) =>
-    apiRequest<{ profile_pic_url: string }>('PATCH', '/teacher/profile/pic/', formData, true),
+    apiRequest<{ profile_pic_url: string }>(
+      "PATCH",
+      "/teacher/profile/pic/",
+      formData,
+      true,
+    ),
 };
