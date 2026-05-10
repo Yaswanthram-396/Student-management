@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -311,6 +312,16 @@ export default function ContentScreen() {
                     <Text style={[styles.fileTypeText, { color: fc.color }]}>{fc.label}</Text>
                   </View>
                   <Text style={styles.uploadedBy}>by {mat.uploaded_by.name}</Text>
+                  {mat.file_url && (
+                    <Pressable
+                      style={({ pressed }) => [styles.downloadBtn, pressed && styles.downloadBtnPressed]}
+                      onPress={() => Linking.openURL(mat.file_url!)}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="download-outline" size={15} color={ACCENT} />
+                      <Text style={styles.downloadText}>Download</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             </View>
@@ -574,7 +585,18 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fileTypePill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   fileTypeText: { fontSize: 10, fontWeight: '700' },
-  uploadedBy: { fontSize: 11, color: '#AAAAAA' },
+  uploadedBy: { fontSize: 11, color: '#AAAAAA', flex: 1 },
+  downloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EBF2FB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  downloadBtnPressed: { opacity: 0.7 },
+  downloadText: { fontSize: 12, fontWeight: '600', color: ACCENT },
 
   // Modal
   modalWrap: { flex: 1, justifyContent: 'flex-end' },
