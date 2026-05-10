@@ -171,14 +171,14 @@ export default function TeacherProfileScreen() {
 
           {/* Assigned sections */}
           <Text style={styles.sectionLabel}>Assigned Classes</Text>
-          {teacher.profile.assigned_sections.length === 0 ? (
+          {(teacher.profile.assigned_sections ?? []).length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="school-outline" size={28} color="#CCCCCC" />
               <Text style={styles.emptyCardText}>No classes assigned yet.</Text>
             </View>
           ) : (
             <View style={styles.card}>
-              {teacher.profile.assigned_sections.map((sec, idx) => (
+              {(teacher.profile.assigned_sections ?? []).map((sec, idx) => (
                 <React.Fragment key={sec.id}>
                   {idx > 0 && <Divider />}
                   <View style={styles.sectionRow}>

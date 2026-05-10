@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Image,
   Modal,
   Pressable,
@@ -13,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { signOut, useAuthStore } from '../store/auth-store';
 import { setSelectedSection, setSections as storeSetSections } from '../store/teacher-store';
 import { teacherSectionsApi, type TeacherSection } from '../services/teacher-sections';
@@ -37,9 +36,6 @@ export default function SectionsScreen() {
   const [error, setError] = useState('');
   const [panelVisible, setPanelVisible] = useState(false);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(-12)).current;
-
   async function fetchSections(isRefresh = false) {
     if (!isRefresh) setLoading(true);
     setError('');
@@ -57,20 +53,8 @@ export default function SectionsScreen() {
 
   useEffect(() => { fetchSections(); }, []);
 
-  function openPanel() {
-    setPanelVisible(true);
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start();
-  }
-
-  function closePanel(cb?: () => void) {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: -12, duration: 150, useNativeDriver: true }),
-    ]).start(() => { setPanelVisible(false); cb?.(); });
-  }
+  function openPanel() { setPanelVisible(true); }
+  function closePanel(cb?: () => void) { setPanelVisible(false); cb?.(); }
 
   function handleSelectSection(section: TeacherSection) {
     setSelectedSection(section);
@@ -209,74 +193,83 @@ export default function SectionsScreen() {
         ))}
       </ScrollView>
 
-      {/* Panel modal */}
-      <Modal visible={panelVisible} transparent animationType="none" onRequestClose={() => closePanel()}>
-        {/* Backdrop */}
-        <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => closePanel()} />
-        </Animated.View>
-
-        {/* Panel card — top right */}
-        <Animated.View
-          style={[
-            styles.panel,
-            { top: insets.top + 60, opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-          ]}
-        >
-          {/* User info row */}
-          <View style={styles.panelUser}>
-            <View style={styles.panelAvatar}>
-              {picUrl ? (
-                <Image source={{ uri: picUrl }} style={styles.panelAvatarImage} />
-              ) : (
-                <Text style={styles.panelAvatarText}>{initials}</Text>
-              )}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.panelName} numberOfLines={1}>{teacher?.profile.name ?? 'Teacher'}</Text>
-              <Text style={styles.panelRole}>Teacher</Text>
-            </View>
+      {/* Full-screen panel */}
+      <Modal visible={panelVisible} animationType="slide" onRequestClose={() => closePanel()}>
+        <SafeAreaView style={styles.panelSafe} edges={['top', 'bottom']}>
+          {/* Panel header */}
+          <View style={styles.panelHeader}>
+            <Pressable
+              style={({ pressed }) => [styles.panelBackBtn, pressed && styles.panelBackBtnPressed]}
+              onPress={() => closePanel()}
+              hitSlop={8}
+            >
+              <Ionicons name="arrow-back" size={22} color="#111111" />
+            </Pressable>
+            <Text style={styles.panelHeaderTitle}>Menu</Text>
+            <View style={{ width: 36 }} />
           </View>
 
-          <View style={styles.panelDivider} />
-
-          {/* Profile */}
-          <Pressable
-            style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
-            onPress={handleProfile}
-          >
-            <View style={[styles.panelIcon, { backgroundColor: '#EBF2FB' }]}>
-              <Ionicons name="person-outline" size={16} color={ACCENT} />
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.panelScroll}>
+            {/* User card */}
+            <View style={styles.panelUserCard}>
+              <View style={styles.panelAvatar}>
+                {picUrl ? (
+                  <Image source={{ uri: picUrl }} style={styles.panelAvatarImage} />
+                ) : (
+                  <Text style={styles.panelAvatarText}>{initials}</Text>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.panelName} numberOfLines={1}>
+                  {teacher?.profile.name ?? 'Teacher'}
+                </Text>
+                <Text style={styles.panelRole}>{teacher?.school.name}</Text>
+              </View>
+              <View style={styles.panelRoleBadge}>
+                <Text style={styles.panelRoleBadgeText}>Teacher</Text>
+              </View>
             </View>
-            <Text style={styles.panelItemText}>My Profile</Text>
-            <Ionicons name="chevron-forward" size={15} color="#CCCCCC" />
-          </Pressable>
 
-          {/* Settings (placeholder) */}
-          <Pressable
-            style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
-            onPress={() => closePanel()}
-          >
-            <View style={[styles.panelIcon, { backgroundColor: '#F3F0FF' }]}>
-              <Ionicons name="settings-outline" size={16} color="#534AB7" />
+            {/* Menu items */}
+            <View style={styles.panelSection}>
+              <Pressable
+                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
+                onPress={handleProfile}
+              >
+                <View style={[styles.panelIcon, { backgroundColor: '#EBF2FB' }]}>
+                  <Ionicons name="person-outline" size={18} color={ACCENT} />
+                </View>
+                <Text style={styles.panelItemText}>My Profile</Text>
+                <Ionicons name="chevron-forward" size={16} color="#CCCCCC" />
+              </Pressable>
+
+              <View style={styles.panelDivider} />
+
+              <Pressable
+                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
+                onPress={() => closePanel()}
+              >
+                <View style={[styles.panelIcon, { backgroundColor: '#F3F0FF' }]}>
+                  <Ionicons name="settings-outline" size={18} color="#534AB7" />
+                </View>
+                <Text style={styles.panelItemText}>Settings</Text>
+                <Ionicons name="chevron-forward" size={16} color="#CCCCCC" />
+              </Pressable>
             </View>
-            <Text style={styles.panelItemText}>Settings</Text>
-            <Ionicons name="chevron-forward" size={15} color="#CCCCCC" />
-          </Pressable>
 
-          <View style={styles.panelDivider} />
-
-          {/* Logout */}
-          <Pressable
-            style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
-            onPress={handleLogout}
-          >
-            <View style={[styles.panelIcon, { backgroundColor: '#FEE2E2' }]}>
-              <Ionicons name="log-out-outline" size={16} color="#DC2626" />
+            <View style={styles.panelSection}>
+              <Pressable
+                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
+                onPress={handleLogout}
+              >
+                <View style={[styles.panelIcon, { backgroundColor: '#FEE2E2' }]}>
+                  <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+                </View>
+                <Text style={[styles.panelItemText, { color: '#DC2626' }]}>Logout</Text>
+              </Pressable>
             </View>
-            <Text style={[styles.panelItemText, { color: '#DC2626' }]}>Logout</Text>
-          </Pressable>
-        </Animated.View>
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -404,56 +397,90 @@ const styles = StyleSheet.create({
   ctBadgeText: { fontSize: 11, color: ACCENT, fontWeight: '600' },
   chevron: { marginTop: 2 },
 
-  // Panel
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
-  panel: {
-    position: 'absolute',
-    right: 16,
-    width: 240,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 16,
-  },
-  panelUser: {
+  // Full-screen panel
+  panelSafe: { flex: 1, backgroundColor: '#F4F4F8' },
+  panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  panelHeaderTitle: { fontSize: 16, fontWeight: '700', color: '#111111' },
+  panelBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  panelBackBtnPressed: { backgroundColor: '#F0F0F0' },
+  panelScroll: { padding: 16, gap: 12 },
+  panelUserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 0.5,
+    borderColor: '#EEEEEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
   },
   panelAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  panelAvatarImage: { width: 38, height: 38, borderRadius: 19 },
-  panelAvatarText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
-  panelName: { fontSize: 13, fontWeight: '600', color: '#111111' },
-  panelRole: { fontSize: 11, color: '#AAAAAA', marginTop: 1 },
-  panelDivider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 4 },
+  panelAvatarImage: { width: 48, height: 48, borderRadius: 24 },
+  panelAvatarText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  panelName: { fontSize: 15, fontWeight: '600', color: '#111111', marginBottom: 2 },
+  panelRole: { fontSize: 12, color: '#888888' },
+  panelRoleBadge: {
+    backgroundColor: '#EBF2FB',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  panelRoleBadgeText: { fontSize: 11, fontWeight: '600', color: ACCENT },
+  panelSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: '#EEEEEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  panelDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 60 },
   panelItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
   },
   panelItemPressed: { backgroundColor: '#F8F8F8' },
   panelIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  panelItemText: { flex: 1, fontSize: 14, fontWeight: '500', color: '#222222' },
+  panelItemText: { flex: 1, fontSize: 15, fontWeight: '500', color: '#222222' },
 });
