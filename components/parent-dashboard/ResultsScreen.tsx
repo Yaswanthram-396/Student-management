@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -193,6 +194,19 @@ function SubjectCard({ item }: { item: SubjectResult }) {
 export function ResultsScreen() {
   const [selectedExam, setSelectedExam] = useState(EXAMS[0]);
   const [selectedChild, setSelectedChild] = useState(0);
+
+  const loadResults = useCallback(() => {
+    // Fetch results when tab comes into focus
+    // Results are currently static from DATA, but this ensures fresh data
+    setSelectedExam(EXAMS[0]);
+    setSelectedChild(0);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadResults();
+    }, [loadResults]),
+  );
 
   const childData = DATA[selectedChild];
   const result =

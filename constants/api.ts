@@ -1,3 +1,4 @@
+// const DEFAULT_BASE_URL = "https://nobuko-subpetrosal-caden.ngrok-free.dev";
 const DEFAULT_BASE_URL = "https://schoolsbackend-production.up.railway.app";
 // const DEFAULT_BASE_URL =
 //   Platform.OS === "android"

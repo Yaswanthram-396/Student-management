@@ -1,1 +1,2 @@
-export { ChatScreen as default } from '../../../../components/parent-dashboard/ChatScreen';
+export { ChatScreen as default } from "../../../../components/parent-dashboard/ChatScreen";
+

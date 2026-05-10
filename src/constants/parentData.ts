@@ -1,39 +1,24 @@
-export type School = {
-  id: string;
-  name: string;
-};
+import type {
+    ParentProfile,
+    ParentSchool,
+    ParentStudent,
+} from "../../types/parent";
 
+export type School = ParentSchool;
 export type AcademicClass = {
   id: string;
   name: string;
 };
-
 export type Section = {
   id: string;
   name: string;
 };
-
-export type Student = {
-  id: string;
-  name: string;
-  roll_number: string;
-  academic_class: AcademicClass;
-  section: Section;
-  is_parent_query_disabled: boolean;
-};
-
-export type ParentProfile = {
-  id: string;
-  name: string;
-  phone_number: string;
-  school: School;
-  students: Student[];
-};
+export type Student = ParentStudent;
 
 export const PARENT_PROFILE: ParentProfile = {
   id: "961be03f-394e-415e-b375-f2f5826256b3",
   name: "Ramesh Kumar",
-  phone_number: "9200000001",
+  mobile_number: "9200000001",
   school: {
     id: "e8123e14-2d69-4d71-93a3-d8bfd2dc7900",
     name: "Green Valley Public School",
@@ -51,7 +36,6 @@ export const PARENT_PROFILE: ParentProfile = {
         id: "97a5016f-3c2e-4137-bf45-a0da4e08d128",
         name: "5A",
       },
-      is_parent_query_disabled: false,
     },
   ],
 };
