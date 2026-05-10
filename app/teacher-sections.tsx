@@ -28,7 +28,6 @@ function getInitials(name?: string) {
 export default function SectionsScreen() {
   const { currentUser } = useAuthStore();
   const teacher = currentUser as TeacherMeResponse | null;
-  const insets = useSafeAreaInsets();
 
   const [sections, setSections] = useState<TeacherSection[]>([]);
   const [loading, setLoading] = useState(true);
