@@ -1,14 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
-import { storage } from '../../../services/storage';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -104,56 +102,9 @@ export default function ContentScreen() {
     if (!mat.file_url) return;
     setDownloadingId(mat.id);
     try {
-      // Build clean filename preserving original extension
-      const urlParts = mat.file_url.split('/');
-      const rawName = urlParts[urlParts.length - 1].split('?')[0];
-      const ext = rawName.includes('.') ? rawName.substring(rawName.lastIndexOf('.')) : '';
-      const fileName = `${mat.title.replace(/[^a-zA-Z0-9]/g, '_')}${ext}`;
-
-      // Step 1: Download to cache (pass auth token in case S3 URL needs it)
-      const cacheUri = `${FileSystem.cacheDirectory}${fileName}`;
-      const token = await storage.getAccessToken();
-      const { status } = await FileSystem.downloadAsync(mat.file_url, cacheUri, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (status !== 200) throw new Error(`Server returned ${status}`);
-
-      if (Platform.OS === 'android') {
-        // Android: ask user to pick a save folder via Storage Access Framework
-        const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-        if (perm.granted) {
-          // Determine MIME from extension
-          const mimeMap: Record<string, string> = {
-            pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-            png: 'image/png', mp4: 'video/mp4', doc: 'application/msword',
-            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            xls: 'application/vnd.ms-excel',
-            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ppt: 'application/vnd.ms-powerpoint',
-            pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          };
-          const extKey = ext.replace('.', '').toLowerCase();
-          const mime = mimeMap[extKey] ?? 'application/octet-stream';
-
-          // Read cached file as base64 and write to chosen directory
-          const base64 = await FileSystem.readAsStringAsync(cacheUri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
-            perm.directoryUri, fileName, mime,
-          );
-          await FileSystem.writeAsStringAsync(destUri, base64, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          Alert.alert('Saved ✓', `"${fileName}" has been saved to the selected folder.`);
-        }
-        // If user cancelled the folder picker — do nothing
-      } else {
-        // iOS: share sheet has "Save to Files" prominently
-        await Sharing.shareAsync(cacheUri, { dialogTitle: mat.title, UTI: 'public.item' });
-      }
-    } catch (err: any) {
-      Alert.alert('Download failed', err?.message ?? String(err));
+      await Linking.openURL(mat.file_url);
+    } catch {
+      Alert.alert('Error', 'Could not open the file.');
     } finally {
       setDownloadingId(null);
     }
@@ -381,14 +332,8 @@ export default function ContentScreen() {
                       disabled={downloadingId === mat.id}
                       hitSlop={6}
                     >
-                      {downloadingId === mat.id ? (
-                        <ActivityIndicator size="small" color={ACCENT} />
-                      ) : (
-                        <Ionicons name="download-outline" size={15} color={ACCENT} />
-                      )}
-                      <Text style={styles.downloadText}>
-                        {downloadingId === mat.id ? 'Downloading…' : 'Download'}
-                      </Text>
+                      <Ionicons name="download-outline" size={15} color={ACCENT} />
+                      <Text style={styles.downloadText}>Download</Text>
                     </Pressable>
                   )}
                 </View>
