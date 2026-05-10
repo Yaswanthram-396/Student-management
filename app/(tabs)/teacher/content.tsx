@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { storage } from '../../../services/storage';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
@@ -109,9 +110,13 @@ export default function ContentScreen() {
       const ext = rawName.includes('.') ? rawName.substring(rawName.lastIndexOf('.')) : '';
       const fileName = `${mat.title.replace(/[^a-zA-Z0-9]/g, '_')}${ext}`;
 
-      // Step 1: Download to cache
+      // Step 1: Download to cache (pass auth token in case S3 URL needs it)
       const cacheUri = `${FileSystem.cacheDirectory}${fileName}`;
-      await FileSystem.downloadAsync(mat.file_url, cacheUri);
+      const token = await storage.getAccessToken();
+      const { status } = await FileSystem.downloadAsync(mat.file_url, cacheUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (status !== 200) throw new Error(`Server returned ${status}`);
 
       if (Platform.OS === 'android') {
         // Android: ask user to pick a save folder via Storage Access Framework
@@ -147,8 +152,8 @@ export default function ContentScreen() {
         // iOS: share sheet has "Save to Files" prominently
         await Sharing.shareAsync(cacheUri, { dialogTitle: mat.title, UTI: 'public.item' });
       }
-    } catch {
-      Alert.alert('Download failed', 'Could not download the file. Please try again.');
+    } catch (err: any) {
+      Alert.alert('Download failed', err?.message ?? String(err));
     } finally {
       setDownloadingId(null);
     }
