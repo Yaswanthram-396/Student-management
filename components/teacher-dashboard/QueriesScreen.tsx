@@ -1,285 +1,443 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View, Text, FlatList, Pressable, TextInput,
-  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { teacherApi } from '../../services/teacher';
-import { useTeacherStore } from '../../store/teacher-store';
-import { ParentQuery } from '../../types/teacher';
-import { StatusPill } from '../shared';
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
+import { teacherApi, type ParentQuery } from "../../services/teacher";
+import { BottomSheet, HeaderBar, SegmentedControl } from "../shared";
 
-type TabKey = 'OPEN' | 'ANSWERED' | 'CLOSED';
+type Filter = "ALL" | "OPEN" | "REPLIED";
 
-function QueryCard({ item, onReply }: { item: ParentQuery, onReply: () => void }) {
-  const [replyText, setReplyText] = useState('');
-  const [isReplying, setIsReplying] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+const STATUS_CFG = {
+  OPEN: { bg: colors.warningBg, text: colors.warning, label: "Open" },
+  REPLIED: { bg: colors.successBg, text: colors.success, label: "Replied" },
+  CLOSED: { bg: colors.border, text: colors.textMuted, label: "Closed" },
+} as const;
 
-  async function handleSendReply() {
-    if (!replyText.trim()) return;
-    setSubmitting(true);
-    try {
-      await teacherApi.replyToParentQuery(item.id, {
-        message: replyText,
-        mark_answered: true
-      });
-      setIsReplying(false);
-      setReplyText('');
-      onReply(); // callback to refresh the list
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSubmitting(false);
-    }
+function relativeTime(iso: string): string {
+  try {
+    const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    const days = Math.floor(diff / 86400);
+    if (days === 1) return "Yesterday";
+    if (days < 7) return `${days} days ago`;
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+    });
+  } catch {
+    return iso;
   }
-
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardHeaderLeft}>
-          <Text style={styles.parentName}>{item.parent.name}</Text>
-          <Text style={styles.studentName}>Parent of {item.student.name}</Text>
-        </View>
-        <StatusPill 
-          variant={item.status === 'OPEN' ? 'warning' : item.status === 'ANSWERED' ? 'success' : 'info'} 
-          label={item.status} 
-        />
-      </View>
-      
-      <Text style={styles.subjectText}>Subject: {item.subject}</Text>
-      <Text style={styles.messageText}>{item.message}</Text>
-      
-      <Text style={styles.dateText}>{new Date(item.created_at).toLocaleString()}</Text>
-
-      {item.status === 'OPEN' && !isReplying && (
-        <Pressable style={styles.replyBtn} onPress={() => setIsReplying(true)}>
-          <Ionicons name="chatbubble-outline" size={16} color={colors.teacher} />
-          <Text style={styles.replyBtnText}>Reply</Text>
-        </Pressable>
-      )}
-
-      {isReplying && (
-        <View style={styles.replyBox}>
-          <TextInput
-            style={styles.replyInput}
-            placeholder="Type your response..."
-            value={replyText}
-            onChangeText={setReplyText}
-            multiline
-            autoFocus
-          />
-          <View style={styles.replyActions}>
-            <Pressable onPress={() => setIsReplying(false)} style={styles.cancelReplyBtn}>
-              <Text style={styles.cancelReplyText}>Cancel</Text>
-            </Pressable>
-            <Pressable 
-              style={[styles.sendReplyBtn, (!replyText.trim() || submitting) && styles.sendReplyBtnDisabled]}
-              onPress={handleSendReply}
-              disabled={!replyText.trim() || submitting}
-            >
-              <Text style={styles.sendReplyText}>{submitting ? 'Sending...' : 'Send'}</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-    </View>
-  );
 }
 
 export function QueriesScreen() {
-  const { selectedSection } = useTeacherStore();
-  const [tab, setTab] = useState<TabKey>('OPEN');
   const [queries, setQueries] = useState<ParentQuery[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>("ALL");
+  const [selectedQuery, setSelectedQuery] = useState<ParentQuery | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
 
-  const fetchQueries = useCallback(async () => {
-    if (!selectedSection?.id) return;
+  const loadQueries = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await teacherApi.getParentQueries({
-        section_id: selectedSection.id,
-        status: tab
-      });
-      setQueries(res.results || []);
-    } catch (err) {
-      console.error(err);
+      const params = filter !== "ALL" ? { status: filter } : undefined;
+      const res = await teacherApi.getParentQueries(params);
+      setQueries(res.results);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to load queries.");
     } finally {
       setLoading(false);
     }
-  }, [selectedSection?.id, tab]);
+  }, [filter]);
 
   useEffect(() => {
-    void fetchQueries();
-  }, [fetchQueries]);
+    loadQueries();
+  }, [loadQueries]);
+
+  async function handleReply() {
+    if (!selectedQuery || !replyText.trim()) {
+      Alert.alert("Validation", "Please enter a reply message.");
+      return;
+    }
+    setReplying(true);
+    try {
+      const res = await teacherApi.replyToParentQuery(
+        selectedQuery.id,
+        replyText.trim(),
+      );
+      setQueries((prev) =>
+        prev.map((q) =>
+          q.id === selectedQuery.id
+            ? { ...q, status: res.query_status as ParentQuery["status"] }
+            : q,
+        ),
+      );
+      setSelectedQuery(null);
+      setReplyText("");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to send reply.");
+    } finally {
+      setReplying(false);
+    }
+  }
+
+  const displayed =
+    filter === "ALL" ? queries : queries.filter((q) => q.status === filter);
+
+  function renderItem({ item }: { item: ParentQuery }) {
+    const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.CLOSED;
+    const isOpen = item.status === "OPEN";
+
+    return (
+      <Pressable
+        style={[st.queryCard, isOpen && st.queryCardOpen]}
+        onPress={() => {
+          setSelectedQuery(item);
+          setReplyText("");
+        }}
+      >
+        <View style={st.queryHeader}>
+          <View style={st.queryHeaderLeft}>
+            <Text style={st.querySubject}>{item.subject}</Text>
+            <Text style={st.queryTime}>{relativeTime(item.created_at)}</Text>
+          </View>
+          <View style={[st.statusBadge, { backgroundColor: cfg.bg }]}>
+            <Text style={[st.statusBadgeText, { color: cfg.text }]}>
+              {cfg.label}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={st.queryMessage} numberOfLines={2}>
+          {item.message}
+        </Text>
+
+        <View style={st.queryFooter}>
+          <View style={st.queryFrom}>
+            <Ionicons
+              name="person-outline"
+              size={11}
+              color={colors.textMuted}
+            />
+            <Text style={st.queryFromText}>
+              {item.parent.name} · {item.student.name}
+            </Text>
+          </View>
+          {isOpen && (
+            <View style={st.replyHint}>
+              <Ionicons
+                name="chatbubble-outline"
+                size={11}
+                color={colors.teacher}
+              />
+              <Text style={st.replyHintText}>Tap to reply</Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Parent Queries</Text>
-        <View style={{ width: 40 }} /> 
+    <SafeAreaView style={st.container} edges={["top"]}>
+      <HeaderBar center={<Text style={st.headerTitle}>Parent Queries</Text>} />
+
+      {/* Filter */}
+      <View style={st.filterBar}>
+        <SegmentedControl
+          options={["All", "Open", "Replied"]}
+          activeIndex={filter === "ALL" ? 0 : filter === "OPEN" ? 1 : 2}
+          onChange={(i) =>
+            setFilter((["ALL", "OPEN", "REPLIED"] as Filter[])[i])
+          }
+          accentColor={colors.teacher}
+        />
       </View>
 
-      {!selectedSection ? (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>Select a section first</Text>
-          <Text style={styles.emptySub}>
-            Please select a section from the dashboard to view queries.
+      {loading ? (
+        <View style={st.centered}>
+          <ActivityIndicator size="large" color={colors.teacher} />
+        </View>
+      ) : displayed.length === 0 ? (
+        <View style={st.centered}>
+          <Ionicons
+            name="chatbubbles-outline"
+            size={52}
+            color={colors.textMuted}
+          />
+          <Text style={st.emptyTitle}>No Queries</Text>
+          <Text style={st.emptyBody}>
+            {filter === "OPEN"
+              ? "No open queries from parents right now."
+              : "No queries found."}
           </Text>
         </View>
       ) : (
-        <KeyboardAvoidingView 
-          style={styles.content} 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.tabBar}>
-            {(['OPEN', 'ANSWERED', 'CLOSED'] as const).map(key => (
-              <Pressable
-                key={key}
-                style={[styles.tab, tab === key && styles.tabActive]}
-                onPress={() => setTab(key)}
-              >
-                <Text style={[styles.tabLabel, tab === key && styles.tabLabelActive]}>
-                  {key}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {loading ? (
-            <ActivityIndicator size="large" color={colors.teacher} style={{ marginTop: spacing.xl }} />
-          ) : (
-            <FlatList
-              data={queries}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => <QueryCard item={item} onReply={fetchQueries} />}
-              contentContainerStyle={styles.listContent}
-              ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-              ListEmptyComponent={() => (
-                <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyTitle}>No queries found</Text>
-                  <Text style={styles.emptySub}>
-                    There are no {tab.toLowerCase()} queries for this section.
-                  </Text>
-                </View>
-              )}
-            />
-          )}
-        </KeyboardAvoidingView>
+        <FlatList
+          data={displayed}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={st.listContent}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+          showsVerticalScrollIndicator={false}
+          onRefresh={loadQueries}
+          refreshing={loading}
+        />
       )}
+
+      {/* Reply sheet */}
+      <BottomSheet
+        visible={!!selectedQuery}
+        onClose={() => setSelectedQuery(null)}
+      >
+        {selectedQuery && (
+          <>
+            <Text style={st.sheetTitle}>Reply to Query</Text>
+
+            {/* Query preview */}
+            <View style={st.queryPreview}>
+              <View style={st.previewHeader}>
+                <Text style={st.previewSubject}>{selectedQuery.subject}</Text>
+                <Text style={st.previewFrom}>{selectedQuery.parent.name}</Text>
+              </View>
+              <Text style={st.previewMessage}>{selectedQuery.message}</Text>
+              <View style={st.previewFooter}>
+                <Ionicons
+                  name="person-outline"
+                  size={11}
+                  color={colors.textMuted}
+                />
+                <Text style={st.previewStudent}>
+                  Student: {selectedQuery.student.name}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={st.fieldLabel}>Your Reply</Text>
+            <TextInput
+              style={st.replyInput}
+              value={replyText}
+              onChangeText={setReplyText}
+              placeholder="Type your reply to the parent…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+
+            <View style={st.sheetBtns}>
+              <Pressable
+                style={st.cancelBtn}
+                onPress={() => setSelectedQuery(null)}
+              >
+                <Text style={st.cancelTxt}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[st.sendBtn, replying && st.sendBtnBusy]}
+                onPress={handleReply}
+                disabled={replying}
+              >
+                {replying ? (
+                  <ActivityIndicator size="small" color={colors.surface} />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={14} color={colors.surface} />
+                    <Text style={st.sendTxt}>Send Reply</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </>
+        )}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
+  headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    padding: spacing.xxl,
+  },
+  emptyTitle: { ...(typography.h2 as object), color: colors.textPrimary },
+  emptyBody: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+
+  filterBar: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     backgroundColor: colors.surface,
     borderBottomWidth: 0.5,
     borderBottomColor: colors.border,
   },
-  backBtn: {
-    width: 40, height: 40,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  content: { flex: 1 },
-  tabBar: {
-    flexDirection: 'row',
+  listContent: { padding: spacing.lg },
+
+  queryCard: {
     backgroundColor: colors.surface,
-    borderBottomWidth: 0.5, borderBottomColor: colors.border,
-  },
-  tab: {
-    flex: 1, height: 44,
-    alignItems: 'center', justifyContent: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
-  tabActive: { borderBottomColor: colors.teacher },
-  tabLabel: { ...(typography.body as object), fontWeight: '500', color: colors.textMuted },
-  tabLabelActive: { color: colors.textPrimary },
-  listContent: { padding: spacing.md },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: spacing.md,
     borderWidth: 0.5,
     borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.lg,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  queryCardOpen: {
+    borderColor: colors.teacher,
+    borderWidth: 1,
+  },
+  queryHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     marginBottom: spacing.xs,
   },
-  cardHeaderLeft: { flex: 1 },
-  parentName: { ...(typography.body as object), fontWeight: '600', color: colors.textPrimary },
-  studentName: { ...(typography.caption as object), color: colors.textSecondary },
-  subjectText: { ...(typography.caption as object), fontWeight: '600', color: colors.textPrimary, marginTop: spacing.xs },
-  messageText: { ...(typography.body as object), color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 20 },
-  dateText: { ...(typography.caption as object), color: colors.textMuted, marginTop: spacing.sm, fontSize: 10 },
-  replyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginTop: spacing.md,
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: spacing.md,
+  queryHeaderLeft: { flex: 1, marginRight: spacing.sm },
+  querySubject: {
+    ...(typography.body as object),
+    fontWeight: "500",
+    color: colors.textPrimary,
+  },
+  queryTime: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  statusBadge: {
+    borderRadius: 999,
     paddingVertical: spacing.xs,
-    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    flexShrink: 0,
+  },
+  statusBadgeText: { ...(typography.label as object) },
+  queryMessage: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.sm,
+  },
+  queryFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  queryFrom: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  queryFromText: { ...(typography.caption as object), color: colors.textMuted },
+  replyHint: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
   },
-  replyBtnText: { ...(typography.body as object), color: colors.teacher, fontWeight: '500' },
-  replyBox: {
-    marginTop: spacing.md,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+  replyHintText: {
+    ...(typography.caption as object),
+    color: colors.teacher,
+    fontWeight: "500",
+  },
+
+  sheetTitle: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
+  fieldLabel: {
+    ...(typography.caption as object),
+    fontWeight: "500",
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  queryPreview: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  previewHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.xs,
+  },
+  previewSubject: {
+    ...(typography.body as object),
+    fontWeight: "500",
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  previewFrom: { ...(typography.caption as object), color: colors.textMuted },
+  previewMessage: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  previewFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  previewStudent: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
   },
   replyInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: spacing.md,
     ...(typography.body as object),
     color: colors.textPrimary,
-    minHeight: 60,
-    textAlignVertical: 'top',
+    height: 110,
+    marginBottom: spacing.lg,
+    textAlignVertical: "top",
   },
-  replyActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.sm,
+  sheetBtns: { flexDirection: "row", gap: spacing.sm },
+  cancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cancelReplyBtn: { padding: spacing.xs },
-  cancelReplyText: { ...(typography.caption as object), color: colors.textSecondary },
-  sendReplyBtn: {
+  cancelTxt: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  sendBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 10,
     backgroundColor: colors.teacher,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
   },
-  sendReplyBtnDisabled: { opacity: 0.5 },
-  sendReplyText: { ...(typography.caption as object), color: colors.surface, fontWeight: '600' },
-  emptyWrap: {
-    margin: spacing.lg,
-    padding: spacing.xl,
-    alignItems: 'center',
-    borderWidth: 0.5, borderColor: colors.border,
-    borderRadius: 12, backgroundColor: colors.surface,
+  sendBtnBusy: { backgroundColor: colors.success },
+  sendTxt: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.surface,
   },
-  emptyTitle: { ...(typography.h3 as object), color: colors.textPrimary, marginBottom: spacing.xs },
-  emptySub: { ...(typography.caption as object), color: colors.textSecondary, textAlign: 'center' },
 });

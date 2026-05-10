@@ -53,7 +53,7 @@ export default function TeacherLayout() {
       <Tabs.Screen
         name="content"
         options={{
-          title: 'Content',
+          title: 'Materials',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="document-outline" size={size} color={color} />
           ),
@@ -65,6 +65,15 @@ export default function TeacherLayout() {
           title: 'Announce',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="megaphone-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="queries"
+        options={{
+          title: 'Queries',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles-outline" size={size} color={color} />
           ),
         }}
       />

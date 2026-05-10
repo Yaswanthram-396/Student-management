@@ -1,392 +1,461 @@
-import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useCallback, useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList, Pressable,
-  ScrollView, StyleSheet,
+  Alert,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { typography } from '../../constants/typography';
-import { teacherApi } from '../../services/teacher';
-import { useTeacherStore } from '../../store/teacher-store';
-import { GetHomeworkParams } from '../../types/teacher';
-import { BottomSheet, StatusPill } from '../shared';
-import { TeacherTopBar } from './TeacherTopBar';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../../constants/colors";
+import { spacing } from "../../constants/spacing";
+import { typography } from "../../constants/typography";
+import {
+  teacherApi,
+  type HomeworkItem,
+  type Section,
+  type SubjectItem,
+} from "../../services/teacher";
+import { BottomSheet, HeaderBar, StatusPill } from "../shared";
 
-type TabKey = 'week' | 'prev';
+const COLOR_PALETTE = [
+  { bg: "#DBEAFE", text: "#1D4ED8" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#F3E8FF", text: "#7C3AED" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#E0F2FE", text: "#0369A1" },
+];
 
-interface HWItem {
-  id: string;
-  subject: string; subjectBg: string; subjectText: string;
-  statusVariant: 'warning' | 'info' | 'success';
-  statusLabel: string;
-  desc: string; due: string;
+function subjectColor(id: string) {
+  const hash = id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return COLOR_PALETTE[hash % COLOR_PALETTE.length];
 }
 
-function SubjectPill({ label, bg, text }: { label: string; bg: string; text: string }) {
-  return (
-    <View style={[styles.subjectPill, { backgroundColor: bg }]}>
-      <Text style={[styles.subjectLabel, { color: text }]}>{label}</Text>
-    </View>
-  );
+function formatDeadline(iso: string | null): string {
+  if (!iso) return "No deadline";
+  try {
+    const d = new Date(iso.split("T")[0]);
+    return d.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
 }
 
-function HWCard({ item }: { item: HWItem }) {
+function addDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+const DEADLINE_OPTS = [
+  { label: "Tomorrow", days: 1 },
+  { label: "+3 Days", days: 3 },
+  { label: "+7 Days", days: 7 },
+  { label: "+14 Days", days: 14 },
+];
+
+function HWCard({ item }: { item: HomeworkItem }) {
+  const clr = subjectColor(item.subject.id);
+  const isOverdue = item.deadline
+    ? new Date(item.deadline) < new Date()
+    : false;
+
   return (
-    <View style={styles.hwCard}>
-      <View style={styles.hwCardTop}>
-        <SubjectPill label={item.subject} bg={item.subjectBg} text={item.subjectText} />
-        <StatusPill variant={item.statusVariant} label={item.statusLabel} />
+    <View style={st.hwCard}>
+      <View style={st.hwTop}>
+        <View style={[st.subjectPill, { backgroundColor: clr.bg }]}>
+          <Text style={[st.subjectPillText, { color: clr.text }]}>
+            {item.subject.name}
+          </Text>
+        </View>
+        <StatusPill
+          variant={isOverdue ? "warning" : "info"}
+          label={isOverdue ? "Overdue" : "Active"}
+        />
       </View>
-      <Text style={styles.hwDesc}>{item.desc}</Text>
-      <View style={styles.hwDueRow}>
-        <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
-        <Text style={styles.hwDue}>Due: {item.due}</Text>
-      </View>
+      <Text style={st.hwDesc}>{item.description}</Text>
+      {item.deadline && (
+        <View style={st.dueRow}>
+          <Ionicons
+            name="calendar-outline"
+            size={11}
+            color={colors.textMuted}
+          />
+          <Text style={st.hwDue}>Due: {formatDeadline(item.deadline)}</Text>
+        </View>
+      )}
     </View>
   );
 }
 
 export function HomeworkScreen() {
-  const { selectedSection } = useTeacherStore();
-  const [tab, setTab] = useState<TabKey>('week');
+  const [homework, setHomework] = useState<HomeworkItem[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [subjects, setSubjects] = useState<SubjectItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showSheet, setShowSheet] = useState(false);
 
-  const [subjects, setSubjects] = useState<Array<{ id: string, name: string }>>([]);
-  const [subjectId, setSubjectId] = useState('');
+  const [formSectionId, setFormSectionId] = useState("");
+  const [formSubjectId, setFormSubjectId] = useState("");
+  const [desc, setDesc] = useState("");
+  const [deadlineDays, setDeadlineDays] = useState(7);
+  const [posting, setPosting] = useState(false);
 
-  const [desc, setDesc] = useState('');
-  const [posted, setPosted] = useState(false);
-
-  const [homeworkItems, setHomeworkItems] = useState<HWItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [deadline, setDeadline] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
-  const fetchHomework = useCallback(async () => {
-    if (!selectedSection?.id) return;
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const now = new Date();
-      const day = now.getDay();
-      const diffToMonday = now.getDate() - day + (day === 0 ? -6 : 1);
-      const startOfWeek = new Date(now.setDate(diffToMonday));
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
-
-      const params: GetHomeworkParams = { section_id: selectedSection.id };
-      if (tab === 'week') {
-        params.deadline_from = startOfWeek.toISOString();
-        params.deadline_to = endOfWeek.toISOString();
-      } else {
-        params.deadline_to = startOfWeek.toISOString();
-      }
-
-      const res = await teacherApi.getHomework(params);
-
-      const mapped: HWItem[] = (res.results || []).map(hw => ({
-        id: hw.id,
-        subject: hw.subject?.name || 'Unknown',
-        subjectBg: '#DBEAFE',
-        subjectText: colors.teacher,
-        statusVariant: 'info',
-        statusLabel: 'Posted',
-        desc: hw.description,
-        due: new Date(hw.deadline).toLocaleDateString(),
-      }));
-      setHomeworkItems(mapped);
-    } catch (err) {
-      console.error(err);
+      const [hwRes, sectRes, subRes] = await Promise.all([
+        teacherApi.getHomework(),
+        teacherApi.getSections(),
+        teacherApi.getSubjects(),
+      ]);
+      setHomework(hwRes.results);
+      setSections(sectRes.results);
+      const active = subRes.results.filter((s) => s.is_active);
+      setSubjects(active);
+      if (sectRes.results.length > 0) setFormSectionId(sectRes.results[0].id);
+      if (active.length > 0) setFormSubjectId(active[0].id);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to load data.");
     } finally {
       setLoading(false);
     }
-  }, [selectedSection?.id, tab]);
-
-  useEffect(() => {
-    async function loadSubjects() {
-      try {
-        const res = await teacherApi.getSubjects();
-        setSubjects(res.results || []);
-        console.log("Subjects: ", res.results);
-        if (res.results && res.results.length > 0) {
-          setSubjectId(res.results[0].id);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    void loadSubjects();
   }, []);
 
   useEffect(() => {
-    setTab('week');
-    setShowSheet(false);
-    setDesc('');
-    setPosted(false);
-    if (subjects.length > 0) {
-      setSubjectId(subjects[0].id);
-    }
-  }, [selectedSection?.id, subjects]);
-
-  useEffect(() => {
-    void fetchHomework();
-  }, [fetchHomework]);
+    loadData();
+  }, [loadData]);
 
   async function handlePost() {
-    if (!selectedSection?.id || !subjectId) return;
-    setPosted(true);
-    console.log(deadline.toISOString())
+    if (!formSectionId || !formSubjectId || !desc.trim()) {
+      Alert.alert("Validation", "Please fill in all fields.");
+      return;
+    }
+    setPosting(true);
     try {
-      await teacherApi.createHomework({
-        section_id: selectedSection.id,
-        subject_id: subjectId,
-        description: desc,
-        deadline: deadline.toISOString(),
+      const res = await teacherApi.createHomework({
+        section_id: formSectionId,
+        subject_id: formSubjectId,
+        description: desc.trim(),
+        deadline: addDays(deadlineDays),
       });
-
-
+      setHomework((prev) => [res, ...prev]);
       setShowSheet(false);
-      setDesc('');
-      setDeadline(new Date());
-      void fetchHomework();
-    } catch (err) {
-      console.error(err);
+      setDesc("");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to post homework.");
     } finally {
-      setPosted(false);
+      setPosting(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <TeacherTopBar />
+    <SafeAreaView style={st.container} edges={["top"]}>
+      <HeaderBar
+        center={<Text style={st.headerTitle}>Homework</Text>}
+        right={
+          <Pressable onPress={() => setShowSheet(true)}>
+            <Ionicons
+              name="add-circle-outline"
+              size={24}
+              color={colors.teacher}
+            />
+          </Pressable>
+        }
+      />
 
-      {!selectedSection ? (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>Select a section first</Text>
-          <Text style={styles.emptySub}>
-            Use the header dropdown to switch class/section.
+      {loading ? (
+        <View style={st.centered}>
+          <ActivityIndicator size="large" color={colors.teacher} />
+        </View>
+      ) : homework.length === 0 ? (
+        <View style={st.centered}>
+          <Ionicons name="book-outline" size={52} color={colors.textMuted} />
+          <Text style={st.emptyTitle}>No Homework Yet</Text>
+          <Text style={st.emptyBody}>
+            Tap + to assign homework to your students.
           </Text>
         </View>
       ) : (
-        <>
+        <FlatList
+          data={homework}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <HWCard item={item} />}
+          contentContainerStyle={st.listContent}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+          showsVerticalScrollIndicator={false}
+          onRefresh={loadData}
+          refreshing={loading}
+        />
+      )}
 
-          <View style={styles.actionRow}>
-            <Text style={styles.headerTitle}>Homework</Text>
-            <Pressable onPress={() => setShowSheet(true)}>
-              <Ionicons name="add-circle-outline" size={24} color={colors.teacher} />
-            </Pressable>
-          </View>
+      <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={st.sheetTitle}>Add Homework</Text>
 
-          {/* Underline tab bar */}
-          <View style={styles.tabBar}>
-            {([{ key: 'week', label: 'This Week' }, { key: 'prev', label: 'Previous' }] as const).map(
-              ({ key, label }) => (
-                <Pressable
-                  key={key}
-                  style={[styles.tab, tab === key && styles.tabActive]}
-                  onPress={() => setTab(key)}
-                >
-                  <Text style={[styles.tabLabel, tab === key && styles.tabLabelActive]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              )
-            )}
-          </View>
-
-          {loading ? (
-            <ActivityIndicator size="large" color={colors.teacher} style={{ marginTop: spacing.xl }} />
-          ) : (
-            <FlatList
-              data={homeworkItems}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => <HWCard item={item} />}
-              contentContainerStyle={styles.listContent}
-              ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={() => (
-                <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyTitle}>No homework found</Text>
-                  <Text style={styles.emptySub}>
-                    {tab === 'week' ? "No homework assigned for this week yet." : "No previous homework found."}
-                  </Text>
-                </View>
-              )}
-            />
+          {sections.length > 0 && (
+            <>
+              <Text style={st.fieldLabel}>Section</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={st.hScroll}
+                contentContainerStyle={st.hScrollContent}
+              >
+                {sections.map((sec) => (
+                  <Pressable
+                    key={sec.id}
+                    style={[st.chip, formSectionId === sec.id && st.chipOn]}
+                    onPress={() => setFormSectionId(sec.id)}
+                  >
+                    <Text
+                      style={[
+                        st.chipText,
+                        formSectionId === sec.id && st.chipTextOn,
+                      ]}
+                    >
+                      {sec.class_name} {sec.section_name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
           )}
 
-          <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
-            <Text style={styles.sheetTitle}>Add Homework</Text>
-
-            <Text style={styles.fieldLabel}>Subject</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subjectScroll}>
-              {subjects.map(s => (
-                <Pressable
-                  key={s.id}
-                  style={[styles.subjectOption, subjectId === s.id && styles.subjectOptionActive]}
-                  onPress={() => setSubjectId(s.id)}
-                >
-                  <Text style={[styles.subjectOptionText, subjectId === s.id && styles.subjectOptionTextActive]}>
-                    {s.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.fieldLabel}>Description</Text>
-            <TextInput
-              style={styles.descInput}
-              value={desc}
-              onChangeText={setDesc}
-              placeholder="Describe the homework..."
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-
-            <Text style={styles.fieldLabel}>Deadline</Text>
-            <Pressable style={styles.staticField} onPress={() => setShowDatePicker(true)}>
-              <Text style={styles.staticFieldText}>{deadline.toLocaleDateString()}</Text>
-            </Pressable>
-            {showDatePicker && (
-              <DateTimePicker
-                value={deadline}
-                mode="date"
-                display="default"
-                minimumDate={new Date()}
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(false);
-                  if (selectedDate) setDeadline(selectedDate);
-                }}
-              />
-            )}
-
-            <View style={styles.sheetBtns}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowSheet(false)}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </Pressable>
+          <Text style={st.fieldLabel}>Subject</Text>
+          <View style={st.wrapRow}>
+            {subjects.map((sub) => (
               <Pressable
-                style={[styles.postBtn, posted && styles.postBtnPosted]}
-                onPress={handlePost}
+                key={sub.id}
+                style={[st.chip, formSubjectId === sub.id && st.chipOn]}
+                onPress={() => setFormSubjectId(sub.id)}
               >
-                <Text style={styles.postBtnText}>{posted ? 'Posted!' : 'Post Homework'}</Text>
+                <Text
+                  style={[
+                    st.chipText,
+                    formSubjectId === sub.id && st.chipTextOn,
+                  ]}
+                >
+                  {sub.name}
+                </Text>
               </Pressable>
-            </View>
-          </BottomSheet>
-        </>
-      )}
+            ))}
+          </View>
+
+          <Text style={st.fieldLabel}>Description</Text>
+          <TextInput
+            style={st.descInput}
+            value={desc}
+            onChangeText={setDesc}
+            placeholder="Describe the homework task…"
+            placeholderTextColor={colors.textMuted}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+
+          <Text style={st.fieldLabel}>Deadline</Text>
+          <View style={st.deadlineRow}>
+            {DEADLINE_OPTS.map((opt) => (
+              <Pressable
+                key={opt.days}
+                style={[st.chip, deadlineDays === opt.days && st.chipOn]}
+                onPress={() => setDeadlineDays(opt.days)}
+              >
+                <Text
+                  style={[
+                    st.chipText,
+                    deadlineDays === opt.days && st.chipTextOn,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={st.deadlinePreview}>
+            <Ionicons
+              name="calendar-outline"
+              size={13}
+              color={colors.teacher}
+            />
+            <Text style={st.deadlinePreviewText}>
+              {formatDeadline(addDays(deadlineDays))}
+            </Text>
+          </View>
+
+          <View style={st.sheetBtns}>
+            <Pressable style={st.cancelBtn} onPress={() => setShowSheet(false)}>
+              <Text style={st.cancelTxt}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[st.postBtn, posting && st.postBtnBusy]}
+              onPress={handlePost}
+              disabled={posting}
+            >
+              {posting ? (
+                <ActivityIndicator size="small" color={colors.surface} />
+              ) : (
+                <Text style={st.postTxt}>Post Homework</Text>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  emptyWrap: {
-    margin: spacing.lg,
-    padding: spacing.lg,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    gap: spacing.xs,
-  },
-  emptyTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  emptySub: { ...(typography.caption as object), color: colors.textSecondary },
-  actionRow: {
-    height: 52,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderBottomWidth: 0.5,
-    borderBottomColor: colors.border,
-  },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  // Tab bar
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderBottomWidth: 0.5, borderBottomColor: colors.border,
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    padding: spacing.xxl,
   },
-  tab: {
-    flex: 1, height: 44,
-    alignItems: 'center', justifyContent: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  emptyTitle: { ...(typography.h2 as object), color: colors.textPrimary },
+  emptyBody: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    textAlign: "center",
   },
-  tabActive: { borderBottomColor: colors.teacher },
-  tabLabel: { ...(typography.body as object), fontWeight: '500', color: colors.textMuted },
-  tabLabelActive: { color: colors.textPrimary },
-  // List
   listContent: { padding: spacing.lg },
-  // HW card
+
   hwCard: {
     backgroundColor: colors.surface,
-    borderWidth: 0.5, borderColor: colors.border,
-    borderRadius: 14, padding: spacing.lg,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.lg,
   },
-  hwCardTop: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: spacing.sm,
+  hwTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
   },
   subjectPill: {
-    borderRadius: 999, paddingVertical: spacing.xs, paddingHorizontal: spacing.md,
+    borderRadius: 999,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
-  subjectLabel: { ...(typography.label as object) },
+  subjectPillText: { ...(typography.label as object) },
   hwDesc: {
-    ...(typography.body as object), color: colors.textSecondary,
-    lineHeight: 22, marginBottom: spacing.sm,
+    ...(typography.body as object),
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.sm,
   },
-  hwDueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  dueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   hwDue: { ...(typography.caption as object), color: colors.textMuted },
-  // Sheet
-  sheetTitle: { ...(typography.h3 as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.md },
-  fieldLabel: {
-    ...(typography.caption as object), fontWeight: '500',
-    color: colors.textSecondary, marginBottom: spacing.xs,
-  },
-  subjectScroll: { marginBottom: spacing.md },
-  subjectOption: {
-    paddingVertical: spacing.xs + 1, paddingHorizontal: 14,
-    borderRadius: 999, backgroundColor: colors.background,
-    marginRight: spacing.xs, borderWidth: 0.5, borderColor: colors.border,
-  },
-  subjectOptionActive: { backgroundColor: colors.teacher, borderColor: colors.teacher },
-  subjectOptionText: { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
-  subjectOptionTextActive: { color: colors.surface },
-  descInput: {
-    backgroundColor: '#F5F5F5', borderRadius: 10,
-    padding: spacing.md, ...(typography.body as object),
-    color: colors.textPrimary, height: 100,
+
+  sheetTitle: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.textPrimary,
     marginBottom: spacing.md,
   },
-  staticField: {
-    backgroundColor: '#F5F5F5', borderRadius: 10,
-    padding: spacing.md, marginBottom: spacing.lg,
+  fieldLabel: {
+    ...(typography.caption as object),
+    fontWeight: "500",
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
-  staticFieldText: { ...(typography.body as object), color: colors.textMuted },
-  sheetBtns: { flexDirection: 'row', gap: spacing.sm },
+  hScroll: { marginBottom: spacing.md },
+  hScrollContent: { gap: spacing.xs, paddingRight: spacing.md },
+  wrapRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  deadlineRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  chip: {
+    paddingVertical: spacing.xs + 1,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  chipOn: { backgroundColor: colors.teacher, borderColor: colors.teacher },
+  chipText: {
+    ...(typography.caption as object),
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  chipTextOn: { color: colors.surface },
+  deadlinePreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  deadlinePreviewText: {
+    ...(typography.body as object),
+    color: colors.teacher,
+    fontWeight: "500",
+  },
+  descInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: spacing.md,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+    height: 100,
+    marginBottom: spacing.md,
+    textAlignVertical: "top",
+  },
+  sheetBtns: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   cancelBtn: {
-    flex: 1, height: 48, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cancelBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
+  cancelTxt: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
   postBtn: {
-    flex: 1, height: 48, borderRadius: 10,
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
     backgroundColor: colors.teacher,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  postBtnPosted: { backgroundColor: colors.success },
-  postBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },
+  postBtnBusy: { backgroundColor: colors.success },
+  postTxt: {
+    ...(typography.h3 as object),
+    fontWeight: "500",
+    color: colors.surface,
+  },
 });
