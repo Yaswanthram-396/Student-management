@@ -54,101 +54,98 @@ function shiftDate(d: Date, days: number) {
 export default function AttendanceScreen() {
   const { selectedSection } = useTeacherStore();
 
-  // Date & slot
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [slot, setSlot] = useState<AttendanceSlot>('MORNING');
 
-  // Students (fetched once per section)
   const [students, setStudents] = useState<SectionStudent[]>([]);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentsError, setStudentsError] = useState('');
-
-  // Session & statuses
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
-  const [takenBy, setTakenBy] = useState<string>('');
+  const [takenBy, setTakenBy] = useState('');
   const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
-  const [sessionLoading, setSessionLoading] = useState(false);
-  const [sessionError, setSessionError] = useState('');
 
-  // Actions
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  const lastSectionId = useRef('');
-  const lastSessionKey = useRef('');
+  // Abort controller ref — cancels stale in-flight requests on re-fetch
+  const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
-  // Fetch students whenever section changes
+  const isToday = toDateString(date) === toDateString(new Date());
+  const isConfirmed = !!confirmedAt;
+
+  // ── Single effect: fetch students + session together ──────────────────────
+  // Captures sectionId, date, slot at call time so stale responses are ignored.
   useEffect(() => {
-    if (!selectedSection || selectedSection.id === lastSectionId.current) return;
-    lastSectionId.current = selectedSection.id;
-    lastSessionKey.current = '';
-
-    setStudents([]);
-    setStudentsError('');
-    setSessionId(null);
-    setStatuses({});
-
-    async function loadStudents() {
-      setStudentsLoading(true);
-      try {
-        const data = await teacherSectionsApi.getStudents(selectedSection!.id);
-        setStudents(data.results);
-      } catch (err: any) {
-        setStudentsError(err.details ?? 'Failed to load students.');
-      } finally {
-        setStudentsLoading(false);
-      }
+    if (!selectedSection) {
+      setStudents([]);
+      setSessionId(null);
+      setStatuses({});
+      return;
     }
-    loadStudents();
-  }, [selectedSection?.id]);
 
-  // Fetch session whenever date or slot changes (students already loaded)
-  useEffect(() => {
-    if (!selectedSection || students.length === 0) return;
-    const key = `${selectedSection.id}_${toDateString(date)}_${slot}`;
-    if (lastSessionKey.current === key) return;
-    lastSessionKey.current = key;
+    // Mark any in-flight request as stale
+    const guard = { cancelled: false };
+    abortRef.current = guard;
 
-    async function loadSession() {
-      setSessionLoading(true);
-      setSessionError('');
+    const sectionId = selectedSection.id;
+    const dateStr = toDateString(date);
+
+    async function load() {
+      setLoading(true);
+      setError('');
+      setStudents([]);
       setSessionId(null);
       setConfirmedAt(null);
       setStatuses({});
+
       try {
-        const sess = await teacherAttendanceApi.getOrCreateSession(
-          selectedSection!.id,
-          toDateString(date),
-          slot,
-        );
+        // Step 1: fetch all students in the section
+        const studentData = await teacherSectionsApi.getStudents(sectionId);
+        if (guard.cancelled) return;
+
+        const fetchedStudents = studentData.results;
+
+        // Step 2: get-or-create attendance session for this date + slot
+        const sess = await teacherAttendanceApi.getOrCreateSession(sectionId, dateStr, slot);
+        if (guard.cancelled) return;
+
+        // Step 3: build status map
+        // Start: all students default to PRESENT
+        const map: Record<string, AttendanceStatus> = {};
+        for (const s of fetchedStudents) {
+          map[s.id] = 'PRESENT';
+        }
+        // Override with existing session records
+        for (const r of sess.records) {
+          if (r.status && r.student_id in map) {
+            map[r.student_id] = r.status;
+          }
+        }
+
+        setStudents(fetchedStudents);
         setSessionId(sess.id);
         setConfirmedAt(sess.confirmed_at);
         setTakenBy(sess.taken_by?.name ?? '');
-
-        // Build status map: start with all students as PRESENT,
-        // then override with any existing session records
-        const map: Record<string, AttendanceStatus> = {};
-        for (const s of students) {
-          map[s.id] = 'PRESENT'; // default
-        }
-        for (const r of sess.records) {
-          if (r.status) map[r.student_id] = r.status;
-        }
         setStatuses(map);
       } catch (err: any) {
-        setSessionError(err.details ?? 'Failed to load session.');
-        lastSessionKey.current = ''; // allow retry
+        if (guard.cancelled) return;
+        setError(err.details ?? 'Failed to load attendance. Please try again.');
       } finally {
-        setSessionLoading(false);
+        if (!guard.cancelled) setLoading(false);
       }
     }
-    loadSession();
-  }, [date, slot, students]);
+
+    load();
+
+    return () => { guard.cancelled = true; };
+  }, [selectedSection?.id, toDateString(date), slot]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   function toggleStatus(studentId: string) {
-    if (confirmedAt) return;
+    if (isConfirmed) return;
     setStatuses(prev => ({
       ...prev,
       [studentId]: prev[studentId] === 'PRESENT' ? 'ABSENT' : 'PRESENT',
@@ -156,33 +153,38 @@ export default function AttendanceScreen() {
   }
 
   function markAll(status: AttendanceStatus) {
-    if (confirmedAt) return;
+    if (isConfirmed) return;
     const map: Record<string, AttendanceStatus> = {};
     for (const s of students) map[s.id] = status;
     setStatuses(map);
   }
 
-  async function handleSave() {
-    if (!sessionId) return;
-    const records = students.map(s => ({
+  function buildRecords() {
+    return students.map(s => ({
       student_id: s.id,
       status: statuses[s.id] ?? 'PRESENT',
     }));
+  }
+
+  async function handleSave() {
+    if (!sessionId || !students.length) return;
     setSaving(true);
     try {
-      await teacherAttendanceApi.markAttendance(sessionId, records);
+      await teacherAttendanceApi.markAttendance(sessionId, buildRecords());
       Alert.alert('Saved', 'Attendance saved successfully.');
     } catch (err: any) {
-      Alert.alert('Error', err.details ?? 'Failed to save attendance.');
+      Alert.alert('Save failed', err.details ?? 'Failed to save attendance.');
     } finally {
       setSaving(false);
     }
   }
 
   function handleConfirmPress() {
+    const p = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'PRESENT').length;
+    const a = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'ABSENT').length;
     Alert.alert(
       'Confirm Attendance',
-      `Lock ${slot === 'MORNING' ? 'morning' : 'afternoon'} attendance for ${formatDisplayDate(date)}?\n\nPresent: ${presentCount}  ·  Absent: ${absentCount}\n\nThis cannot be undone.`,
+      `Lock ${slot === 'MORNING' ? 'morning' : 'afternoon'} attendance for ${formatDisplayDate(date)}?\n\nPresent: ${p}  ·  Absent: ${a}\n\nThis cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Confirm', style: 'destructive', onPress: doConfirm },
@@ -191,18 +193,14 @@ export default function AttendanceScreen() {
   }
 
   async function doConfirm() {
-    if (!sessionId) return;
+    if (!sessionId || !students.length) return;
     // Save first, then confirm
     setSaving(true);
     try {
-      const records = students.map(s => ({
-        student_id: s.id,
-        status: statuses[s.id] ?? 'PRESENT',
-      }));
-      await teacherAttendanceApi.markAttendance(sessionId, records);
+      await teacherAttendanceApi.markAttendance(sessionId, buildRecords());
     } catch (err: any) {
       setSaving(false);
-      Alert.alert('Error', err.details ?? 'Failed to save attendance before confirming.');
+      Alert.alert('Save failed', err.details ?? 'Could not save attendance before confirming.');
       return;
     }
     setSaving(false);
@@ -212,11 +210,11 @@ export default function AttendanceScreen() {
       const res = await teacherAttendanceApi.confirmSession(sessionId);
       setConfirmedAt(res.confirmed_at);
       Alert.alert(
-        '✓ Confirmed',
+        'Confirmed ✓',
         `Attendance confirmed.\n${res.absent_count} student${res.absent_count !== 1 ? 's' : ''} marked absent.`,
       );
     } catch (err: any) {
-      Alert.alert('Error', err.details ?? 'Failed to confirm attendance.');
+      Alert.alert('Confirm failed', err.details ?? 'Failed to confirm attendance.');
     } finally {
       setConfirming(false);
     }
@@ -224,19 +222,17 @@ export default function AttendanceScreen() {
 
   const presentCount = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'PRESENT').length;
   const absentCount = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'ABSENT').length;
-  const isConfirmed = !!confirmedAt;
-  const isLoading = studentsLoading || sessionLoading;
-  const error = studentsError || sessionError;
-  const isToday = toDateString(date) === toDateString(new Date());
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
 
-      {/* ── Date navigator ── */}
+      {/* Date navigator */}
       <View style={styles.dateNav}>
         <Pressable
           style={({ pressed }) => [styles.navArrow, pressed && styles.navArrowPressed]}
-          onPress={() => { setDate(d => shiftDate(d, -1)); lastSessionKey.current = ''; }}
+          onPress={() => setDate(d => shiftDate(d, -1))}
           hitSlop={8}
         >
           <Ionicons name="chevron-back" size={20} color="#444444" />
@@ -253,7 +249,7 @@ export default function AttendanceScreen() {
 
         <Pressable
           style={({ pressed }) => [styles.navArrow, pressed && styles.navArrowPressed]}
-          onPress={() => { setDate(d => shiftDate(d, 1)); lastSessionKey.current = ''; }}
+          onPress={() => setDate(d => shiftDate(d, 1))}
           hitSlop={8}
         >
           <Ionicons name="chevron-forward" size={20} color="#444444" />
@@ -267,18 +263,18 @@ export default function AttendanceScreen() {
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(_, selected) => {
             setShowDatePicker(false);
-            if (selected) { lastSessionKey.current = ''; setDate(selected); }
+            if (selected) setDate(selected);
           }}
         />
       )}
 
-      {/* ── Slot tabs ── */}
+      {/* Slot tabs */}
       <View style={styles.slotRow}>
         {SLOTS.map(s => (
           <Pressable
             key={s}
             style={[styles.slotTab, slot === s && styles.slotTabActive]}
-            onPress={() => { setSlot(s); lastSessionKey.current = ''; }}
+            onPress={() => setSlot(s)}
           >
             <Ionicons
               name={s === 'MORNING' ? 'sunny-outline' : 'moon-outline'}
@@ -292,7 +288,7 @@ export default function AttendanceScreen() {
         ))}
       </View>
 
-      {/* ── Confirmed banner ── */}
+      {/* Confirmed banner */}
       {isConfirmed && (
         <View style={styles.confirmedBanner}>
           <Ionicons name="lock-closed" size={13} color={GREEN} />
@@ -307,23 +303,23 @@ export default function AttendanceScreen() {
         </View>
       )}
 
-      {/* ── Stats + quick actions ── */}
-      {!isLoading && !error && students.length > 0 && (
+      {/* Stats bar */}
+      {!loading && !error && students.length > 0 && (
         <View style={styles.statsBar}>
           <View style={styles.statChip}>
             <View style={[styles.statDot, { backgroundColor: GREEN }]} />
-            <Text style={styles.statText}>{presentCount}</Text>
-            <Text style={styles.statLabel}>Present</Text>
+            <Text style={styles.statNum}>{presentCount}</Text>
+            <Text style={styles.statLabel}> Present</Text>
           </View>
           <View style={styles.statChip}>
             <View style={[styles.statDot, { backgroundColor: RED }]} />
-            <Text style={styles.statText}>{absentCount}</Text>
-            <Text style={styles.statLabel}>Absent</Text>
+            <Text style={styles.statNum}>{absentCount}</Text>
+            <Text style={styles.statLabel}> Absent</Text>
           </View>
           <View style={styles.statChip}>
             <View style={[styles.statDot, { backgroundColor: '#AAAAAA' }]} />
-            <Text style={styles.statText}>{students.length}</Text>
-            <Text style={styles.statLabel}>Total</Text>
+            <Text style={styles.statNum}>{students.length}</Text>
+            <Text style={styles.statLabel}> Total</Text>
           </View>
 
           {!isConfirmed && (
@@ -345,37 +341,33 @@ export default function AttendanceScreen() {
         </View>
       )}
 
-      {/* ── Content ── */}
+      {/* Scroll content */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Loading */}
-        {isLoading && (
+        {loading && (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={ACCENT} />
-            <Text style={styles.stateText}>
-              {studentsLoading ? 'Loading students…' : 'Loading session…'}
-            </Text>
+            <Text style={styles.stateText}>Loading attendance…</Text>
           </View>
         )}
 
         {/* Error */}
-        {!isLoading && !!error && (
+        {!loading && !!error && (
           <View style={styles.errorCard}>
             <View style={styles.errorIconWrap}>
               <Ionicons name="alert-circle-outline" size={28} color={RED} />
             </View>
-            <Text style={styles.errorTitle}>Could not load attendance</Text>
+            <Text style={styles.errorTitle}>Couldn't load attendance</Text>
             <Text style={styles.errorBody}>{error}</Text>
             <Pressable
               style={styles.retryBtn}
               onPress={() => {
-                setStudentsError('');
-                setSessionError('');
-                lastSectionId.current = '';
-                lastSessionKey.current = '';
+                // Force re-run by toggling date (same value, new reference)
+                setDate(d => new Date(d));
               }}
             >
               <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />
@@ -385,7 +377,7 @@ export default function AttendanceScreen() {
         )}
 
         {/* No section */}
-        {!isLoading && !error && !selectedSection && (
+        {!loading && !error && !selectedSection && (
           <View style={styles.centered}>
             <Ionicons name="school-outline" size={48} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No class selected</Text>
@@ -393,8 +385,8 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* Empty students */}
-        {!isLoading && !error && !!selectedSection && students.length === 0 && (
+        {/* No students */}
+        {!loading && !error && !!selectedSection && students.length === 0 && (
           <View style={styles.centered}>
             <Ionicons name="people-outline" size={48} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No students found</Text>
@@ -403,7 +395,7 @@ export default function AttendanceScreen() {
         )}
 
         {/* Student list */}
-        {!isLoading && !error && students.length > 0 && (
+        {!loading && !error && students.length > 0 && (
           <View style={styles.listCard}>
             {students.map((student, idx) => {
               const status = statuses[student.id] ?? 'PRESENT';
@@ -425,9 +417,9 @@ export default function AttendanceScreen() {
                       <Text style={styles.studentName} numberOfLines={1}>
                         {student.name}
                       </Text>
-                      {student.roll_number ? (
+                      {!!student.roll_number && (
                         <Text style={styles.studentRoll}>Roll: {student.roll_number}</Text>
-                      ) : null}
+                      )}
                     </View>
                     <View style={[
                       styles.statusPill,
@@ -453,8 +445,8 @@ export default function AttendanceScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* ── Bottom actions ── */}
-      {!isLoading && !error && students.length > 0 && !isConfirmed && (
+      {/* Bottom actions */}
+      {!loading && !error && students.length > 0 && !isConfirmed && (
         <View style={styles.actions}>
           <Pressable
             style={({ pressed }) => [
@@ -502,7 +494,6 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F4F8' },
 
-  // Date nav
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -513,13 +504,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
   },
-  navArrow: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  navArrow: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   navArrowPressed: { backgroundColor: '#F0F0F0' },
   dateBtn: {
     flexDirection: 'row',
@@ -534,7 +519,6 @@ const styles = StyleSheet.create({
   dateBtnText: { fontSize: 13, fontWeight: '600', color: ACCENT },
   todayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GREEN },
 
-  // Slots
   slotRow: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -558,7 +542,6 @@ const styles = StyleSheet.create({
   slotTabText: { fontSize: 13, fontWeight: '500', color: '#AAAAAA' },
   slotTabTextActive: { color: ACCENT, fontWeight: '600' },
 
-  // Confirmed banner
   confirmedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -571,7 +554,6 @@ const styles = StyleSheet.create({
   },
   confirmedText: { fontSize: 12, color: '#065F46', fontWeight: '500', flex: 1 },
 
-  // Stats
   statsBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -581,35 +563,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
     gap: 6,
+    flexWrap: 'wrap',
   },
   statChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: '#F5F5F5',
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 10,
   },
-  statDot: { width: 7, height: 7, borderRadius: 4 },
-  statText: { fontSize: 13, fontWeight: '700', color: '#111111' },
-  statLabel: { fontSize: 11, color: '#888888' },
+  statDot: { width: 7, height: 7, borderRadius: 4, marginRight: 4 },
+  statNum: { fontSize: 13, fontWeight: '700', color: '#111111' },
+  statLabel: { fontSize: 12, color: '#888888' },
   quickBtns: { flexDirection: 'row', gap: 6, marginLeft: 'auto' },
-  quickBtn: {
-    borderWidth: 1.5,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+  quickBtn: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   quickBtnText: { fontSize: 12, fontWeight: '700' },
 
-  // List
   scroll: { flex: 1 },
   scrollContent: { padding: 14, paddingBottom: 20 },
 
   centered: { alignItems: 'center', paddingVertical: 64, gap: 12 },
   stateText: { fontSize: 14, color: '#888888' },
-
   errorCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -619,31 +594,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFCDD2',
   },
-  errorIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FEE2E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  errorIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center' },
   errorTitle: { fontSize: 15, fontWeight: '600', color: '#111111' },
   errorBody: { fontSize: 13, color: '#888888', textAlign: 'center' },
-  retryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: RED,
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    marginTop: 4,
-  },
+  retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: RED, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 9, marginTop: 4 },
   retryText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#444444' },
   emptyBody: { fontSize: 13, color: '#AAAAAA', textAlign: 'center' },
 
-  // List card
   listCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -660,7 +618,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     gap: 10,
   },
   studentRowPressed: { backgroundColor: '#F8F8F8' },
@@ -679,7 +637,6 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: 12, fontWeight: '600' },
 
-  // Bottom actions
   actions: {
     flexDirection: 'row',
     gap: 10,
