@@ -38,6 +38,7 @@ export default function SectionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [panelVisible, setPanelVisible] = useState(false);
+  const [imageVisible, setImageVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   async function fetchSections(isRefresh = false) {
@@ -232,13 +233,17 @@ export default function SectionsScreen() {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.panelScroll}>
             {/* User card */}
             <View style={styles.panelUserCard}>
-              <View style={styles.panelAvatar}>
+              <Pressable
+                style={({ pressed }) => [styles.panelAvatar, pressed && picUrl && { opacity: 0.85 }]}
+                onPress={() => picUrl && setImageVisible(true)}
+                disabled={!picUrl}
+              >
                 {picUrl ? (
                   <Image source={{ uri: picUrl }} style={styles.panelAvatarImage} />
                 ) : (
                   <Text style={styles.panelAvatarText}>{initials}</Text>
                 )}
-              </View>
+              </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={styles.panelName} numberOfLines={1}>
                   {teacher?.profile.name ?? 'Teacher'}
@@ -292,6 +297,32 @@ export default function SectionsScreen() {
         </SafeAreaView>
         </Animated.View>
       </Modal>
+
+      {/* Profile picture lightbox */}
+      {picUrl && (
+        <Modal
+          visible={imageVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setImageVisible(false)}
+          statusBarTranslucent
+        >
+          <Pressable style={styles.lightboxBackdrop} onPress={() => setImageVisible(false)}>
+            <Image
+              source={{ uri: picUrl }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+            <Pressable
+              style={styles.lightboxClose}
+              onPress={() => setImageVisible(false)}
+              hitSlop={12}
+            >
+              <Ionicons name="close-circle" size={36} color="#FFFFFF" />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -408,6 +439,24 @@ const styles = StyleSheet.create({
   },
   ctBadgeText: { fontSize: 11, color: ACCENT, fontWeight: '600' },
   chevron: { marginTop: 2 },
+
+  // Lightbox
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+    borderRadius: 0,
+  },
+  lightboxClose: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+  },
 
   // Full-screen panel
   panelOverlay: {
