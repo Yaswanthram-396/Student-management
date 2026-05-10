@@ -48,7 +48,7 @@ export default function TeacherLayout() {
             ),
             // Only class teachers can mark attendance
             tabBarButton: showAttendance ? undefined : () => null,
-            tabBarItemStyle: showAttendance ? undefined : { width: 0, overflow: 'hidden' },
+            tabBarItemStyle: showAttendance ? undefined : { display: 'none' },
           }}
         />
         <Tabs.Screen
