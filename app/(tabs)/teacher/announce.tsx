@@ -1,1 +1,5 @@
-export { AnnounceScreen as default } from '../../../components/teacher-dashboard/AnnounceScreen';
+import { View } from 'react-native';
+
+export default function AnnounceScreen() {
+  return <View />;
+}

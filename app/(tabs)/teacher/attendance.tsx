@@ -1,1 +1,5 @@
-export { AttendanceScreen as default } from '../../../components/teacher-dashboard/AttendanceScreen';
+import { View } from 'react-native';
+
+export default function AttendanceScreen() {
+  return <View />;
+}

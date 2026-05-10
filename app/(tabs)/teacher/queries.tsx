@@ -1,1 +1,5 @@
-export { QueriesScreen as default } from '../../../components/teacher-dashboard/QueriesScreen';
+import { View } from 'react-native';
+
+export default function QueriesScreen() {
+  return <View />;
+}

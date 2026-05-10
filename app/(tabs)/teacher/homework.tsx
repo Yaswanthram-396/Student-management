@@ -1,1 +1,5 @@
-export { HomeworkScreen as default } from '../../../components/teacher-dashboard/HomeworkScreen';
+import { View } from 'react-native';
+
+export default function HomeworkScreen() {
+  return <View />;
+}
