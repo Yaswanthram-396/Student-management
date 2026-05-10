@@ -246,7 +246,7 @@ export default function SectionsScreen() {
 
               <Pressable
                 style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
-                onPress={() => closePanel()}
+                onPress={() => closePanel(() => router.push('/teacher-settings'))}
               >
                 <View style={[styles.panelIcon, { backgroundColor: '#F3F0FF' }]}>
                   <Ionicons name="settings-outline" size={18} color="#534AB7" />
