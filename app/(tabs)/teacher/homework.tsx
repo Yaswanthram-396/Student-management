@@ -37,29 +37,21 @@ function subjectColor(name: string) {
   return SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length];
 }
 
-type FilterTab = 'ALL' | 'UPCOMING' | 'TODAY' | 'OVERDUE';
+type FilterTab = 'ALL' | 'UPCOMING' | 'PREVIOUS';
 
 const FILTER_TABS: { key: FilterTab; label: string; icon: string }[] = [
   { key: 'ALL', label: 'All', icon: 'list-outline' },
   { key: 'UPCOMING', label: 'Upcoming', icon: 'calendar-outline' },
-  { key: 'TODAY', label: 'Due Today', icon: 'today-outline' },
-  { key: 'OVERDUE', label: 'Overdue', icon: 'alert-circle-outline' },
+  { key: 'PREVIOUS', label: 'Previous', icon: 'checkmark-done-outline' },
 ];
 
-function getDeadlineStatus(deadline: string): 'overdue' | 'today' | 'upcoming' {
-  const now = new Date();
-  const due = new Date(deadline);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 86400000);
-  if (due < todayStart) return 'overdue';
-  if (due < todayEnd) return 'today';
-  return 'upcoming';
+function getDeadlineStatus(deadline: string): 'upcoming' | 'previous' {
+  return new Date(deadline) > new Date() ? 'upcoming' : 'previous';
 }
 
 const DEADLINE_CONFIG = {
-  overdue: { color: '#DC2626', bg: '#FEE2E2', label: 'Overdue' },
-  today: { color: '#D97706', bg: '#FEF3C7', label: 'Due Today' },
   upcoming: { color: '#1D9E75', bg: '#E1F5EE', label: 'Upcoming' },
+  previous: { color: '#888888', bg: '#F0F0F0', label: 'Previous' },
 };
 
 function formatDeadline(iso: string) {
@@ -204,18 +196,13 @@ export default function HomeworkScreen() {
 
   const filtered = homework.filter((hw) => {
     if (activeFilter === 'ALL') return true;
-    const status = getDeadlineStatus(hw.deadline);
-    if (activeFilter === 'OVERDUE') return status === 'overdue';
-    if (activeFilter === 'TODAY') return status === 'today';
-    if (activeFilter === 'UPCOMING') return status === 'upcoming';
-    return true;
+    return getDeadlineStatus(hw.deadline) === activeFilter.toLowerCase();
   });
 
   const counts: Record<FilterTab, number> = {
     ALL: homework.length,
     UPCOMING: homework.filter((h) => getDeadlineStatus(h.deadline) === 'upcoming').length,
-    TODAY: homework.filter((h) => getDeadlineStatus(h.deadline) === 'today').length,
-    OVERDUE: homework.filter((h) => getDeadlineStatus(h.deadline) === 'overdue').length,
+    PREVIOUS: homework.filter((h) => getDeadlineStatus(h.deadline) === 'previous').length,
   };
 
   return (
@@ -309,14 +296,10 @@ export default function HomeworkScreen() {
               <Ionicons name="book-outline" size={38} color="#CCCCCC" />
             </View>
             <Text style={styles.emptyTitle}>
-              {activeFilter === 'ALL'
-                ? 'No homework assigned'
-                : `No ${FILTER_TABS.find((t) => t.key === activeFilter)?.label.toLowerCase()} homework`}
+              {activeFilter === 'ALL' ? 'No homework assigned' : `No ${activeFilter.toLowerCase()} homework`}
             </Text>
             <Text style={styles.emptyHint}>
-              {activeFilter === 'ALL'
-                ? 'Tap + to assign homework to this section.'
-                : 'Switch to All to see everything.'}
+              {activeFilter === 'ALL' ? 'Tap + to assign homework to this section.' : 'Switch to All to see everything.'}
             </Text>
           </View>
         )}
@@ -415,7 +398,10 @@ export default function HomeworkScreen() {
                         key={sub.id}
                         style={[
                           styles.subjectChip,
-                          { backgroundColor: isSelected ? sc.text : sc.bg },
+                          {
+                            backgroundColor: isSelected ? sc.text : 'transparent',
+                            borderColor: sc.text,
+                          },
                         ]}
                         onPress={() => { setSelectedSubject(sub); setFormError(''); }}
                       >
@@ -694,7 +680,7 @@ const styles = StyleSheet.create({
   subjectsEmptyText: { fontSize: 13, color: '#AAAAAA' },
   subjectScroll: { marginHorizontal: -20 },
   subjectScrollContent: { paddingHorizontal: 20, gap: 8 },
-  subjectChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  subjectChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5 },
   subjectChipText: { fontSize: 13, fontWeight: '600' },
 
   input: {
