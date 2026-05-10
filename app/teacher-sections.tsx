@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Dimensions,
   Image,
   Modal,
   Pressable,
@@ -12,6 +14,8 @@ import {
   Text,
   View,
 } from 'react-native';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signOut, useAuthStore } from '../store/auth-store';
 import { setSelectedSection, setSections as storeSetSections } from '../store/teacher-store';
@@ -34,6 +38,7 @@ export default function SectionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [panelVisible, setPanelVisible] = useState(false);
+  const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   async function fetchSections(isRefresh = false) {
     if (!isRefresh) setLoading(true);
@@ -52,8 +57,26 @@ export default function SectionsScreen() {
 
   useEffect(() => { fetchSections(); }, []);
 
-  function openPanel() { setPanelVisible(true); }
-  function closePanel(cb?: () => void) { setPanelVisible(false); cb?.(); }
+  function openPanel() {
+    setPanelVisible(true);
+    slideAnim.setValue(SCREEN_WIDTH);
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 280,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  function closePanel(cb?: () => void) {
+    Animated.timing(slideAnim, {
+      toValue: SCREEN_WIDTH,
+      duration: 240,
+      useNativeDriver: true,
+    }).start(() => {
+      setPanelVisible(false);
+      cb?.();
+    });
+  }
 
   function handleSelectSection(section: TeacherSection) {
     setSelectedSection(section);
@@ -86,16 +109,13 @@ export default function SectionsScreen() {
             <Text style={styles.headerTitle}>My Classes</Text>
           </View>
 
-          {/* Avatar button */}
+          {/* Hamburger button */}
           <Pressable
-            style={({ pressed }) => [styles.avatar, pressed && styles.avatarPressed]}
+            style={({ pressed }) => [styles.hamburger, pressed && styles.hamburgerPressed]}
             onPress={openPanel}
+            hitSlop={8}
           >
-            {picUrl ? (
-              <Image source={{ uri: picUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarText}>{initials}</Text>
-            )}
+            <Ionicons name="menu" size={26} color="#111111" />
           </Pressable>
         </View>
 
@@ -192,8 +212,9 @@ export default function SectionsScreen() {
         ))}
       </ScrollView>
 
-      {/* Full-screen panel */}
-      <Modal visible={panelVisible} animationType="slide" onRequestClose={() => closePanel()}>
+      {/* Full-screen panel — slides in from right */}
+      <Modal visible={panelVisible} animationType="none" transparent onRequestClose={() => closePanel()}>
+        <Animated.View style={[styles.panelOverlay, { transform: [{ translateX: slideAnim }] }]}>
         <SafeAreaView style={styles.panelSafe} edges={['top', 'bottom']}>
           {/* Panel header */}
           <View style={styles.panelHeader}>
@@ -269,6 +290,7 @@ export default function SectionsScreen() {
             </View>
           </ScrollView>
         </SafeAreaView>
+        </Animated.View>
       </Modal>
     </SafeAreaView>
   );
@@ -301,23 +323,14 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#111111', letterSpacing: -0.5 },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: ACCENT,
+  hamburger: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
   },
-  avatarPressed: { opacity: 0.8 },
-  avatarImage: { width: 46, height: 46, borderRadius: 23 },
-  avatarText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  hamburgerPressed: { backgroundColor: '#F0F0F0' },
   teacherName: { fontSize: 14, color: '#666666', marginBottom: 8 },
   subjectBadge: {
     flexDirection: 'row',
@@ -397,7 +410,11 @@ const styles = StyleSheet.create({
   chevron: { marginTop: 2 },
 
   // Full-screen panel
-  panelSafe: { flex: 1, backgroundColor: '#F4F4F8' },
+  panelOverlay: {
+    flex: 1,
+    backgroundColor: '#F4F4F8',
+  },
+  panelSafe: { flex: 1 },
   panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
