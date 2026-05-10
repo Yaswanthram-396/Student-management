@@ -26,7 +26,7 @@ const AMBER = '#D97706';
 function greeting(name: string) {
   const h = new Date().getHours();
   const time = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-  return `Good ${time}, ${name.split(' ')[0]}!`;
+  return `Good ${time}, ${name}!`;
 }
 
 function formatDeadline(iso: string) {
