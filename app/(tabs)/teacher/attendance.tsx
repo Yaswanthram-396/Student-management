@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,6 +71,7 @@ export default function AttendanceScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [search, setSearch] = useState('');
 
   const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
@@ -199,6 +201,14 @@ export default function AttendanceScreen() {
   const markedAbsent = students.filter(s => statuses[s.id] === 'ABSENT').length;
   const unmarked = students.filter(s => statuses[s.id] === null).length;
 
+  const q = search.trim().toLowerCase();
+  const filteredStudents = q
+    ? students.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.roll_number?.toLowerCase().includes(q),
+      )
+    : students;
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
 
@@ -323,6 +333,27 @@ export default function AttendanceScreen() {
         </View>
       )}
 
+      {/* Search bar */}
+      {!loading && !error && students.length > 0 && (
+        <View style={styles.searchWrap}>
+          <Ionicons name="search-outline" size={16} color="#AAAAAA" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by name or roll number…"
+            placeholderTextColor="#AAAAAA"
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={17} color="#CCCCCC" />
+            </Pressable>
+          )}
+        </View>
+      )}
+
       {/* Content */}
       <ScrollView
         style={styles.scroll}
@@ -369,12 +400,21 @@ export default function AttendanceScreen() {
           </View>
         )}
 
+        {/* No search results */}
+        {!loading && !error && students.length > 0 && filteredStudents.length === 0 && (
+          <View style={styles.centered}>
+            <Ionicons name="search-outline" size={40} color="#CCCCCC" />
+            <Text style={styles.emptyTitle}>No results for "{search}"</Text>
+            <Text style={styles.emptyBody}>Try a different name or roll number.</Text>
+          </View>
+        )}
+
         {/* Student list */}
-        {!loading && !error && students.length > 0 && (
+        {!loading && !error && filteredStudents.length > 0 && (
           <View style={styles.listCard}>
-            {students.map((student, idx) => {
+            {filteredStudents.map((student, idx) => {
               const status = statuses[student.id] ?? null;
-              const isLast = idx === students.length - 1;
+              const isLast = idx === filteredStudents.length - 1;
 
               return (
                 <React.Fragment key={student.id}>
@@ -569,6 +609,34 @@ const styles = StyleSheet.create({
   markAllPresent: { backgroundColor: GREEN },
   markAllAbsent: { backgroundColor: RED },
   markAllText: { fontSize: 12, fontWeight: '600', color: '#FFFFFF' },
+
+  // Search
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 14,
+    marginTop: 14,
+    marginBottom: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  searchIcon: { flexShrink: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111111',
+    paddingVertical: 0,
+  },
 
   // List
   scroll: { flex: 1 },
