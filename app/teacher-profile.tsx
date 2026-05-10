@@ -171,6 +171,9 @@ export default function TeacherProfileScreen() {
           <View style={styles.roleBadge}>
             <Text style={styles.roleBadgeText}>Teacher</Text>
           </View>
+          {!!teacher.school.name && (
+            <Text style={styles.heroSchool}>{teacher.school.name}</Text>
+          )}
         </View>
 
         <View style={styles.body}>
@@ -195,6 +198,16 @@ export default function TeacherProfileScreen() {
               value={teacher.profile.primary_subject?.name ?? "—"}
             />
           </View>
+
+          {/* School */}
+          {!!teacher.school.name && (
+            <>
+              <Text style={styles.sectionLabel}>School</Text>
+              <View style={styles.card}>
+                <InfoRow icon="school-outline" label="School Name" value={teacher.school.name} />
+              </View>
+            </>
+          )}
 
           {/* Assigned sections */}
           <Text style={styles.sectionLabel}>Assigned Classes</Text>
@@ -370,6 +383,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   roleBadgeText: { fontSize: 12, fontWeight: "600", color: ACCENT },
+  heroSchool: { fontSize: 13, color: "#888888", marginTop: 4 },
 
   // Body
   body: { padding: 16 },

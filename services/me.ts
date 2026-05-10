@@ -59,10 +59,12 @@ function normalizeMeResponse(raw: unknown): MeResponse {
         ? (user.profile_pic_url as string | null)
         : null,
     profile: normalizedProfile as unknown as MeResponse["profile"],
-    school: toSchoolSummary(
-      payload.school,
-      typeof user.school_id === "string" ? user.school_id : undefined,
-    ),
+    // API returns school_name flat on user/profile, not a nested school object
+    school: {
+      id: typeof user.school_id === "string" ? user.school_id : "",
+      name: typeof user.school_name === "string" ? user.school_name : "",
+      subdomain: "",
+    },
   } as MeResponse;
 }
 
