@@ -29,6 +29,9 @@ const RED = '#DC2626';
 
 const SLOTS: AttendanceSlot[] = ['MORNING', 'AFTERNOON'];
 
+// null = not yet marked by teacher
+type StatusValue = AttendanceStatus | null;
+
 function toDateString(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -62,21 +65,18 @@ export default function AttendanceScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
   const [takenBy, setTakenBy] = useState('');
-  const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
+  const [statuses, setStatuses] = useState<Record<string, StatusValue>>({});
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  // Abort controller ref — cancels stale in-flight requests on re-fetch
   const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
   const isToday = toDateString(date) === toDateString(new Date());
   const isConfirmed = !!confirmedAt;
 
-  // ── Single effect: fetch students + session together ──────────────────────
-  // Captures sectionId, date, slot at call time so stale responses are ignored.
+  // Fetch students + session together to avoid any section mismatch
   useEffect(() => {
     if (!selectedSection) {
       setStudents([]);
@@ -85,7 +85,6 @@ export default function AttendanceScreen() {
       return;
     }
 
-    // Mark any in-flight request as stale
     const guard = { cancelled: false };
     abortRef.current = guard;
 
@@ -101,27 +100,19 @@ export default function AttendanceScreen() {
       setStatuses({});
 
       try {
-        // Step 1: fetch all students in the section
         const studentData = await teacherSectionsApi.getStudents(sectionId);
         if (guard.cancelled) return;
 
         const fetchedStudents = studentData.results;
 
-        // Step 2: get-or-create attendance session for this date + slot
         const sess = await teacherAttendanceApi.getOrCreateSession(sectionId, dateStr, slot);
         if (guard.cancelled) return;
 
-        // Step 3: build status map
-        // Start: all students default to PRESENT
-        const map: Record<string, AttendanceStatus> = {};
-        for (const s of fetchedStudents) {
-          map[s.id] = 'PRESENT';
-        }
-        // Override with existing session records
+        // Default: all null (no selection). Override with existing records.
+        const map: Record<string, StatusValue> = {};
+        for (const s of fetchedStudents) map[s.id] = null;
         for (const r of sess.records) {
-          if (r.status && r.student_id in map) {
-            map[r.student_id] = r.status;
-          }
+          if (r.status && r.student_id in map) map[r.student_id] = r.status;
         }
 
         setStudents(fetchedStudents);
@@ -138,53 +129,45 @@ export default function AttendanceScreen() {
     }
 
     load();
-
     return () => { guard.cancelled = true; };
   }, [selectedSection?.id, toDateString(date), slot]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  function toggleStatus(studentId: string) {
+  function setStudentStatus(studentId: string, status: AttendanceStatus) {
     if (isConfirmed) return;
+    // Tap same status again → deselect (back to null)
     setStatuses(prev => ({
       ...prev,
-      [studentId]: prev[studentId] === 'PRESENT' ? 'ABSENT' : 'PRESENT',
+      [studentId]: prev[studentId] === status ? null : status,
     }));
   }
 
   function markAll(status: AttendanceStatus) {
     if (isConfirmed) return;
-    const map: Record<string, AttendanceStatus> = {};
+    const map: Record<string, StatusValue> = {};
     for (const s of students) map[s.id] = status;
     setStatuses(map);
   }
 
+  // Unmarked students default to PRESENT when confirming
   function buildRecords() {
     return students.map(s => ({
       student_id: s.id,
-      status: statuses[s.id] ?? 'PRESENT',
+      status: (statuses[s.id] ?? 'PRESENT') as AttendanceStatus,
     }));
   }
 
-  async function handleSave() {
-    if (!sessionId || !students.length) return;
-    setSaving(true);
-    try {
-      await teacherAttendanceApi.markAttendance(sessionId, buildRecords());
-      Alert.alert('Saved', 'Attendance saved successfully.');
-    } catch (err: any) {
-      Alert.alert('Save failed', err.details ?? 'Failed to save attendance.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   function handleConfirmPress() {
-    const p = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'PRESENT').length;
-    const a = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'ABSENT').length;
+    const unmarked = students.filter(s => statuses[s.id] === null).length;
+    const present = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'PRESENT').length;
+    const absent = students.filter(s => statuses[s.id] === 'ABSENT').length;
+
+    const unmarkedNote = unmarked > 0
+      ? `\n\n${unmarked} unmarked student${unmarked > 1 ? 's' : ''} will be counted as Present.`
+      : '';
+
     Alert.alert(
       'Confirm Attendance',
-      `Lock ${slot === 'MORNING' ? 'morning' : 'afternoon'} attendance for ${formatDisplayDate(date)}?\n\nPresent: ${p}  ·  Absent: ${a}\n\nThis cannot be undone.`,
+      `Lock ${slot === 'MORNING' ? 'morning' : 'afternoon'} attendance for ${formatDisplayDate(date)}?\n\nPresent: ${present}  ·  Absent: ${absent}${unmarkedNote}\n\nThis cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Confirm', style: 'destructive', onPress: doConfirm },
@@ -194,19 +177,11 @@ export default function AttendanceScreen() {
 
   async function doConfirm() {
     if (!sessionId || !students.length) return;
-    // Save first, then confirm
-    setSaving(true);
-    try {
-      await teacherAttendanceApi.markAttendance(sessionId, buildRecords());
-    } catch (err: any) {
-      setSaving(false);
-      Alert.alert('Save failed', err.details ?? 'Could not save attendance before confirming.');
-      return;
-    }
-    setSaving(false);
-
     setConfirming(true);
     try {
+      // Save all statuses first
+      await teacherAttendanceApi.markAttendance(sessionId, buildRecords());
+      // Then confirm
       const res = await teacherAttendanceApi.confirmSession(sessionId);
       setConfirmedAt(res.confirmed_at);
       Alert.alert(
@@ -214,16 +189,15 @@ export default function AttendanceScreen() {
         `Attendance confirmed.\n${res.absent_count} student${res.absent_count !== 1 ? 's' : ''} marked absent.`,
       );
     } catch (err: any) {
-      Alert.alert('Confirm failed', err.details ?? 'Failed to confirm attendance.');
+      Alert.alert('Failed', err.details ?? 'Failed to confirm attendance.');
     } finally {
       setConfirming(false);
     }
   }
 
-  const presentCount = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'PRESENT').length;
-  const absentCount = students.filter(s => (statuses[s.id] ?? 'PRESENT') === 'ABSENT').length;
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const markedPresent = students.filter(s => statuses[s.id] === 'PRESENT').length;
+  const markedAbsent = students.filter(s => statuses[s.id] === 'ABSENT').length;
+  const unmarked = students.filter(s => statuses[s.id] === null).length;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -268,7 +242,7 @@ export default function AttendanceScreen() {
         />
       )}
 
-      {/* Slot tabs */}
+      {/* Slot tabs — extra top padding for breathing room */}
       <View style={styles.slotRow}>
         {SLOTS.map(s => (
           <Pressable
@@ -303,51 +277,58 @@ export default function AttendanceScreen() {
         </View>
       )}
 
-      {/* Stats bar */}
+      {/* Stats + quick mark buttons */}
       {!loading && !error && students.length > 0 && (
         <View style={styles.statsBar}>
-          <View style={styles.statChip}>
-            <View style={[styles.statDot, { backgroundColor: GREEN }]} />
-            <Text style={styles.statNum}>{presentCount}</Text>
-            <Text style={styles.statLabel}> Present</Text>
-          </View>
-          <View style={styles.statChip}>
-            <View style={[styles.statDot, { backgroundColor: RED }]} />
-            <Text style={styles.statNum}>{absentCount}</Text>
-            <Text style={styles.statLabel}> Absent</Text>
-          </View>
-          <View style={styles.statChip}>
-            <View style={[styles.statDot, { backgroundColor: '#AAAAAA' }]} />
-            <Text style={styles.statNum}>{students.length}</Text>
-            <Text style={styles.statLabel}> Total</Text>
+          {/* Counts */}
+          <View style={styles.statsLeft}>
+            <View style={styles.statChip}>
+              <View style={[styles.statDot, { backgroundColor: GREEN }]} />
+              <Text style={styles.statNum}>{markedPresent}</Text>
+              <Text style={styles.statLabel}>P</Text>
+            </View>
+            <View style={styles.statChip}>
+              <View style={[styles.statDot, { backgroundColor: RED }]} />
+              <Text style={styles.statNum}>{markedAbsent}</Text>
+              <Text style={styles.statLabel}>A</Text>
+            </View>
+            {unmarked > 0 && (
+              <View style={styles.statChip}>
+                <View style={[styles.statDot, { backgroundColor: '#CCCCCC' }]} />
+                <Text style={styles.statNum}>{unmarked}</Text>
+                <Text style={styles.statLabel}>–</Text>
+              </View>
+            )}
           </View>
 
+          {/* Mark all buttons */}
           {!isConfirmed && (
-            <View style={styles.quickBtns}>
+            <View style={styles.markAllRow}>
               <Pressable
-                style={[styles.quickBtn, { borderColor: GREEN }]}
+                style={({ pressed }) => [styles.markAllBtn, styles.markAllPresent, pressed && styles.markAllBtnPressed]}
                 onPress={() => markAll('PRESENT')}
               >
-                <Text style={[styles.quickBtnText, { color: GREEN }]}>All ✓</Text>
+                <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
+                <Text style={styles.markAllText}>All Present</Text>
               </Pressable>
               <Pressable
-                style={[styles.quickBtn, { borderColor: RED }]}
+                style={({ pressed }) => [styles.markAllBtn, styles.markAllAbsent, pressed && styles.markAllBtnPressed]}
                 onPress={() => markAll('ABSENT')}
               >
-                <Text style={[styles.quickBtnText, { color: RED }]}>All ✗</Text>
+                <Ionicons name="close-circle" size={14} color="#FFFFFF" />
+                <Text style={styles.markAllText}>All Absent</Text>
               </Pressable>
             </View>
           )}
         </View>
       )}
 
-      {/* Scroll content */}
+      {/* Content */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Loading */}
         {loading && (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={ACCENT} />
@@ -355,7 +336,6 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* Error */}
         {!loading && !!error && (
           <View style={styles.errorCard}>
             <View style={styles.errorIconWrap}>
@@ -365,10 +345,7 @@ export default function AttendanceScreen() {
             <Text style={styles.errorBody}>{error}</Text>
             <Pressable
               style={styles.retryBtn}
-              onPress={() => {
-                // Force re-run by toggling date (same value, new reference)
-                setDate(d => new Date(d));
-              }}
+              onPress={() => setDate(d => new Date(d))}
             >
               <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />
               <Text style={styles.retryText}>Try Again</Text>
@@ -376,7 +353,6 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* No section */}
         {!loading && !error && !selectedSection && (
           <View style={styles.centered}>
             <Ionicons name="school-outline" size={48} color="#CCCCCC" />
@@ -385,7 +361,6 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* No students */}
         {!loading && !error && !!selectedSection && students.length === 0 && (
           <View style={styles.centered}>
             <Ionicons name="people-outline" size={48} color="#CCCCCC" />
@@ -398,21 +373,14 @@ export default function AttendanceScreen() {
         {!loading && !error && students.length > 0 && (
           <View style={styles.listCard}>
             {students.map((student, idx) => {
-              const status = statuses[student.id] ?? 'PRESENT';
-              const isPresent = status === 'PRESENT';
+              const status = statuses[student.id] ?? null;
               const isLast = idx === students.length - 1;
 
               return (
                 <React.Fragment key={student.id}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.studentRow,
-                      pressed && !isConfirmed && styles.studentRowPressed,
-                    ]}
-                    onPress={() => toggleStatus(student.id)}
-                    disabled={isConfirmed}
-                  >
+                  <View style={styles.studentRow}>
                     <Text style={styles.studentIndex}>{idx + 1}</Text>
+
                     <View style={styles.studentInfo}>
                       <Text style={styles.studentName} numberOfLines={1}>
                         {student.name}
@@ -421,20 +389,42 @@ export default function AttendanceScreen() {
                         <Text style={styles.studentRoll}>Roll: {student.roll_number}</Text>
                       )}
                     </View>
-                    <View style={[
-                      styles.statusPill,
-                      { backgroundColor: isPresent ? '#E1F5EE' : '#FEE2E2' },
-                    ]}>
-                      <Ionicons
-                        name={isPresent ? 'checkmark-circle' : 'close-circle'}
-                        size={15}
-                        color={isPresent ? GREEN : RED}
-                      />
-                      <Text style={[styles.statusText, { color: isPresent ? GREEN : RED }]}>
-                        {isPresent ? 'Present' : 'Absent'}
-                      </Text>
+
+                    {/* P / A buttons */}
+                    <View style={styles.paButtons}>
+                      <Pressable
+                        style={[
+                          styles.paBtn,
+                          status === 'PRESENT' ? styles.paBtnPresentActive : styles.paBtnPresentInactive,
+                        ]}
+                        onPress={() => !isConfirmed && setStudentStatus(student.id, 'PRESENT')}
+                        disabled={isConfirmed}
+                      >
+                        <Text style={[
+                          styles.paBtnText,
+                          status === 'PRESENT' ? styles.paBtnTextActive : styles.paBtnTextPresentInactive,
+                        ]}>
+                          P
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={[
+                          styles.paBtn,
+                          status === 'ABSENT' ? styles.paBtnAbsentActive : styles.paBtnAbsentInactive,
+                        ]}
+                        onPress={() => !isConfirmed && setStudentStatus(student.id, 'ABSENT')}
+                        disabled={isConfirmed}
+                      >
+                        <Text style={[
+                          styles.paBtnText,
+                          status === 'ABSENT' ? styles.paBtnTextActive : styles.paBtnTextAbsentInactive,
+                        ]}>
+                          A
+                        </Text>
+                      </Pressable>
                     </View>
-                  </Pressable>
+                  </View>
                   {!isLast && <View style={styles.rowDivider} />}
                 </React.Fragment>
               );
@@ -445,43 +435,24 @@ export default function AttendanceScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Bottom actions */}
+      {/* Confirm button only */}
       {!loading && !error && students.length > 0 && !isConfirmed && (
         <View style={styles.actions}>
           <Pressable
             style={({ pressed }) => [
-              styles.saveBtn,
-              pressed && styles.saveBtnPressed,
-              (saving || confirming) && styles.btnDisabled,
-            ]}
-            onPress={handleSave}
-            disabled={saving || confirming}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color={ACCENT} />
-            ) : (
-              <>
-                <Ionicons name="save-outline" size={17} color={ACCENT} />
-                <Text style={styles.saveBtnText}>Save Draft</Text>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
               styles.confirmBtn,
               pressed && styles.confirmBtnPressed,
-              (saving || confirming) && styles.btnDisabled,
+              confirming && styles.btnDisabled,
             ]}
             onPress={handleConfirmPress}
-            disabled={saving || confirming}
+            disabled={confirming}
           >
             {confirming ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <Ionicons name="checkmark-done" size={17} color="#FFFFFF" />
-                <Text style={styles.confirmBtnText}>Confirm & Lock</Text>
+                <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
+                <Text style={styles.confirmBtnText}>Confirm & Lock Attendance</Text>
               </>
             )}
           </Pressable>
@@ -494,24 +465,25 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F4F8' },
 
+  // Date nav
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
   },
-  navArrow: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  navArrow: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   navArrowPressed: { backgroundColor: '#F0F0F0' },
   dateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     borderRadius: 20,
     backgroundColor: '#EBF2FB',
   },
@@ -519,11 +491,13 @@ const styles = StyleSheet.create({
   dateBtnText: { fontSize: 13, fontWeight: '600', color: ACCENT },
   todayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GREEN },
 
+  // Slot tabs — extra vertical padding for breathing room
   slotRow: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingTop: 14,
+    paddingBottom: 14,
     gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
@@ -534,57 +508,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
     backgroundColor: '#F5F5F5',
   },
   slotTabActive: { backgroundColor: '#EBF2FB' },
   slotTabText: { fontSize: 13, fontWeight: '500', color: '#AAAAAA' },
   slotTabTextActive: { color: ACCENT, fontWeight: '600' },
 
+  // Confirmed banner
   confirmedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#E1F5EE',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderBottomWidth: 1,
     borderBottomColor: '#A7F3D0',
   },
   confirmedText: { fontSize: 12, color: '#065F46', fontWeight: '500', flex: 1 },
 
+  // Stats bar
   statsBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
-    gap: 6,
-    flexWrap: 'wrap',
   },
+  statsLeft: { flexDirection: 'row', gap: 6 },
   statChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
     backgroundColor: '#F5F5F5',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
   },
-  statDot: { width: 7, height: 7, borderRadius: 4, marginRight: 4 },
+  statDot: { width: 7, height: 7, borderRadius: 4 },
   statNum: { fontSize: 13, fontWeight: '700', color: '#111111' },
   statLabel: { fontSize: 12, color: '#888888' },
-  quickBtns: { flexDirection: 'row', gap: 6, marginLeft: 'auto' },
-  quickBtn: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
-  quickBtnText: { fontSize: 12, fontWeight: '700' },
 
+  // Mark all buttons
+  markAllRow: { flexDirection: 'row', gap: 8 },
+  markAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  markAllBtnPressed: { opacity: 0.75 },
+  markAllPresent: { backgroundColor: GREEN },
+  markAllAbsent: { backgroundColor: RED },
+  markAllText: { fontSize: 12, fontWeight: '600', color: '#FFFFFF' },
+
+  // List
   scroll: { flex: 1 },
   scrollContent: { padding: 14, paddingBottom: 20 },
 
   centered: { alignItems: 'center', paddingVertical: 64, gap: 12 },
   stateText: { fontSize: 14, color: '#888888' },
+
   errorCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -618,56 +609,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 12,
     gap: 10,
   },
-  studentRowPressed: { backgroundColor: '#F8F8F8' },
-  rowDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 48 },
-  studentIndex: { width: 24, fontSize: 12, color: '#AAAAAA', fontWeight: '500' },
+  rowDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 46 },
+  studentIndex: { width: 22, fontSize: 12, color: '#AAAAAA', fontWeight: '500' },
   studentInfo: { flex: 1 },
   studentName: { fontSize: 14, fontWeight: '500', color: '#111111' },
   studentRoll: { fontSize: 11, color: '#AAAAAA', marginTop: 1 },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  statusText: { fontSize: 12, fontWeight: '600' },
 
+  // P / A buttons
+  paButtons: { flexDirection: 'row', gap: 6 },
+  paBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  paBtnPresentActive: { backgroundColor: GREEN, borderColor: GREEN },
+  paBtnPresentInactive: { backgroundColor: 'transparent', borderColor: '#CCCCCC' },
+  paBtnAbsentActive: { backgroundColor: RED, borderColor: RED },
+  paBtnAbsentInactive: { backgroundColor: 'transparent', borderColor: '#CCCCCC' },
+  paBtnText: { fontSize: 13, fontWeight: '700' },
+  paBtnTextActive: { color: '#FFFFFF' },
+  paBtnTextPresentInactive: { color: '#AAAAAA' },
+  paBtnTextAbsentInactive: { color: '#AAAAAA' },
+
+  // Bottom action
   actions: {
-    flexDirection: 'row',
-    gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#EEEEEE',
   },
-  saveBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    paddingVertical: 13,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: ACCENT,
-    backgroundColor: '#FFFFFF',
-  },
-  saveBtnPressed: { backgroundColor: '#EBF2FB' },
-  saveBtnText: { fontSize: 14, fontWeight: '600', color: ACCENT },
   confirmBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    paddingVertical: 13,
-    borderRadius: 13,
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
     backgroundColor: ACCENT,
     shadowColor: ACCENT,
     shadowOffset: { width: 0, height: 3 },
@@ -676,6 +660,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   confirmBtnPressed: { opacity: 0.85 },
-  confirmBtnText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+  confirmBtnText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
   btnDisabled: { opacity: 0.55 },
 });
