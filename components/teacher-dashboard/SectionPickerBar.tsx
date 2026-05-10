@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
   Animated,
@@ -25,31 +26,15 @@ export function SectionPickerBar() {
   function openDropdown() {
     setOpen(true);
     Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   }
 
   function closeDropdown() {
     Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: -20,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 160,
-        useNativeDriver: true,
-      }),
+      Animated.timing(slideAnim, { toValue: -20, duration: 180, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
     ]).start(() => setOpen(false));
   }
 
@@ -59,19 +44,33 @@ export function SectionPickerBar() {
     closeDropdown();
   }
 
-  const barTop = insets.top;
-  const dropdownTop = barTop + BAR_HEIGHT;
+  function handleBack() {
+    router.replace('/teacher-sections');
+  }
+
+  const dropdownTop = insets.top + BAR_HEIGHT;
 
   return (
     <>
       {/* Fixed top bar */}
-      <View style={[styles.bar, { paddingTop: barTop }]}>
+      <View style={[styles.bar, { paddingTop: insets.top }]}>
         <View style={styles.barInner}>
-          <View style={styles.barLeft}>
-            <Ionicons name="school-outline" size={16} color={ACCENT} />
-            <Text style={styles.barLabel}>Class</Text>
+          {/* Back button */}
+          <Pressable
+            style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+            onPress={handleBack}
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={20} color="#444444" />
+          </Pressable>
+
+          {/* Class label */}
+          <View style={styles.barLabel}>
+            <Ionicons name="school-outline" size={14} color={ACCENT} />
+            <Text style={styles.barLabelText}>Class</Text>
           </View>
 
+          {/* Section selector pill */}
           <Pressable
             style={({ pressed }) => [styles.selector, pressed && styles.selectorPressed]}
             onPress={open ? closeDropdown : openDropdown}
@@ -83,7 +82,7 @@ export function SectionPickerBar() {
             </Text>
             <Ionicons
               name={open ? 'chevron-up' : 'chevron-down'}
-              size={15}
+              size={14}
               color={ACCENT}
             />
           </Pressable>
@@ -103,26 +102,18 @@ export function SectionPickerBar() {
           <Pressable style={StyleSheet.absoluteFill} onPress={closeDropdown} />
         </Animated.View>
 
-        {/* Dropdown panel */}
+        {/* Dropdown panel — narrower with horizontal margins */}
         <Animated.View
           style={[
             styles.dropdown,
             { top: dropdownTop },
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
           <View style={styles.dropdownHandle} />
-
           <Text style={styles.dropdownTitle}>Switch Class</Text>
 
-          <ScrollView
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-            style={styles.dropdownScroll}
-          >
+          <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
             {sections.map((section) => {
               const isActive = section.id === selectedSection?.id;
               return (
@@ -131,13 +122,13 @@ export function SectionPickerBar() {
                   style={({ pressed }) => [
                     styles.item,
                     isActive && styles.itemActive,
-                    pressed && styles.itemPressed,
+                    pressed && !isActive && styles.itemPressed,
                   ]}
                   onPress={() => handleSelect(section)}
                 >
                   <View style={styles.itemLeft}>
                     <View style={[styles.itemDot, isActive && styles.itemDotActive]} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={[styles.itemTitle, isActive && styles.itemTitleActive]}>
                         {section.class_name} – {section.section_name}
                       </Text>
@@ -153,9 +144,7 @@ export function SectionPickerBar() {
                       </View>
                     </View>
                   </View>
-                  {isActive && (
-                    <Ionicons name="checkmark-circle" size={20} color={ACCENT} />
-                  )}
+                  {isActive && <Ionicons name="checkmark-circle" size={20} color={ACCENT} />}
                 </Pressable>
               );
             })}
@@ -167,111 +156,99 @@ export function SectionPickerBar() {
 }
 
 const styles = StyleSheet.create({
-  // Top bar
   bar: {
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
-    zIndex: 10,
   },
   barInner: {
     height: BAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
+    gap: 10,
   },
-  barLeft: {
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backBtnPressed: { backgroundColor: '#F0F0F0' },
+  barLabel: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
+    flex: 1,
   },
-  barLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#444444',
-  },
+  barLabelText: { fontSize: 13, fontWeight: '600', color: '#444444' },
   selector: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#EBF2FB',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
-    maxWidth: 220,
+    maxWidth: 180,
   },
-  selectorPressed: { opacity: 0.75 },
-  selectorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: ACCENT,
-    flexShrink: 1,
-  },
+  selectorPressed: { opacity: 0.7 },
+  selectorText: { fontSize: 13, fontWeight: '600', color: ACCENT, flexShrink: 1 },
 
-  // Backdrop
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
 
-  // Dropdown panel
+  // Narrower dropdown with horizontal margins
   dropdown: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 20,
+    right: 20,
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderRadius: 16,
     paddingTop: 10,
-    paddingBottom: 16,
+    paddingBottom: 12,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.14,
     shadowRadius: 16,
-    elevation: 10,
-    overflow: 'hidden',
+    elevation: 12,
   },
   dropdownHandle: {
-    width: 36,
+    width: 32,
     height: 4,
     backgroundColor: '#DDDDDD',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   dropdownTitle: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: '#AAAAAA',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    paddingHorizontal: 16,
-    marginBottom: 6,
+    letterSpacing: 0.8,
+    paddingHorizontal: 14,
+    marginBottom: 4,
   },
-  dropdownScroll: { maxHeight: 300 },
 
-  // Dropdown items
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 8,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginHorizontal: 6,
+    borderRadius: 10,
   },
   itemActive: { backgroundColor: '#EBF2FB' },
   itemPressed: { backgroundColor: '#F5F5F5' },
-  itemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  itemDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#DDDDDD',
-  },
+  itemLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  itemDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#DDDDDD' },
   itemDotActive: { backgroundColor: ACCENT },
-  itemTitle: { fontSize: 15, fontWeight: '600', color: '#111111', marginBottom: 2 },
+  itemTitle: { fontSize: 14, fontWeight: '600', color: '#111111', marginBottom: 2 },
   itemTitleActive: { color: ACCENT },
   itemMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   itemSub: { fontSize: 11, color: '#AAAAAA' },
