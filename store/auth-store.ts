@@ -105,6 +105,10 @@ export async function signInWithTokens(
   return await loadCurrentUser();
 }
 
+export async function refreshCurrentUser() {
+  return await loadCurrentUser();
+}
+
 export async function signOut() {
   await storage.clearTokens();
   state = {
