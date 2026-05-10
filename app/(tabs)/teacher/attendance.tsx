@@ -280,8 +280,8 @@ export default function AttendanceScreen() {
       {/* Stats + quick mark buttons */}
       {!loading && !error && students.length > 0 && (
         <View style={styles.statsBar}>
-          {/* Counts */}
-          <View style={styles.statsLeft}>
+          {/* Row 1: counts */}
+          <View style={styles.statsRow}>
             <View style={styles.statChip}>
               <View style={[styles.statDot, { backgroundColor: GREEN }]} />
               <Text style={styles.statNum}>{markedPresent}</Text>
@@ -301,7 +301,7 @@ export default function AttendanceScreen() {
             )}
           </View>
 
-          {/* Mark all buttons */}
+          {/* Row 2: mark all buttons — full width, never clipped */}
           {!isConfirmed && (
             <View style={styles.markAllRow}>
               <Pressable
@@ -452,7 +452,7 @@ export default function AttendanceScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
-                <Text style={styles.confirmBtnText}>Confirm & Lock Attendance</Text>
+                <Text style={styles.confirmBtnText}>Confirm Attendance</Text>
               </>
             )}
           </Pressable>
@@ -531,16 +531,16 @@ const styles = StyleSheet.create({
 
   // Stats bar
   statsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
   },
-  statsLeft: { flexDirection: 'row', gap: 6 },
+  statsRow: { flexDirection: 'row', gap: 6 },
   statChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -557,11 +557,12 @@ const styles = StyleSheet.create({
   // Mark all buttons
   markAllRow: { flexDirection: 'row', gap: 8 },
   markAllBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
     borderRadius: 10,
   },
   markAllBtnPressed: { opacity: 0.75 },
