@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, StyleSheet,
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  TextInput,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,242 +16,457 @@ import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
 import { HeaderBar, BottomSheet } from '../shared';
+import {
+  teacherApi,
+  type StudyMaterial,
+  type Section,
+  type SubjectItem,
+} from '../../services/teacher';
 
-type Material = { id: string; type: string; title: string; subject: string; date: string };
-
-const MATERIALS: Material[] = [
-  { id: '1', type: 'PDF',   title: 'Chapter 6 – Light and Reflection.pdf',        subject: 'Science',       date: '4 May 2026'  },
-  { id: '2', type: 'PDF',   title: 'Algebra Formulas Sheet.pdf',                   subject: 'Math',          date: '3 May 2026'  },
-  { id: '3', type: 'Image', title: 'Digestive System Diagram.jpg',                 subject: 'Science',       date: '2 May 2026'  },
-  { id: '4', type: 'PDF',   title: 'Grammar Rules – Tenses.pdf',                   subject: 'English',       date: '1 May 2026'  },
-  { id: '5', type: 'PDF',   title: 'Chapter 5 Notes – The French Revolution.pdf',  subject: 'Social Studies',date: '30 Apr 2026' },
-];
-
-const SUBJECT_FILTERS = ['All', 'Math', 'Science', 'English', 'Hindi', 'Social Studies'];
-const SUBJECTS        = ['Math', 'Science', 'English', 'Hindi', 'Social Studies'];
-const FILE_TYPES      = ['PDF', 'Image', 'Video'];
-
-const FILE_TYPE_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  PDF:   { bg: colors.dangerBg,  color: '#991B1B', label: 'PDF' },
-  Image: { bg: '#DBEAFE',        color: colors.teacher,  label: 'IMG' },
-  Video: { bg: '#F3E8FF',        color: '#7C3AED',  label: 'VID' },
+const FILE_ICONS: Record<string, { icon: string; bg: string; color: string }> = {
+  pdf:  { icon: 'document-text-outline', bg: colors.dangerBg,  color: '#991B1B' },
+  img:  { icon: 'image-outline',          bg: '#DBEAFE',        color: colors.teacher },
+  vid:  { icon: 'videocam-outline',       bg: '#F3E8FF',        color: '#7C3AED' },
+  file: { icon: 'document-outline',       bg: colors.border,    color: colors.textMuted },
 };
 
-function FileTypeBox({ type }: { type: string }) {
-  const cfg = FILE_TYPE_CFG[type] ?? { bg: colors.background, color: colors.textMuted, label: '?' };
-  return (
-    <View style={[styles.fileTypeBox, { backgroundColor: cfg.bg }]}>
-      <Text style={[styles.fileTypeLabel, { color: cfg.color }]}>{cfg.label}</Text>
-    </View>
-  );
+function fileIcon(url: string | null) {
+  if (!url) return FILE_ICONS.file;
+  const ext = url.split('.').pop()?.toLowerCase() ?? '';
+  if (['pdf'].includes(ext)) return FILE_ICONS.pdf;
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return FILE_ICONS.img;
+  if (['mp4', 'mov', 'avi'].includes(ext)) return FILE_ICONS.vid;
+  return FILE_ICONS.file;
 }
 
-function MaterialRow({ item }: { item: Material }) {
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function MaterialRow({ item }: { item: StudyMaterial }) {
+  const cfg = fileIcon(item.file_url);
   return (
-    <View style={styles.materialCard}>
-      <FileTypeBox type={item.type} />
-      <View style={styles.materialInfo}>
-        <Text style={styles.materialTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.materialMeta}>{item.subject} · {item.date}</Text>
+    <View style={st.materialCard}>
+      <View style={[st.fileTypeBox, { backgroundColor: cfg.bg }]}>
+        <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
       </View>
-      <Ionicons name="download-outline" size={18} color={colors.textMuted} />
+      <View style={st.materialInfo}>
+        <Text style={st.materialTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={st.materialMeta}>
+          {item.subject.name} · {formatDate(item.material_date)}
+        </Text>
+      </View>
+      <Ionicons
+        name={item.file_url ? 'download-outline' : 'alert-circle-outline'}
+        size={18}
+        color={item.file_url ? colors.textMuted : colors.warning}
+      />
     </View>
   );
 }
 
 export function ContentScreen() {
-  const [activeSubject, setActiveSubject] = useState('All');
-  const [showSheet, setShowSheet]         = useState(false);
-  const [uploaded, setUploaded]           = useState(false);
-  const [uploadSubject, setUploadSubject] = useState('Math');
-  const [fileType, setFileType]           = useState('PDF');
-  const [matTitle, setMatTitle]           = useState('');
+  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [subjects, setSubjects] = useState<SubjectItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
+  const [showSheet, setShowSheet] = useState(false);
 
-  const filtered = activeSubject === 'All'
-    ? MATERIALS
-    : MATERIALS.filter(m => m.subject === activeSubject);
+  const [formSectionId, setFormSectionId] = useState('');
+  const [formSubjectId, setFormSubjectId] = useState('');
+  const [formTitle, setFormTitle] = useState('');
+  const [formDesc, setFormDesc] = useState('');
 
-  function handleUpload() {
-    setUploaded(true);
-    setTimeout(() => {
-      setUploaded(false);
-      setShowSheet(false);
-      setMatTitle('');
-    }, 1000);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [matRes, sectRes, subRes] = await Promise.all([
+        teacherApi.getStudyMaterials(),
+        teacherApi.getSections(),
+        teacherApi.getSubjects(),
+      ]);
+      setMaterials(matRes.results);
+      setSections(sectRes.results);
+      const active = subRes.results.filter((s) => s.is_active);
+      setSubjects(active);
+      if (sectRes.results.length > 0) setFormSectionId(sectRes.results[0].id);
+      if (active.length > 0) setFormSubjectId(active[0].id);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to load materials.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const filtered = activeSubjectId
+    ? materials.filter((m) => m.subject.id === activeSubjectId)
+    : materials;
+
+  function handleUploadTap() {
+    if (!formTitle.trim() || !formSectionId || !formSubjectId) {
+      Alert.alert('Validation', 'Please fill in title, section, and subject.');
+      return;
+    }
+    Alert.alert(
+      'File Upload',
+      'File upload requires expo-document-picker.\n\nInstall it with:\nnpx expo install expo-document-picker\n\nThen update ContentScreen to use DocumentPicker.getDocumentAsync().',
+      [{ text: 'OK' }],
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={st.container} edges={['top']}>
       <HeaderBar
-        center={<Text style={styles.headerTitle}>Study Materials</Text>}
+        center={<Text style={st.headerTitle}>Study Materials</Text>}
         right={
           <Pressable onPress={() => setShowSheet(true)}>
-            <Ionicons name="add-circle-outline" size={24} color={colors.teacher} />
+            <Ionicons
+              name="add-circle-outline"
+              size={24}
+              color={colors.teacher}
+            />
           </Pressable>
         }
       />
 
-      {/* Subject filter pills */}
-      <View style={styles.filterBar}>
-        <FlatList
-          data={SUBJECT_FILTERS}
-          keyExtractor={item => item}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterList}
-          ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.filterPill, activeSubject === item && styles.filterPillActive]}
-              onPress={() => setActiveSubject(item)}
-            >
-              <Text style={[styles.filterLabel, activeSubject === item && styles.filterLabelActive]}>
-                {item}
-              </Text>
-            </Pressable>
-          )}
-        />
-      </View>
+      {/* Subject filter bar */}
+      {subjects.length > 0 && (
+        <View style={st.filterBar}>
+          <FlatList
+            data={[{ id: null as string | null, name: 'All' }, ...subjects.map(s => ({ id: s.id, name: s.name }))]}
+            keyExtractor={(item) => item.id ?? 'all'}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={st.filterList}
+            renderItem={({ item }) => (
+              <Pressable
+                style={[
+                  st.filterPill,
+                  activeSubjectId === item.id && st.filterPillOn,
+                ]}
+                onPress={() => setActiveSubjectId(item.id)}
+              >
+                <Text
+                  style={[
+                    st.filterLabel,
+                    activeSubjectId === item.id && st.filterLabelOn,
+                  ]}
+                >
+                  {item.name}
+                </Text>
+              </Pressable>
+            )}
+            ItemSeparatorComponent={() => (
+              <View style={{ width: spacing.sm }} />
+            )}
+          />
+        </View>
+      )}
 
-      {/* Materials list */}
-      <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <MaterialRow item={item} />}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading ? (
+        <View style={st.centered}>
+          <ActivityIndicator size="large" color={colors.teacher} />
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={st.centered}>
+          <Ionicons name="document-outline" size={52} color={colors.textMuted} />
+          <Text style={st.emptyTitle}>No Materials Yet</Text>
+          <Text style={st.emptyBody}>
+            Tap + to upload study materials for your students.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <MaterialRow item={item} />}
+          contentContainerStyle={st.listContent}
+          ItemSeparatorComponent={() => (
+            <View style={{ height: spacing.sm }} />
+          )}
+          showsVerticalScrollIndicator={false}
+          onRefresh={loadData}
+          refreshing={loading}
+        />
+      )}
 
       <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
-        <Text style={styles.sheetTitle}>Upload Material</Text>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={st.sheetTitle}>Upload Material</Text>
 
-        <Text style={styles.fieldLabel}>Subject</Text>
-        <View style={styles.optionRow}>
-          {SUBJECTS.map(s => (
-            <Pressable
-              key={s}
-              style={[styles.optionPill, uploadSubject === s && styles.optionPillActive]}
-              onPress={() => setUploadSubject(s)}
-            >
-              <Text style={[styles.optionText, uploadSubject === s && styles.optionTextActive]}>
-                {s}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+          {sections.length > 0 && (
+            <>
+              <Text style={st.fieldLabel}>Section</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={st.hScroll}
+                contentContainerStyle={st.hScrollContent}
+              >
+                {sections.map((sec) => (
+                  <Pressable
+                    key={sec.id}
+                    style={[st.chip, formSectionId === sec.id && st.chipOn]}
+                    onPress={() => setFormSectionId(sec.id)}
+                  >
+                    <Text
+                      style={[
+                        st.chipText,
+                        formSectionId === sec.id && st.chipTextOn,
+                      ]}
+                    >
+                      {sec.class_name} {sec.section_name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
 
-        <Text style={styles.fieldLabel}>Material Title</Text>
-        <TextInput
-          style={styles.textInput}
-          value={matTitle}
-          onChangeText={setMatTitle}
-          placeholder="Enter title..."
-          placeholderTextColor={colors.textMuted}
-        />
+          <Text style={st.fieldLabel}>Subject</Text>
+          <View style={st.wrapRow}>
+            {subjects.map((sub) => (
+              <Pressable
+                key={sub.id}
+                style={[st.chip, formSubjectId === sub.id && st.chipOn]}
+                onPress={() => setFormSubjectId(sub.id)}
+              >
+                <Text
+                  style={[
+                    st.chipText,
+                    formSubjectId === sub.id && st.chipTextOn,
+                  ]}
+                >
+                  {sub.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
-        <Text style={styles.fieldLabel}>File Type</Text>
-        <View style={styles.optionRow}>
-          {FILE_TYPES.map(t => (
-            <Pressable
-              key={t}
-              style={[styles.optionPill, fileType === t && styles.optionPillActive]}
-              onPress={() => setFileType(t)}
-            >
-              <Text style={[styles.optionText, fileType === t && styles.optionTextActive]}>
-                {t}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+          <Text style={st.fieldLabel}>Title</Text>
+          <TextInput
+            style={st.textInput}
+            value={formTitle}
+            onChangeText={setFormTitle}
+            placeholder="Material title…"
+            placeholderTextColor={colors.textMuted}
+          />
 
-        <Text style={styles.fieldLabel}>Upload Date</Text>
-        <View style={styles.staticField}>
-          <Text style={styles.staticFieldText}>5 May 2026</Text>
-        </View>
+          <Text style={st.fieldLabel}>Description (optional)</Text>
+          <TextInput
+            style={[st.textInput, st.textArea]}
+            value={formDesc}
+            onChangeText={setFormDesc}
+            placeholder="Add a short description…"
+            placeholderTextColor={colors.textMuted}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
 
-        <View style={styles.sheetBtns}>
-          <Pressable style={styles.cancelBtn} onPress={() => setShowSheet(false)}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
+          <Text style={st.fieldLabel}>File</Text>
+          <Pressable style={st.filePicker} onPress={handleUploadTap}>
+            <Ionicons
+              name="cloud-upload-outline"
+              size={24}
+              color={colors.teacher}
+            />
+            <Text style={st.filePickerTitle}>Tap to pick a file</Text>
+            <Text style={st.filePickerSub}>PDF · Image · Video</Text>
           </Pressable>
-          <Pressable
-            style={[styles.uploadBtn, uploaded && styles.uploadBtnDone]}
-            onPress={handleUpload}
-          >
-            <Text style={styles.uploadBtnText}>{uploaded ? 'Uploaded!' : 'Upload'}</Text>
-          </Pressable>
-        </View>
+
+          <View style={st.sheetBtns}>
+            <Pressable
+              style={st.cancelBtn}
+              onPress={() => setShowSheet(false)}
+            >
+              <Text style={st.cancelTxt}>Cancel</Text>
+            </Pressable>
+            <Pressable style={st.uploadBtn} onPress={handleUploadTap}>
+              <Text style={st.uploadTxt}>Upload</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </BottomSheet>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-  // Filter bar
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xxl,
+  },
+  emptyTitle: { ...(typography.h2 as object), color: colors.textPrimary },
+  emptyBody: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+
   filterBar: {
     backgroundColor: colors.surface,
-    borderBottomWidth: 0.5, borderBottomColor: colors.border,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
   },
   filterList: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   filterPill: {
-    paddingVertical: 5, paddingHorizontal: 14,
-    borderRadius: 999, backgroundColor: colors.background,
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: colors.background,
   },
-  filterPillActive: { backgroundColor: colors.teacher },
-  filterLabel:       { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
-  filterLabelActive: { color: colors.surface },
-  // List
+  filterPillOn: { backgroundColor: colors.teacher },
+  filterLabel: {
+    ...(typography.caption as object),
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  filterLabelOn: { color: colors.surface },
   listContent: { padding: spacing.lg },
-  // Material card
+
   materialCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     backgroundColor: colors.surface,
-    borderWidth: 0.5, borderColor: colors.border,
-    borderRadius: 14, padding: spacing.md, paddingHorizontal: spacing.lg,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   fileTypeBox: {
-    width: 42, height: 42, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  fileTypeLabel: { ...(typography.label as object), fontWeight: '700' },
   materialInfo: { flex: 1, minWidth: 0 },
-  materialTitle: { ...(typography.body as object), fontWeight: '500', color: colors.textPrimary },
-  materialMeta:  { ...(typography.caption as object), color: colors.textMuted, marginTop: spacing.xs },
-  // Sheet
-  sheetTitle: { ...(typography.h3 as object), fontWeight: '500', color: colors.textPrimary, marginBottom: spacing.md },
+  materialTitle: {
+    ...(typography.body as object),
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  materialMeta: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+
+  sheetTitle: {
+    ...(typography.h3 as object),
+    fontWeight: '500',
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
   fieldLabel: {
-    ...(typography.caption as object), fontWeight: '500',
-    color: colors.textSecondary, marginBottom: spacing.xs,
+    ...(typography.caption as object),
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
-  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
-  optionPill: {
-    paddingVertical: spacing.xs, paddingHorizontal: spacing.md,
-    borderRadius: 999, backgroundColor: colors.background,
-    borderWidth: 0.5, borderColor: colors.border,
+  hScroll: { marginBottom: spacing.md },
+  hScrollContent: { gap: spacing.xs, paddingRight: spacing.md },
+  wrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
   },
-  optionPillActive: { backgroundColor: colors.teacher, borderColor: colors.teacher },
-  optionText:       { ...(typography.caption as object), fontWeight: '500', color: colors.textSecondary },
-  optionTextActive: { color: colors.surface },
+  chip: {
+    paddingVertical: spacing.xs + 1,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  chipOn: { backgroundColor: colors.teacher, borderColor: colors.teacher },
+  chipText: {
+    ...(typography.caption as object),
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  chipTextOn: { color: colors.surface },
   textInput: {
-    backgroundColor: '#F5F5F5', borderRadius: 10,
-    padding: spacing.md, ...(typography.body as object),
-    color: colors.textPrimary, marginBottom: spacing.md,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    padding: spacing.md,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
   },
-  staticField: {
-    backgroundColor: '#F5F5F5', borderRadius: 10,
-    padding: spacing.md, marginBottom: spacing.lg,
+  textArea: { height: 80, textAlignVertical: 'top' },
+  filePicker: {
+    borderWidth: 1.5,
+    borderColor: colors.teacher,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
+    backgroundColor: '#EFF6FF',
   },
-  staticFieldText: { ...(typography.body as object), color: colors.textMuted },
-  sheetBtns: { flexDirection: 'row', gap: spacing.sm },
+  filePickerTitle: {
+    ...(typography.body as object),
+    fontWeight: '500',
+    color: colors.teacher,
+  },
+  filePickerSub: { ...(typography.caption as object), color: colors.textMuted },
+  sheetBtns: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   cancelBtn: {
-    flex: 1, height: 48, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
-  uploadBtn:     { flex: 1, height: 48, borderRadius: 10, backgroundColor: colors.teacher, alignItems: 'center', justifyContent: 'center' },
-  uploadBtnDone: { backgroundColor: colors.success },
-  uploadBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },
+  cancelTxt: {
+    ...(typography.h3 as object),
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  uploadBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: colors.teacher,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadTxt: {
+    ...(typography.h3 as object),
+    fontWeight: '500',
+    color: colors.surface,
+  },
 });
