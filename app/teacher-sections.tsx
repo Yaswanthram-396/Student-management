@@ -11,10 +11,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuthStore } from '../../store/auth-store';
-import { setSelectedSection } from '../../store/teacher-store';
-import { teacherSectionsApi, type TeacherSection } from '../../services/teacher-sections';
-import type { TeacherMeResponse } from '../../types/auth';
+import { useAuthStore } from '../store/auth-store';
+import { setSelectedSection } from '../store/teacher-store';
+import { teacherSectionsApi, type TeacherSection } from '../services/teacher-sections';
+import type { TeacherMeResponse } from '../types/auth';
 
 const ACCENT = '#185FA5';
 
@@ -194,7 +194,6 @@ export default function SectionsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F4F8' },
 
-  // Header
   header: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
@@ -251,16 +250,13 @@ const styles = StyleSheet.create({
   },
   subjectText: { fontSize: 12, color: ACCENT, fontWeight: '500' },
 
-  // Scroll
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 36 },
 
-  // List header
   listHeader: { marginBottom: 16 },
   listTitle: { fontSize: 15, fontWeight: '600', color: '#111111', marginBottom: 2 },
   listHint: { fontSize: 12, color: '#AAAAAA' },
 
-  // States
   centered: {
     alignItems: 'center',
     paddingVertical: 56,
@@ -300,7 +296,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Card
   card: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
