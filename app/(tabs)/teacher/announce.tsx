@@ -125,11 +125,20 @@ export default function AnnounceScreen() {
             </Text>
           )}
         </View>
-        {!loading && (
-          <Text style={styles.headerCount}>
-            {announcements.length} total
-          </Text>
-        )}
+        <View style={styles.headerRight}>
+          {!loading && (
+            <Text style={styles.headerCount}>{announcements.length} total</Text>
+          )}
+          {isClassTeacher && (
+            <Pressable
+              style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
+              onPress={openModal}
+              hitSlop={6}
+            >
+              <Ionicons name="add" size={20} color={ACCENT} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Not a class teacher banner */}
@@ -182,7 +191,7 @@ export default function AnnounceScreen() {
             <Text style={styles.emptyTitle}>No announcements yet</Text>
             {isClassTeacher && (
               <Text style={styles.emptyHint}>
-                Tap the button below to post your first announcement.
+                Tap the + icon above to post your first announcement.
               </Text>
             )}
           </View>
@@ -213,7 +222,9 @@ export default function AnnounceScreen() {
                 <View style={styles.cardFooter}>
                   <Ionicons name="person-outline" size={11} color="#AAAAAA" />
                   <Text style={styles.cardMeta}>
-                    {item.author_role.charAt(0) + item.author_role.slice(1).toLowerCase()}
+                    {item.author_role
+                      ? item.author_role.charAt(0) + item.author_role.slice(1).toLowerCase()
+                      : 'Teacher'}
                     {item.published_at ? ` · ${formatDate(item.published_at)}` : ' · Draft'}
                   </Text>
                 </View>
@@ -231,17 +242,6 @@ export default function AnnounceScreen() {
           );
         })}
       </ScrollView>
-
-      {/* FAB — only for class teacher */}
-      {isClassTeacher && (
-        <Pressable
-          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-          onPress={openModal}
-        >
-          <Ionicons name="add" size={22} color="#FFFFFF" />
-          <Text style={styles.fabText}>New Announcement</Text>
-        </Pressable>
-      )}
 
       {/* Create modal */}
       <Modal
@@ -360,7 +360,17 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#111111' },
   headerSub: { fontSize: 12, color: '#AAAAAA', marginTop: 2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerCount: { fontSize: 12, color: '#AAAAAA' },
+  addBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EBF2FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnPressed: { opacity: 0.7 },
 
   lockedBanner: {
     flexDirection: 'row',
@@ -375,7 +385,7 @@ const styles = StyleSheet.create({
   lockedText: { flex: 1, fontSize: 13, color: '#92400E', lineHeight: 18 },
 
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 100 },
+  scrollContent: { padding: 16, paddingBottom: 24 },
 
   centered: { alignItems: 'center', paddingVertical: 60, gap: 10 },
   loadingText: { fontSize: 14, color: '#888888' },
@@ -438,28 +448,6 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: 11, color: '#AAAAAA' },
   attachRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   attachText: { fontSize: 11, color: '#888888' },
-
-  // FAB
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    left: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: ACCENT,
-    paddingVertical: 14,
-    borderRadius: 16,
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  fabPressed: { opacity: 0.85 },
-  fabText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
 
   // Modal
   modalWrap: { flex: 1, justifyContent: 'flex-end' },
