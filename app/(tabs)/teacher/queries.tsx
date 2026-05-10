@@ -10,7 +10,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -60,7 +59,6 @@ export default function QueriesScreen() {
 
   const [selectedQuery, setSelectedQuery] = useState<ParentQuery | null>(null);
   const [replyText, setReplyText] = useState('');
-  const [markAnswered, setMarkAnswered] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [replyError, setReplyError] = useState('');
 
@@ -90,7 +88,6 @@ export default function QueriesScreen() {
   function openQuery(query: ParentQuery) {
     setSelectedQuery(query);
     setReplyText('');
-    setMarkAnswered(false);
     setReplyError('');
   }
 
@@ -107,13 +104,15 @@ export default function QueriesScreen() {
     setReplyError('');
     setSubmitting(true);
     try {
-      const result = await teacherQueriesApi.reply(selectedQuery.id, msg, markAnswered);
-      // Update the query status in local list
-      setQueries((prev) =>
-        prev.map((q) =>
+      const result = await teacherQueriesApi.reply(selectedQuery.id, msg, true);
+      setQueries((prev) => {
+        const updated = prev.map((q) =>
           q.id === selectedQuery.id ? { ...q, status: result.query_status } : q,
-        ),
-      );
+        );
+        // Remove from list if it no longer matches the active filter
+        if (activeTab === 'OPEN') return updated.filter((q) => q.status === 'OPEN');
+        return updated;
+      });
       setSelectedQuery(null);
     } catch (err: any) {
       setReplyError(err.details ?? 'Failed to send reply. Please try again.');
@@ -215,7 +214,7 @@ export default function QueriesScreen() {
 
         {!loading && !fetchError && queries.map((query) => {
           const cfg = STATUS_CONFIG[query.status];
-          const isClosed = query.status === 'CLOSED';
+          const isOpen = query.status === 'OPEN';
           return (
             <Pressable
               key={query.id}
@@ -245,7 +244,7 @@ export default function QueriesScreen() {
                   <Ionicons name="school-outline" size={11} color="#888888" />
                   <Text style={styles.personText}>{query.student?.name ?? '—'}</Text>
                 </View>
-                {!isClosed && (
+                {isOpen && (
                   <View style={styles.replyHint}>
                     <Ionicons name="arrow-undo-outline" size={13} color={ACCENT} />
                     <Text style={styles.replyHintText}>Reply</Text>
@@ -272,7 +271,7 @@ export default function QueriesScreen() {
 
           {selectedQuery && (() => {
             const cfg = STATUS_CONFIG[selectedQuery.status];
-            const isClosed = selectedQuery.status === 'CLOSED';
+            const isOpen = selectedQuery.status === 'OPEN';
             return (
               <View style={styles.sheet}>
                 <View style={styles.sheetHandle} />
@@ -315,18 +314,24 @@ export default function QueriesScreen() {
                     <Text style={styles.queryMsgDate}>{formatDate(selectedQuery.created_at)}</Text>
                   </View>
 
-                  {/* Closed state */}
-                  {isClosed && (
+                  {/* Non-open info banner */}
+                  {!isOpen && (
                     <View style={styles.closedBanner}>
-                      <Ionicons name="lock-closed-outline" size={15} color="#888888" />
+                      <Ionicons
+                        name={selectedQuery.status === 'CLOSED' ? 'lock-closed-outline' : 'checkmark-circle-outline'}
+                        size={15}
+                        color="#888888"
+                      />
                       <Text style={styles.closedText}>
-                        This query is closed and cannot receive new replies.
+                        {selectedQuery.status === 'CLOSED'
+                          ? 'This query is closed and cannot receive new replies.'
+                          : 'This query has already been answered.'}
                       </Text>
                     </View>
                   )}
 
-                  {/* Reply form */}
-                  {!isClosed && (
+                  {/* Reply form — OPEN only */}
+                  {isOpen && (
                     <>
                       <Text style={styles.fieldLabel}>Your Reply</Text>
                       <TextInput
@@ -338,23 +343,6 @@ export default function QueriesScreen() {
                         multiline
                         textAlignVertical="top"
                       />
-
-                      {selectedQuery.status === 'OPEN' && (
-                        <View style={styles.toggleRow}>
-                          <View>
-                            <Text style={styles.toggleLabel}>Mark as Answered</Text>
-                            <Text style={styles.toggleHint}>
-                              Changes query status from Open → Answered
-                            </Text>
-                          </View>
-                          <Switch
-                            value={markAnswered}
-                            onValueChange={setMarkAnswered}
-                            trackColor={{ false: '#DDDDDD', true: '#93C5FD' }}
-                            thumbColor={markAnswered ? ACCENT : '#FFFFFF'}
-                          />
-                        </View>
-                      )}
 
                       {!!replyError && (
                         <View style={styles.errorRow}>
@@ -598,19 +586,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   inputMulti: { minHeight: 110, paddingTop: 12 },
-
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  toggleLabel: { fontSize: 14, fontWeight: '600', color: '#111111', marginBottom: 2 },
-  toggleHint: { fontSize: 12, color: '#AAAAAA' },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
 
