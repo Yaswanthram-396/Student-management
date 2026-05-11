@@ -1,82 +1,101 @@
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useTeacherStore } from '../../../store/teacher-store';
+import { Ionicons } from "@expo/vector-icons";
+import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { Tabs } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SectionPickerBar } from "../../../components/teacher-dashboard/SectionPickerBar";
+import { useTeacherStore } from "../../../store/teacher-store";
 
-const ACCENT = '#185FA5';
+const ACCENT = "#185FA5";
 
-export default function TeacherLayout() {
+const TAB_ICONS: Record<string, { name: string; label: string }> = {
+  index:      { name: "home-outline",           label: "Home"      },
+  attendance: { name: "checkmark-circle-outline",label: "Attendance"},
+  homework:   { name: "book-outline",            label: "Homework"  },
+  content:    { name: "document-outline",        label: "Materials" },
+  announce:   { name: "megaphone-outline",        label: "Announce"  },
+  queries:    { name: "chatbubbles-outline",      label: "Queries"   },
+};
+
+function TeacherTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { selectedSection } = useTeacherStore();
-  const showAttendance = !selectedSection || selectedSection.is_class_teacher;
+  const isClassTeacher = selectedSection?.is_class_teacher ?? false;
+  const insets = useSafeAreaInsets();
+
+  // Filter out attendance for non-class-teachers — no slot reserved
+  const visibleRoutes = state.routes.filter(route => {
+    if (route.name === "attendance") return isClassTeacher;
+    return true;
+  });
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: ACCENT,
-        tabBarInactiveTintColor: '#AAAAAA',
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '500' },
-        tabBarStyle: {
-          height: 56,
-          borderTopWidth: 0.5,
-          borderTopColor: '#EEEEEE',
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="attendance"
-        options={{
-          href: showAttendance ? '/(tabs)/teacher/attendance' : null,
-          title: 'Attendance',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkmark-circle-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="homework"
-        options={{
-          title: 'Homework',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="content"
-        options={{
-          title: 'Materials',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="announce"
-        options={{
-          title: 'Announce',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="megaphone-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="queries"
-        options={{
-          title: 'Queries',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubbles-outline" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+    <View style={[styles.tabBar, { paddingBottom: insets.bottom || 8 }]}>
+      {visibleRoutes.map(route => {
+        const isFocused = state.routes[state.index]?.key === route.key;
+        const cfg = TAB_ICONS[route.name] ?? { name: "ellipse-outline", label: route.name };
+        const color = isFocused ? ACCENT : "#AAAAAA";
+
+        function onPress() {
+          const event = navigation.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        }
+
+        return (
+          <Pressable
+            key={route.key}
+            style={({ pressed }) => [styles.tabItem, pressed && styles.tabItemPressed]}
+            onPress={onPress}
+            android_ripple={{ color: "#EBF2FB", borderless: true, radius: 28 }}
+          >
+            <Ionicons name={cfg.name as any} size={22} color={color} />
+            <Text style={[styles.tabLabel, { color }]}>{cfg.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
+
+export default function TeacherLayout() {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#F4F4F8" }}>
+      <SectionPickerBar />
+      <Tabs
+        tabBar={props => <TeacherTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tabs.Screen name="index" />
+        <Tabs.Screen name="attendance" />
+        <Tabs.Screen name="homework" />
+        <Tabs.Screen name="content" />
+        <Tabs.Screen name="announce" />
+        <Tabs.Screen name="queries" />
+      </Tabs>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 0.5,
+    borderTopColor: "#EEEEEE",
+    paddingTop: 6,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    gap: 2,
+  },
+  tabItemPressed: { opacity: 0.7 },
+  tabLabel: { fontSize: 10, fontWeight: "500" },
+});
