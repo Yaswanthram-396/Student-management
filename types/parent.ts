@@ -31,6 +31,7 @@ export interface ParentStudent {
   roll_number: string;
   academic_class: AcademicClass;
   section: ParentSection;
+  is_parent_query_disabled: boolean;
 }
 
 export interface ParentStudentDetail extends ParentStudent {
@@ -40,7 +41,7 @@ export interface ParentStudentDetail extends ParentStudent {
 export interface ParentProfile {
   id: string;
   name: string;
-  mobile_number: string;
+  phone_number: string;
   school: ParentSchool;
   students: ParentStudent[];
 }

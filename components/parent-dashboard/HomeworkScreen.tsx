@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +14,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
-import { PARENT_PROFILE } from "../../constants/parentData";
 import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { parentApi } from "../../services/parent";
@@ -31,7 +31,6 @@ import {
 import type { HomeworkItem } from "../../types/parent";
 import {
   BottomSheet,
-  HeaderBar,
   LoadingScreen,
   SegmentedControl,
   StatusPill,
@@ -42,6 +41,8 @@ import {
 type FilterKey = "All" | "Today" | "This Week" | "Overdue";
 const FILTERS: FilterKey[] = ["All", "Today", "This Week", "Overdue"];
 
+type TaggedHW = HomeworkItem & { studentId: string; studentName: string };
+
 type HWItem = {
   id: string;
   subject: string;
@@ -50,6 +51,7 @@ type HWItem = {
   desc: string;
   due: string;
   status: "Pending" | "Overdue";
+  studentName: string;
 };
 
 const SUBJECT_COLORS: Record<string, { bg: string; text: string }> = {
@@ -65,7 +67,7 @@ function subjectStyle(name: string) {
   return SUBJECT_COLORS[name] ?? DEFAULT_SUBJECT_COLOR;
 }
 
-function mapHomework(hw: HomeworkItem): HWItem {
+function mapHomework(hw: TaggedHW): HWItem {
   const deadline = new Date(hw.deadline);
   const isPast = deadline < new Date();
   const style = subjectStyle(hw.subject.name);
@@ -81,10 +83,11 @@ function mapHomework(hw: HomeworkItem): HWItem {
       year: "numeric",
     }),
     status: isPast ? "Overdue" : "Pending",
+    studentName: hw.studentName,
   };
 }
 
-function applyFilter(items: HomeworkItem[], filter: FilterKey): HomeworkItem[] {
+function applyFilter(items: TaggedHW[], filter: FilterKey): TaggedHW[] {
   if (filter === "All") return items;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -117,7 +120,7 @@ function SubjectPill({
   );
 }
 
-function HWCard({ item }: { item: HWItem }) {
+function HWCard({ item, showStudent }: { item: HWItem; showStudent: boolean }) {
   return (
     <View style={styles.hwCard}>
       <View style={styles.hwCardTop}>
@@ -132,13 +135,98 @@ function HWCard({ item }: { item: HWItem }) {
         />
       </View>
       <Text style={styles.hwDesc}>{item.desc}</Text>
-      <View style={styles.hwDueRow}>
-        <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
-        <Text style={styles.hwDue}>Due: {item.due}</Text>
+      <View style={styles.hwCardFooter}>
+        <View style={styles.hwDueRow}>
+          <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+          <Text style={styles.hwDue}>Due: {item.due}</Text>
+        </View>
+        {showStudent && (
+          <View style={styles.hwStudentRow}>
+            <Ionicons name="person-outline" size={11} color={colors.textMuted} />
+            <Text style={styles.hwDue}>{item.studentName}</Text>
+          </View>
+        )}
       </View>
     </View>
   );
 }
+
+// ─── Student dropdown ─────────────────────────────────────────────────────────
+
+function StudentDropdown({
+  students,
+  selectedId,
+  onChange,
+  showAllOption = true,
+}: {
+  students: { id: string; name: string }[];
+  selectedId: string;
+  onChange: (id: string) => void;
+  showAllOption?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const options = showAllOption
+    ? [{ id: "ALL", name: "All Students" }, ...students]
+    : students;
+  const selected = options.find((s) => s.id === selectedId);
+  // Show first name only in header to keep it compact
+  const displayName = selected
+    ? selected.name.split(" ")[0]
+    : "All";
+
+  return (
+    <>
+      <Pressable style={styles.dropdownBtn} onPress={() => setOpen(true)}>
+        <Ionicons name="person-outline" size={13} color={colors.parent} />
+        <Text style={styles.dropdownBtnText} numberOfLines={1}>
+          {displayName}
+        </Text>
+        <Ionicons name="chevron-down" size={13} color={colors.parent} />
+      </Pressable>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setOpen(false)}>
+          <View style={styles.dropdownMenu}>
+            {options.map((s) => (
+              <Pressable
+                key={s.id}
+                style={[
+                  styles.dropdownItem,
+                  selectedId === s.id && styles.dropdownItemActive,
+                ]}
+                onPress={() => {
+                  onChange(s.id);
+                  setOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    selectedId === s.id && styles.dropdownItemTextActive,
+                  ]}
+                >
+                  {s.name}
+                </Text>
+                {selectedId === s.id && (
+                  <Ionicons name="checkmark" size={14} color={colors.parent} />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+// ─── Query types ─────────────────────────────────────────────────────────────
+
+type TaggedQuery = Query & { studentId: string; studentName: string };
 
 // ─── Queries helpers ─────────────────────────────────────────────────────────
 
@@ -192,10 +280,17 @@ function SkeletonCard({ opacity }: { opacity: number }) {
 
 // ─── Query card ──────────────────────────────────────────────────────────────
 
-function QueryCard({ item, onPress }: { item: Query; onPress: () => void }) {
+function QueryCard({
+  item,
+  onPress,
+  showStudent,
+}: {
+  item: TaggedQuery;
+  onPress: () => void;
+  showStudent: boolean;
+}) {
   return (
     <Pressable style={styles.queryCard} onPress={onPress}>
-      {/* Top row */}
       <View style={styles.queryCardTop}>
         <Text style={styles.querySubject} numberOfLines={1}>
           {item.subject}
@@ -206,19 +301,22 @@ function QueryCard({ item, onPress }: { item: Query; onPress: () => void }) {
         />
       </View>
 
-      {/* Teacher row */}
       <View style={styles.queryTeacherRow}>
         <View style={styles.teacherAvatar}>
           <Text style={styles.teacherAvatarText}>
             {getInitials(item.assigned_teacher.name)}
           </Text>
         </View>
-        <Text style={styles.queryTeacherText}>
-          Sent to: {item.assigned_teacher.name}
-        </Text>
+        <View style={{ flex: 1, marginLeft: spacing.sm }}>
+          <Text style={styles.queryTeacherText}>
+            Sent to: {item.assigned_teacher.name}
+          </Text>
+          {showStudent && (
+            <Text style={styles.queryStudentText}>{item.studentName}</Text>
+          )}
+        </View>
       </View>
 
-      {/* Bottom row */}
       <View style={styles.queryCardBottom}>
         <View style={styles.queryDateRow}>
           <Ionicons name="time-outline" size={12} color={colors.textMuted} />
@@ -469,10 +567,15 @@ function QueryDetailSheet({
 
 // ─── Queries segment ─────────────────────────────────────────────────────────
 
-function QueriesSegment() {
-  const studentId = PARENT_PROFILE.students[0]?.id ?? "";
+function QueriesSegment({
+  students,
+  selectedStudentId,
+}: {
+  students: { id: string; name: string }[];
+  selectedStudentId: string;
+}) {
   const [activeStatus, setActiveStatus] = useState<StatusFilter>("ALL");
-  const [queries, setQueries] = useState<Query[]>([]);
+  const [queries, setQueries] = useState<TaggedQuery[]>([]);
   const [queriesLoading, setQueriesLoading] = useState(false);
   const [queriesError, setQueriesError] = useState<string | null>(null);
 
@@ -503,17 +606,40 @@ function QueriesSegment() {
   }
 
   const loadQueries = useCallback(
-    async (status: StatusFilter) => {
-      if (!studentId) return;
+    async (status: StatusFilter, studentId: string) => {
+      if (students.length === 0) return;
       setQueriesLoading(true);
       setQueriesError(null);
       startSkeleton();
       try {
-        const res: QueryListResponse = await getQueries(
-          studentId,
-          status === "ALL" ? undefined : status,
-        );
-        setQueries(res.results);
+        const statusParam = status === "ALL" ? undefined : status;
+        if (studentId === "ALL") {
+          const results = await Promise.all(
+            students.map((s) =>
+              getQueries(s.id, statusParam)
+                .then((res: QueryListResponse) =>
+                  res.results.map((q) => ({
+                    ...q,
+                    studentId: s.id,
+                    studentName: s.name,
+                  })),
+                )
+                .catch(() => [] as TaggedQuery[]),
+            ),
+          );
+          setQueries(results.flat());
+        } else {
+          const student = students.find((s) => s.id === studentId);
+          if (!student) return;
+          const res: QueryListResponse = await getQueries(studentId, statusParam);
+          setQueries(
+            res.results.map((q) => ({
+              ...q,
+              studentId: student.id,
+              studentName: student.name,
+            })),
+          );
+        }
       } catch {
         setQueriesError("Could not load queries");
       } finally {
@@ -521,21 +647,18 @@ function QueriesSegment() {
         stopSkeleton();
       }
     },
-    [studentId],
+    [students],
   );
 
   useEffect(() => {
-    loadQueries(activeStatus);
+    loadQueries(activeStatus, selectedStudentId);
     return () => stopSkeleton();
-  }, [activeStatus, loadQueries]);
+  }, [activeStatus, selectedStudentId, loadQueries]);
 
-  function handleFilterChange(key: StatusFilter) {
-    setActiveStatus(key);
-  }
+  const showStudentName = selectedStudentId === "ALL" && students.length > 1;
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Status filter pills */}
       <View style={styles.statusFilterBar}>
         <ScrollView
           horizontal
@@ -549,7 +672,7 @@ function QueriesSegment() {
                 styles.statusPill,
                 activeStatus === f.key && styles.statusPillActive,
               ]}
-              onPress={() => handleFilterChange(f.key)}
+              onPress={() => setActiveStatus(f.key)}
             >
               <Text
                 style={[
@@ -564,7 +687,6 @@ function QueriesSegment() {
         </ScrollView>
       </View>
 
-      {/* Loading skeleton */}
       {queriesLoading && (
         <View style={styles.queriesListContent}>
           <SkeletonCard opacity={skeletonOpacity} />
@@ -573,27 +695,26 @@ function QueriesSegment() {
         </View>
       )}
 
-      {/* Error state */}
       {!queriesLoading && queriesError && (
         <View style={styles.queriesCenter}>
           <Text style={styles.queriesErrorText}>{queriesError}</Text>
           <Pressable
             style={styles.retryBtn}
-            onPress={() => loadQueries(activeStatus)}
+            onPress={() => loadQueries(activeStatus, selectedStudentId)}
           >
             <Text style={styles.retryBtnText}>Retry</Text>
           </Pressable>
         </View>
       )}
 
-      {/* Query list */}
       {!queriesLoading && !queriesError && (
         <FlatList
           data={queries}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => `${item.id}-${item.studentId}`}
           renderItem={({ item }) => (
             <QueryCard
               item={item}
+              showStudent={showStudentName}
               onPress={() => {
                 setSelectedQueryId(item.id);
                 setShowDetail(true);
@@ -633,22 +754,38 @@ function QueriesSegment() {
 
 export function HomeworkScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("All");
-  const [homework, setHomework] = useState<HomeworkItem[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("ALL");
+  const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
+  const [homework, setHomework] = useState<TaggedHW[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [activeSegment, setActiveSegment] = useState<0 | 1>(0);
 
   const loadHomework = useCallback(() => {
+    setLoadingProfile(true);
     parentApi
       .getProfile()
-      .then((profile) => {
-        const firstStudent = profile.students[0];
-        if (!firstStudent) {
-          setHomework([]);
-          return;
-        }
-        return parentApi
-          .getHomework(firstStudent.id)
-          .then((data) => setHomework(data.results));
+      .then(async (profile) => {
+        if (profile.students.length === 0) return;
+        const studentList = profile.students.map((s) => ({
+          id: s.id,
+          name: s.name,
+        }));
+        setStudents(studentList);
+        const results = await Promise.all(
+          studentList.map((s) =>
+            parentApi
+              .getHomework(s.id)
+              .then((data) =>
+                data.results.map((hw) => ({
+                  ...hw,
+                  studentId: s.id,
+                  studentName: s.name,
+                })),
+              )
+              .catch(() => [] as TaggedHW[]),
+          ),
+        );
+        setHomework(results.flat());
       })
       .catch(() => {})
       .finally(() => setLoadingProfile(false));
@@ -656,12 +793,17 @@ export function HomeworkScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoadingProfile(true);
       loadHomework();
     }, [loadHomework]),
   );
 
-  const filtered = applyFilter(homework, activeFilter).map(mapHomework);
+  const studentFiltered =
+    selectedStudentId === "ALL"
+      ? homework.filter((hw, idx, arr) => arr.findIndex((h) => h.id === hw.id) === idx)
+      : homework.filter((hw) => hw.studentId === selectedStudentId);
+
+  const filtered = applyFilter(studentFiltered, activeFilter).map(mapHomework);
+  const showStudentName = false;
 
   if (loadingProfile) {
     return <LoadingScreen label="Loading homework profile..." />;
@@ -669,9 +811,18 @@ export function HomeworkScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <HeaderBar center={<Text style={styles.headerTitle}>Homework</Text>} />
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Homework</Text>
+        {students.length > 0 && (
+          <StudentDropdown
+            students={students}
+            selectedId={selectedStudentId}
+            onChange={setSelectedStudentId}
+            showAllOption={students.length > 1}
+          />
+        )}
+      </View>
 
-      {/* Segmented control */}
       <View style={styles.segmentedWrap}>
         <SegmentedControl
           options={["Homework", "Queries"]}
@@ -683,7 +834,6 @@ export function HomeworkScreen() {
 
       {activeSegment === 0 ? (
         <>
-          {/* Filter pills */}
           <View style={styles.filterBar}>
             <FlatList
               data={FILTERS}
@@ -717,8 +867,10 @@ export function HomeworkScreen() {
 
           <FlatList
             data={filtered}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <HWCard item={item} />}
+            keyExtractor={(item) => `${item.id}-${item.studentName}`}
+            renderItem={({ item }) => (
+              <HWCard item={item} showStudent={showStudentName} />
+            )}
             contentContainerStyle={styles.listContent}
             ItemSeparatorComponent={() => (
               <View style={{ height: spacing.sm }} />
@@ -732,7 +884,7 @@ export function HomeworkScreen() {
           />
         </>
       ) : (
-        <QueriesSegment />
+        <QueriesSegment students={students} selectedStudentId={selectedStudentId} />
       )}
     </SafeAreaView>
   );
@@ -742,9 +894,35 @@ export function HomeworkScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+
+  header: {
+    height: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+  },
   headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
 
-  // Segmented control
+  dropdownBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: spacing.md,
+  },
+  dropdownBtnText: {
+    ...(typography.caption as object),
+    fontWeight: "600",
+    color: colors.parent,
+    maxWidth: 90,
+  },
+
   segmentedWrap: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -752,17 +930,43 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: colors.border,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dropdownMenu: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingVertical: spacing.xs,
+    minWidth: 220,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  dropdownItemActive: { backgroundColor: "#F0F4FF" },
+  dropdownItemText: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+  },
+  dropdownItemTextActive: { color: colors.parent, fontWeight: "600" },
 
-  // Homework filter
   filterBar: {
     backgroundColor: colors.surface,
     borderBottomWidth: 0.5,
     borderBottomColor: colors.border,
   },
-  filterList: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
+  filterList: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   filterPill: {
     paddingVertical: 5,
     paddingHorizontal: 14,
@@ -802,16 +1006,17 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: spacing.sm,
   },
-  hwDueRow: {
+  hwCardFooter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
+    justifyContent: "space-between",
   },
+  hwDueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  hwStudentRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   hwDue: { ...(typography.caption as object), color: colors.textMuted },
   emptyWrap: { paddingTop: spacing.xxl, alignItems: "center" },
   emptyText: { ...(typography.body as object), color: colors.textMuted },
 
-  // Queries status filter
   statusFilterBar: {
     backgroundColor: colors.surface,
     borderBottomWidth: 0.5,
@@ -836,7 +1041,6 @@ const styles = StyleSheet.create({
   },
   statusPillTextActive: { color: colors.surface },
 
-  // Query list
   queriesListContent: { padding: spacing.lg },
   queriesCenter: {
     flex: 1,
@@ -859,7 +1063,6 @@ const styles = StyleSheet.create({
   },
   retryBtnText: { fontSize: 13, color: colors.parent, fontWeight: "500" },
 
-  // Empty state
   emptyCircle: {
     width: 40,
     height: 40,
@@ -880,7 +1083,6 @@ const styles = StyleSheet.create({
     maxWidth: 240,
   },
 
-  // Skeleton
   skeletonRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -900,7 +1102,6 @@ const styles = StyleSheet.create({
   },
   skeletonLine: { height: 10, backgroundColor: "#E5E7EB", borderRadius: 6 },
 
-  // Query card
   queryCard: {
     backgroundColor: colors.surface,
     borderWidth: 0.5,
@@ -931,7 +1132,12 @@ const styles = StyleSheet.create({
   queryTeacherText: {
     fontSize: 12,
     color: colors.textMuted,
-    marginLeft: spacing.sm,
+  },
+  queryStudentText: {
+    fontSize: 11,
+    color: colors.parent,
+    fontWeight: "500",
+    marginTop: 2,
   },
   queryCardBottom: {
     flexDirection: "row",
@@ -947,7 +1153,6 @@ const styles = StyleSheet.create({
   viewRepliesRow: { flexDirection: "row", alignItems: "center", gap: 2 },
   viewRepliesText: { fontSize: 12, color: colors.parent },
 
-  // Teacher avatar
   teacherAvatar: {
     width: 28,
     height: 28,
@@ -958,7 +1163,6 @@ const styles = StyleSheet.create({
   },
   teacherAvatarText: { fontSize: 10, fontWeight: "700", color: colors.surface },
 
-  // Detail sheet
   detailSheetInner: { flex: 1 },
   detailClose: {
     position: "absolute",
@@ -1021,7 +1225,6 @@ const styles = StyleSheet.create({
     marginVertical: spacing.lg,
   },
 
-  // Reply bubbles
   replyBubbleWrap: {
     flexDirection: "row",
     marginBottom: spacing.md,
@@ -1044,7 +1247,6 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 14, lineHeight: 20 },
   replyTime: { fontSize: 11, color: colors.textMuted, marginTop: spacing.xs },
 
-  // Reply input
   replyInputRow: { paddingTop: spacing.sm },
   replyErrorText: {
     fontSize: 12,

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -10,10 +11,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../../constants/colors";
-import { PARENT_PROFILE, type Student } from "../../../constants/parentData";
 import { spacing } from "../../../constants/spacing";
 import { typography } from "../../../constants/typography";
 import { authApi } from "../../../../services/auth";
+import { parentApi } from "../../../../services/parent";
+import type { ParentProfile, ParentStudent } from "../../../../types/parent";
 import { BottomSheet, HeaderBar } from "../../shared";
 
 function getInitials(name: string) {
@@ -24,7 +26,7 @@ function getInitials(name: string) {
     .join("");
 }
 
-function StudentCard({ item }: { item: Student }) {
+function StudentCard({ item }: { item: ParentStudent }) {
   return (
     <View style={styles.studentCard}>
       <View style={styles.studentTop}>
@@ -58,9 +60,7 @@ function StudentCard({ item }: { item: Student }) {
               : styles.queryPillTextEnabled,
           ]}
         >
-          {item.is_parent_query_disabled
-            ? "Queries Disabled"
-            : "Queries Enabled"}
+          {item.is_parent_query_disabled ? "Queries Disabled" : "Queries Enabled"}
         </Text>
       </View>
     </View>
@@ -68,12 +68,20 @@ function StudentCard({ item }: { item: Student }) {
 }
 
 export function ProfileScreen() {
+  const [profile, setProfile] = useState<ParentProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showPinSheet, setShowPinSheet] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [logoutMessage, setLogoutMessage] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const parentInitials = useMemo(() => getInitials(PARENT_PROFILE.name), []);
+  useEffect(() => {
+    parentApi
+      .getProfile()
+      .then(setProfile)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -88,55 +96,70 @@ export function ProfileScreen() {
     }
   }
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <HeaderBar center={<Text style={styles.headerTitle}>Profile</Text>} />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={colors.parent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <HeaderBar center={<Text style={styles.headerTitle}>Profile</Text>} />
 
       <FlatList
-        data={PARENT_PROFILE.students}
+        data={profile?.students ?? []}
         keyExtractor={(student) => student.id}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         renderItem={({ item }) => <StudentCard item={item} />}
         ListHeaderComponent={
-          <View>
-            <View style={styles.parentCard}>
-              <View style={styles.parentTopRow}>
-                <View style={styles.parentAvatar}>
-                  <Text style={styles.parentAvatarText}>{parentInitials}</Text>
-                </View>
-                <View style={styles.parentInfo}>
-                  <Text style={styles.parentName}>{PARENT_PROFILE.name}</Text>
-                  <View style={styles.phoneRow}>
-                    <Ionicons
-                      name="call-outline"
-                      size={13}
-                      color={colors.textSecondary}
-                    />
-                    <Text style={styles.parentPhone}>
-                      {PARENT_PROFILE.phone_number}
+          profile ? (
+            <View>
+              <View style={styles.parentCard}>
+                <View style={styles.parentTopRow}>
+                  <View style={styles.parentAvatar}>
+                    <Text style={styles.parentAvatarText}>
+                      {getInitials(profile.name)}
                     </Text>
                   </View>
+                  <View style={styles.parentInfo}>
+                    <Text style={styles.parentName}>{profile.name}</Text>
+                    {!!profile.phone_number && (
+                      <View style={styles.phoneRow}>
+                        <Ionicons
+                          name="call-outline"
+                          size={13}
+                          color={colors.textSecondary}
+                        />
+                        <Text style={styles.parentPhone}>
+                          {profile.phone_number}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.parentDivider} />
+
+                <Text style={styles.schoolLabel}>SCHOOL</Text>
+                <View style={styles.schoolRow}>
+                  <Ionicons
+                    name="school-outline"
+                    size={16}
+                    color={colors.parent}
+                  />
+                  <Text style={styles.schoolName}>{profile.school.name}</Text>
                 </View>
               </View>
 
-              <View style={styles.parentDivider} />
-
-              <Text style={styles.schoolLabel}>SCHOOL</Text>
-              <View style={styles.schoolRow}>
-                <Ionicons
-                  name="school-outline"
-                  size={16}
-                  color={colors.parent}
-                />
-                <Text style={styles.schoolName}>
-                  {PARENT_PROFILE.school.name}
-                </Text>
-              </View>
+              <Text style={styles.sectionLabel}>LINKED STUDENTS</Text>
             </View>
-
-            <Text style={styles.sectionLabel}>LINKED STUDENTS</Text>
-          </View>
+          ) : null
         }
         ListFooterComponent={
           <View style={styles.accountSection}>
@@ -181,11 +204,7 @@ export function ProfileScreen() {
               style={styles.logoutBtn}
               onPress={() => setShowLogoutModal(true)}
             >
-              <Ionicons
-                name="log-out-outline"
-                size={18}
-                color={colors.danger}
-              />
+              <Ionicons name="log-out-outline" size={18} color={colors.danger} />
               <Text style={styles.logoutBtnText}>Logout</Text>
             </Pressable>
 
@@ -196,14 +215,9 @@ export function ProfileScreen() {
         }
       />
 
-      <BottomSheet
-        visible={showPinSheet}
-        onClose={() => setShowPinSheet(false)}
-      >
+      <BottomSheet visible={showPinSheet} onClose={() => setShowPinSheet(false)}>
         <Text style={styles.sheetTitle}>Change PIN</Text>
-        <Text style={styles.sheetBody}>
-          This feature will be available soon.
-        </Text>
+        <Text style={styles.sheetBody}>This feature will be available soon.</Text>
         <Pressable
           style={styles.sheetCloseBtn}
           onPress={() => setShowPinSheet(false)}
@@ -254,6 +268,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: colors.textPrimary,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   listContent: {
     paddingHorizontal: spacing.lg,
@@ -379,22 +398,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
   },
-  queryPillEnabled: {
-    backgroundColor: "#E1F5EE",
-  },
-  queryPillDisabled: {
-    backgroundColor: "#FEE2E2",
-  },
+  queryPillEnabled: { backgroundColor: "#E1F5EE" },
+  queryPillDisabled: { backgroundColor: "#FEE2E2" },
   queryPillText: {
     fontSize: 11,
     fontWeight: "500",
   },
-  queryPillTextEnabled: {
-    color: "#0F6E56",
-  },
-  queryPillTextDisabled: {
-    color: "#991B1B",
-  },
+  queryPillTextEnabled: { color: "#0F6E56" },
+  queryPillTextDisabled: { color: "#991B1B" },
   accountSection: {
     marginTop: spacing.lg,
   },
