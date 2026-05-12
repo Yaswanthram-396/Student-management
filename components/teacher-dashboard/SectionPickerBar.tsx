@@ -104,6 +104,15 @@ export function SectionPickerBar() {
             />
           </Pressable>
 
+          {/* Calendar button */}
+          <Pressable
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            onPress={() => router.push('/teacher-calendar')}
+            hitSlop={6}
+          >
+            <Ionicons name="calendar-outline" size={20} color="#444444" />
+          </Pressable>
+
           {/* Bell button */}
           <Pressable
             style={({ pressed }) => [styles.bellBtn, pressed && styles.bellBtnPressed]}
@@ -234,6 +243,14 @@ const styles = StyleSheet.create({
   },
   selectorPressed: { opacity: 0.7 },
   selectorText: { fontSize: 13, fontWeight: '600', color: ACCENT, flexShrink: 1 },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnPressed: { backgroundColor: '#F0F0F0' },
   bellBtn: {
     width: 34,
     height: 34,

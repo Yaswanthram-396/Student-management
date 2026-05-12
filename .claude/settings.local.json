@@ -40,7 +40,8 @@
       "Bash(git commit -m 'fix: show full name in greeting instead of first word only *)",
       "Bash(git commit -m 'feat: hamburger icon + right-to-left panel animation on sections screen *)",
       "Bash(git commit -m 'feat: profile picture lightbox in menu panel *)",
-      "WebFetch(domain:docs.expo.dev)"
+      "WebFetch(domain:docs.expo.dev)",
+      "Bash(git commit -m 'fix: redesign close query as outlined red button in chat header *)"
     ]
   }
 }
