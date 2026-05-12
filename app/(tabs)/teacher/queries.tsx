@@ -206,22 +206,22 @@ function ChatSheet({ query, visible, onClose, onStatusChange }: ChatSheetProps) 
           <View style={[chat.statusBadge, { backgroundColor: statusCfg.bg }]}>
             <Text style={[chat.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
           </View>
+
+          {(isOpen || isAnswered) && (
+            <Pressable
+              style={({ pressed }) => [chat.closeBtn, pressed && chat.closeBtnPressed]}
+              onPress={handleCloseQuery}
+              disabled={closing}
+            >
+              {closing
+                ? <ActivityIndicator size="small" color="#DC2626" />
+                : <Ionicons name="lock-closed-outline" size={14} color="#DC2626" />
+              }
+              <Text style={chat.closeBtnText}>Close</Text>
+            </Pressable>
+          )}
         </View>
 
-        {/* Close query button for open/answered */}
-        {(isOpen || isAnswered) && (
-          <Pressable
-            style={({ pressed }) => [chat.closeQueryBtn, pressed && { opacity: 0.75 }]}
-            onPress={handleCloseQuery}
-            disabled={closing}
-          >
-            {closing
-              ? <ActivityIndicator size="small" color="#888888" />
-              : <Ionicons name="lock-closed-outline" size={13} color="#888888" />
-            }
-            <Text style={chat.closeQueryText}>Close Query</Text>
-          </Pressable>
-        )}
 
         {/* Messages */}
         {loading && (
@@ -636,13 +636,18 @@ const chat = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 11, fontWeight: '700' },
 
-  closeQueryBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#F5F5F5', paddingHorizontal: 14, paddingVertical: 7,
-    borderBottomWidth: 1, borderBottomColor: '#EEEEEE',
-    justifyContent: 'center',
+  closeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  closeQueryText: { fontSize: 12, color: '#888888', fontWeight: '500' },
+  closeBtnPressed: { backgroundColor: '#FEE2E2' },
+  closeBtnText: { fontSize: 12, fontWeight: '600', color: '#DC2626' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   stateText: { fontSize: 14, color: '#888888' },
