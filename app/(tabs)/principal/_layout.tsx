@@ -72,6 +72,10 @@ export default function PrincipalLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="class-attendance"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }

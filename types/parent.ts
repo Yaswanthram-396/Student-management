@@ -75,6 +75,13 @@ export interface AttendanceResponse {
 }
 
 // Announcements
+export interface AnnouncementAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  file_url: string;
+}
+
 export interface ParentAnnouncement {
   id: string;
   title: string;
@@ -82,7 +89,7 @@ export interface ParentAnnouncement {
   author_role: 'PRINCIPAL' | 'TEACHER';
   audience: 'SCHOOL' | 'CLASS' | 'SECTION';
   published_at: string;
-  attachments: string[];
+  attachments: AnnouncementAttachment[];
 }
 
 export interface AnnouncementsResponse {

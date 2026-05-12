@@ -4,10 +4,16 @@ import type {
   TeacherResponse,
   BulkUploadBatch,
   AnnouncementResponse,
+  AnnouncementsListResponse,
   CalendarEventResponse,
+  CalendarEventsListResponse,
   ExamResponse,
   ResultsResponse,
   AnalyticsResponse,
+  SectionResponse,
+  SectionsListResponse,
+  DailySummaryResponse,
+  ClassAttendanceDetailResponse,
 } from '../types/principal';
 
 export const principalApi = {
@@ -24,11 +30,11 @@ export const principalApi = {
     mobile_number: string;
     username: string;
     password: string;
-    primary_subject_id: number;
-    assigned_section_ids: number[];
+    primary_subject_id: string;
+    assigned_section_ids: string[];
   }) => apiRequest<TeacherResponse>('POST', '/principal/teachers/', body),
 
-  getTeachers: (params?: { search?: string; subject_id?: number; section_id?: number }) => {
+  getTeachers: (params?: { search?: string; subject_id?: string; section_id?: string }) => {
     const qs = params
       ? '?' + new URLSearchParams(
           Object.entries(params)
@@ -39,18 +45,18 @@ export const principalApi = {
     return apiRequest<TeacherResponse[]>('GET', `/principal/teachers/${qs}`);
   },
 
-  updateTeacher: (id: number, body: {
+  updateTeacher: (id: string, body: {
     name?: string;
     mobile_number?: string;
-    primary_subject_id?: number;
-    assigned_section_ids?: number[];
+    primary_subject_id?: string;
+    assigned_section_ids?: string[];
   }) => apiRequest<TeacherResponse>('PATCH', `/principal/teachers/${id}/`, body),
 
   // ── Student bulk upload ───────────────────────────────────────────────────────
   bulkUploadStudents: (formData: FormData) =>
     apiRequest<BulkUploadBatch>('POST', '/principal/students/bulk-upload/', formData, true),
 
-  getBulkUploadStatus: (batchId: number) =>
+  getBulkUploadStatus: (batchId: string) =>
     apiRequest<BulkUploadBatch>('GET', `/principal/students/bulk-upload/${batchId}/`),
 
   // ── Announcements ─────────────────────────────────────────────────────────────
@@ -58,13 +64,21 @@ export const principalApi = {
     title: string;
     body: string;
     audience: 'SCHOOL' | 'CLASS' | 'SECTION';
-    class_ids?: number[];
-    section_ids?: number[];
+    class_ids?: string[];
+    section_ids?: string[];
     publish_now: boolean;
   }) => apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', body),
 
-  getAnnouncements: () =>
-    apiRequest<AnnouncementResponse[]>('GET', '/principal/announcements/'),
+  getAnnouncements: (params?: { audience?: 'SCHOOL' | 'CLASS' | 'SECTION'; published_after?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params)
+            .filter(([, v]) => v !== undefined)
+            .map(([k, v]) => [k, String(v)])
+        ).toString()
+      : '';
+    return apiRequest<AnnouncementsListResponse>('GET', `/announcements/${qs}`);
+  },
 
   // ── Calendar events ───────────────────────────────────────────────────────────
   createCalendarEvent: (body: {
@@ -76,20 +90,48 @@ export const principalApi = {
     visible_to: string[];
   }) => apiRequest<CalendarEventResponse>('POST', '/principal/calendar-events/', body),
 
-  getCalendarEvents: () =>
-    apiRequest<CalendarEventResponse[]>('GET', '/principal/calendar-events/'),
+  getCalendarEvents: (params?: { event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT'; start_date?: string; end_date?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params)
+            .filter(([, v]) => v !== undefined)
+            .map(([k, v]) => [k, String(v)])
+        ).toString()
+      : '';
+    return apiRequest<CalendarEventsListResponse>('GET', `/calendar-events/${qs}`);
+  },
+
+  // ── Sections ──────────────────────────────────────────────────────────────────
+  getSections: (params?: { class_id?: string }) => {
+    const qs = params?.class_id ? `?class_id=${params.class_id}` : '';
+    return apiRequest<SectionsListResponse>('GET', `/principal/sections/${qs}`);
+  },
+
+  updateSection: (sectionId: string, body: { parent_query_enabled: boolean }) =>
+    apiRequest<SectionResponse>('PATCH', `/principal/sections/${sectionId}/`, body),
+
+  // ── Attendance ────────────────────────────────────────────────────────────────
+  getAttendanceDailySummary: (params?: { date?: string }) => {
+    const qs = params?.date ? `?date=${params.date}` : '';
+    return apiRequest<DailySummaryResponse>('GET', `/principal/attendance/daily-summary/${qs}`);
+  },
+
+  getAttendanceClassDetail: (classId: string, params?: { date?: string }) => {
+    const qs = params?.date ? `?date=${params.date}` : '';
+    return apiRequest<ClassAttendanceDetailResponse>('GET', `/principal/attendance/classes/${classId}/${qs}`);
+  },
 
   // ── Exams ─────────────────────────────────────────────────────────────────────
   createExam: (body: {
     name: string;
     start_date: string;
     end_date: string;
-    class_ids: number[];
-    section_ids: number[];
-    subjects: { subject_id: number; max_marks: number; pass_marks: number }[];
+    class_ids: string[];
+    section_ids: string[];
+    subjects: { subject_id: string; max_marks: number; pass_marks: number }[];
   }) => apiRequest<ExamResponse>('POST', '/principal/exams/', body),
 
-  getExams: (params?: { status?: string; class_id?: number; section_id?: number }) => {
+  getExams: (params?: { status?: string; class_id?: string; section_id?: string }) => {
     const qs = params
       ? '?' + new URLSearchParams(
           Object.entries(params)
@@ -102,11 +144,11 @@ export const principalApi = {
 
   // ── Results ───────────────────────────────────────────────────────────────────
   getResults: (params: {
-    exam_id?: number;
-    class_id?: number;
-    section_id?: number;
-    subject_id?: number;
-    student_id?: number;
+    exam_id?: string;
+    class_id?: string;
+    section_id?: string;
+    subject_id?: string;
+    student_id?: string;
   }) => {
     const qs = Object.entries(params)
       .filter(([, v]) => v !== undefined)
@@ -117,10 +159,10 @@ export const principalApi = {
 
   // ── Analytics ─────────────────────────────────────────────────────────────────
   getAnalytics: (params?: {
-    class_id?: number;
-    section_id?: number;
-    subject_id?: number;
-    teacher_id?: number;
+    class_id?: string;
+    section_id?: string;
+    subject_id?: string;
+    teacher_id?: string;
     date_from?: string;
     date_to?: string;
   }) => {

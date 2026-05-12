@@ -128,7 +128,7 @@ export function AnnounceScreen() {
         title: annTitle || 'New Announcement',
         body: annMsg || 'No message body.',
         audience: apiAudience,
-        class_ids: apiAudience === 'CLASS' ? [1] : undefined, // ⚠ placeholder class ID
+        class_ids: apiAudience === 'CLASS' ? ["1"] : undefined, // ⚠ placeholder class ID
         publish_now: true,
       });
       setAnnouncements(prev => [mapApiAnn(created), ...prev]);
