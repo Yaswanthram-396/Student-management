@@ -1,13 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    PanResponder,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -22,8 +24,18 @@ const CELL_SIZE = (SCREEN_WIDTH - spacing.lg * 2) / 7;
 
 const WEEK_DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const EVENT_TYPE_COLORS: Record<ParentCalendarEvent["event_type"], string> = {
@@ -54,7 +66,11 @@ function toDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function eventDaysInMonth(events: ParentCalendarEvent[], year: number, month: number): Set<number> {
+function eventDaysInMonth(
+  events: ParentCalendarEvent[],
+  year: number,
+  month: number,
+): Set<number> {
   const days = new Set<number>();
   const monthStart = toDateStr(year, month, 1);
   const monthEnd = toDateStr(year, month, daysInMonth(year, month));
@@ -87,8 +103,12 @@ function EventRow({ item }: { item: ParentCalendarEvent }) {
       <View style={[styles.eventAccent, { backgroundColor: color }]} />
       <View style={styles.eventBody}>
         <View style={styles.eventTopRow}>
-          <Text style={styles.eventName} numberOfLines={1}>{item.title}</Text>
-          <View style={[styles.eventTypePill, { backgroundColor: color + "20" }]}>
+          <Text style={styles.eventName} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <View
+            style={[styles.eventTypePill, { backgroundColor: color + "20" }]}
+          >
             <Text style={[styles.eventTypeText, { color }]}>
               {EVENT_TYPE_LABELS[item.event_type]}
             </Text>
@@ -98,7 +118,9 @@ function EventRow({ item }: { item: ParentCalendarEvent }) {
           {formatDateRange(item.start_date, item.end_date)}
         </Text>
         {!!item.description && (
-          <Text style={styles.eventDesc} numberOfLines={2}>{item.description}</Text>
+          <Text style={styles.eventDesc} numberOfLines={2}>
+            {item.description}
+          </Text>
         )}
       </View>
     </View>
@@ -106,6 +128,7 @@ function EventRow({ item }: { item: ParentCalendarEvent }) {
 }
 
 export function CalendarScreen() {
+  const router = useRouter();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -127,48 +150,72 @@ export function CalendarScreen() {
   }, []);
 
   // Fetch events whenever studentId or month/year changes
-  const fetchEvents = useCallback(
-    (y: number, m: number, sid: string) => {
-      const lastDay = daysInMonth(y, m);
-      setEventsLoading(true);
-      parentApi
-        .getCalendarEvents(sid, {
-          start_date: toDateStr(y, m, 1),
-          end_date: toDateStr(y, m, lastDay),
-        })
-        .then((res) => setEvents(res.results))
-        .catch(() => setEvents([]))
-        .finally(() => setEventsLoading(false));
-    },
-    [],
-  );
+  const fetchEvents = useCallback((y: number, m: number, sid: string) => {
+    const lastDay = daysInMonth(y, m);
+    setEventsLoading(true);
+    parentApi
+      .getCalendarEvents(sid, {
+        start_date: toDateStr(y, m, 1),
+        end_date: toDateStr(y, m, lastDay),
+      })
+      .then((res) => setEvents(res.results))
+      .catch(() => setEvents([]))
+      .finally(() => setEventsLoading(false));
+  }, []);
 
   useEffect(() => {
     if (studentId) fetchEvents(year, month, studentId);
   }, [studentId, year, month, fetchEvents]);
 
   const goBack = () => {
-    if (month === 0) { setMonth(11); setYear((y) => y - 1); }
-    else setMonth((m) => m - 1);
+    if (month === 0) {
+      setMonth(11);
+      setYear((y) => y - 1);
+    } else setMonth((m) => m - 1);
   };
   const goNext = () => {
-    if (month === 11) { setMonth(0); setYear((y) => y + 1); }
-    else setMonth((m) => m + 1);
+    if (month === 11) {
+      setMonth(0);
+      setYear((y) => y + 1);
+    } else setMonth((m) => m + 1);
   };
+
+  const swipeResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > Math.abs(gesture.dy) &&
+        Math.abs(gesture.dx) > 12,
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx > 40) goBack();
+        if (gesture.dx < -40) goNext();
+      },
+    }),
+  ).current;
 
   const calDays = buildCalDays(year, month);
   const eventDays = eventDaysInMonth(events, year, month);
-  const isCurrentMonth = month === today.getMonth() && year === today.getFullYear();
+  const isCurrentMonth =
+    month === today.getMonth() && year === today.getFullYear();
 
   const CalHeader = (
-    <View style={styles.calHeader}>
+    <View style={styles.calHeader} {...swipeResponder.panHandlers}>
       <View style={styles.monthNav}>
         <Pressable style={styles.navBtn} onPress={goBack}>
-          <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+          <Ionicons
+            name="chevron-back"
+            size={18}
+            color={colors.textSecondary}
+          />
         </Pressable>
-        <Text style={styles.monthLabel}>{MONTH_NAMES[month]} {year}</Text>
+        <Text style={styles.monthLabel}>
+          {MONTH_NAMES[month]} {year}
+        </Text>
         <Pressable style={styles.navBtn} onPress={goNext}>
-          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={colors.textSecondary}
+          />
         </Pressable>
       </View>
 
@@ -188,8 +235,12 @@ export function CalendarScreen() {
             <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
               {d !== null && (
                 <>
-                  <View style={[styles.dayCircle, isToday && styles.todayCircle]}>
-                    <Text style={[styles.dayNum, isToday && styles.todayNum]}>{d}</Text>
+                  <View
+                    style={[styles.dayCircle, isToday && styles.todayCircle]}
+                  >
+                    <Text style={[styles.dayNum, isToday && styles.todayNum]}>
+                      {d}
+                    </Text>
                   </View>
                   {hasEvent && <View style={styles.eventDot} />}
                 </>
@@ -201,7 +252,9 @@ export function CalendarScreen() {
 
       <View style={styles.sectionRow}>
         <Text style={styles.sectionLabel}>Events This Month</Text>
-        {eventsLoading && <ActivityIndicator size="small" color={colors.parent} />}
+        {eventsLoading && (
+          <ActivityIndicator size="small" color={colors.parent} />
+        )}
       </View>
     </View>
   );
@@ -209,7 +262,18 @@ export function CalendarScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <HeaderBar center={<Text style={styles.headerTitle}>Academic Calendar</Text>} />
+        <HeaderBar
+          left={
+            <Pressable onPress={() => router.back()}>
+              <Ionicons
+                name="arrow-back"
+                size={20}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+          }
+          center={<Text style={styles.headerTitle}>Academic Calendar</Text>}
+        />
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={colors.parent} />
         </View>
@@ -219,7 +283,14 @@ export function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <HeaderBar center={<Text style={styles.headerTitle}>Academic Calendar</Text>} />
+      <HeaderBar
+        left={
+          <Pressable onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+          </Pressable>
+        }
+        center={<Text style={styles.headerTitle}>Academic Calendar</Text>}
+      />
 
       <FlatList
         data={events}
@@ -230,11 +301,15 @@ export function CalendarScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={CalHeader}
         ListEmptyComponent={
-          !eventsLoading ? (
+          eventsLoading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator color={colors.parent} />
+            </View>
+          ) : (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyText}>No events this month</Text>
             </View>
-          ) : null
+          )
         }
       />
     </SafeAreaView>
@@ -351,6 +426,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
-  emptyWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, alignItems: "center" },
+  emptyWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    alignItems: "center",
+  },
   emptyText: { ...(typography.body as object), color: colors.textMuted },
 });
