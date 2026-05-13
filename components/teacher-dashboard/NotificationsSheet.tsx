@@ -243,7 +243,7 @@ export function NotificationsSheet({ visible, onClose, onUnreadCountChange }: Pr
               <View style={styles.errorIconWrap}>
                 <Ionicons name="cloud-offline-outline" size={28} color="#DC2626" />
               </View>
-              <Text style={styles.errorTitle}>Couldn't load notifications</Text>
+              <Text style={styles.errorTitle}>{"Couldn't load notifications"}</Text>
               <Text style={styles.errorBody}>{error}</Text>
               <Pressable style={styles.retryBtn} onPress={() => fetchNotifications()}>
                 <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />

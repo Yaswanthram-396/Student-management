@@ -114,7 +114,7 @@ export function AnnounceScreen() {
   useEffect(() => {
     setLoading(true);
     principalApi.getAnnouncements()
-      .then(data => setAnnouncements(data.map(mapApiAnn)))
+      .then(data => setAnnouncements(data.results.map(mapApiAnn)))
       .catch(() => {}) // keep mock data on network error
       .finally(() => setLoading(false));
   }, []);

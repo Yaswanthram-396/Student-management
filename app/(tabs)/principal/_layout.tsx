@@ -76,6 +76,13 @@ export default function PrincipalLayout() {
         name="class-attendance"
         options={{ href: null }}
       />
+      <Tabs.Screen name="exam-overview"    options={{ href: null }} />
+      <Tabs.Screen name="section-detail"   options={{ href: null }} />
+      <Tabs.Screen name="section-students" options={{ href: null }} />
+      <Tabs.Screen name="question-heatmap" options={{ href: null }} />
+      <Tabs.Screen name="question-detail"  options={{ href: null }} />
+      <Tabs.Screen name="student-summary"  options={{ href: null }} />
+      <Tabs.Screen name="student-subject"  options={{ href: null }} />
     </Tabs>
   );
 }

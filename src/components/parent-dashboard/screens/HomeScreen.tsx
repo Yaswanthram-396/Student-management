@@ -409,10 +409,8 @@ export function HomeScreen() {
     .toUpperCase();
 
   useEffect(() => {
-    const firstStudent = PARENT_PROFILE.students[0];
-    if (!firstStudent) return;
     parentApi
-      .getAnnouncements(firstStudent.id)
+      .getAnnouncements()
       .then((data) => setAnnouncements(data.results))
       .catch(() => {});
   }, []);
