@@ -124,7 +124,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={48} color="#CCCCCC" />
-          <Text style={styles.errorTitle}>Couldn't load dashboard</Text>
+          <Text style={styles.errorTitle}>{"Couldn't load dashboard"}</Text>
           <Pressable style={styles.retryBtn} onPress={() => fetchAll()}>
             <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />
             <Text style={styles.retryText}>Try Again</Text>

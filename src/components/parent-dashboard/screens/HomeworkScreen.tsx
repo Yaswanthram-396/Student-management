@@ -614,7 +614,7 @@ function QueriesSegment({ students }: { students: { id: string; name: string }[]
               <View style={styles.emptyCircle} />
               <Text style={styles.emptyTitle}>No queries yet</Text>
               <Text style={styles.emptyBody}>
-                Tap 'Raise a Query' on the home screen to get started
+                Tap Raise a Query on the home screen to get started
               </Text>
             </View>
           }

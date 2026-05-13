@@ -20,23 +20,27 @@ interface CalEvent {
   bar: string; name: string; date: string;
   audience: string; audienceBg: string; audienceText: string;
   month: number;
+  year: number;
+  day: number;
 }
-
-const MONTHS = [
-  { name: 'May 2026', month: 4, days: 31, firstDay: 5, eventDates: [10, 15, 22, 25], today: 5 },
-  { name: 'June 2026', month: 5, days: 30, firstDay: 1, eventDates: [2, 10], today: null },
-];
 
 const PRINCIPAL_ACCENT = colors.principal;
 
-const INIT_EVENTS: CalEvent[] = [
-  { id: 'm1', bar: PRINCIPAL_ACCENT, name: 'Parent-Teacher Meeting', date: '10 May', audience: 'All', audienceBg: '#EDEDFA', audienceText: PRINCIPAL_ACCENT, month: 4 },
-  { id: 'm2', bar: colors.warning, name: 'Mid-Term Exams Begin', date: '15 May', audience: 'Students', audienceBg: colors.warningBg, audienceText: '#92400E', month: 4 },
-  { id: 'm3', bar: '#14B8A6', name: 'Annual Sports Day', date: '22 May', audience: 'All', audienceBg: '#CCFBF1', audienceText: '#0F766E', month: 4 },
-  { id: 'm4', bar: colors.danger, name: 'School Closes for Summer', date: '25 May', audience: 'All', audienceBg: colors.dangerBg, audienceText: '#991B1B', month: 4 },
-  { id: 'j1', bar: PRINCIPAL_ACCENT, name: 'School Reopens', date: '2 Jun', audience: 'All', audienceBg: '#EDEDFA', audienceText: PRINCIPAL_ACCENT, month: 5 },
-  { id: 'j2', bar: colors.warning, name: 'Unit Test 1', date: '10 Jun', audience: 'Students', audienceBg: colors.warningBg, audienceText: '#92400E', month: 5 },
-];
+const NOW = new Date();
+const TODAY_DATE  = NOW.getDate();
+const TODAY_MONTH = NOW.getMonth();
+const TODAY_YEAR  = NOW.getFullYear();
+
+function getMonthInfo(offsetFromToday: number) {
+  const d = new Date(TODAY_YEAR, TODAY_MONTH + offsetFromToday, 1);
+  return {
+    year:     d.getFullYear(),
+    month:    d.getMonth(),
+    days:     new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(),
+    firstDay: d.getDay(),
+    name:     d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+  };
+}
 
 const COLOR_OPTIONS = [
   { label: 'Purple', value: PRINCIPAL_ACCENT },
@@ -61,29 +65,33 @@ const VISIBLE_TO_MAP: Record<string, string[]> = {
 
 function mapApiEvent(e: CalendarEventResponse): CalEvent {
   const ac = AUDIENCE_CFG['All'];
+  const d = new Date(e.start_date);
   return {
     id: String(e.id),
     bar: PRINCIPAL_ACCENT,
     name: e.title,
-    date: new Date(e.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
     audience: 'All',
     audienceBg: ac.bg,
     audienceText: ac.text,
-    month: new Date(e.start_date).getMonth(),
+    month: d.getMonth(),
+    year: d.getFullYear(),
+    day: d.getDate(),
   };
 }
 
 export function CalendarScreen() {
   const [monthIdx, setMonthIdx] = useState(0);
-  const [events, setEvents] = useState<CalEvent[]>(INIT_EVENTS);
+  const [events, setEvents] = useState<CalEvent[]>([]);
   const [showSheet, setShowSheet] = useState(false);
   const [evtName, setEvtName] = useState('');
   const [audience, setAudience] = useState('All');
-  const [barColor, setBarColor] = useState(PRINCIPAL_ACCENT);
+  const [barColor, setBarColor] = useState<string>(PRINCIPAL_ACCENT);
   const [adding, setAdding] = useState(false);
 
-  const mon = MONTHS[Math.min(monthIdx, MONTHS.length - 1)];
-  const visibleEvents = events.filter(e => e.month === mon.month);
+  const mon = getMonthInfo(monthIdx);
+  const visibleEvents = events.filter(e => e.month === mon.month && e.year === mon.year);
+  const eventDatesInMonth = new Set(visibleEvents.map(e => e.day));
 
   const calDays: (number | null)[] = Array(mon.firstDay).fill(null);
   for (let d = 1; d <= mon.days; d++) calDays.push(d);
@@ -91,7 +99,7 @@ export function CalendarScreen() {
   // ── Load events on mount ──────────────────────────────────────────────────
   useEffect(() => {
     principalApi.getCalendarEvents()
-      .then(data => setEvents(data.map(mapApiEvent)))
+      .then(data => setEvents(data.results.map(mapApiEvent)))
       .catch(() => {}); // keep mock events on network error
   }, []);
 
@@ -129,8 +137,8 @@ export function CalendarScreen() {
         </Pressable>
         <Text style={styles.monthLabel}>{mon.name}</Text>
         <Pressable
-          style={[styles.navBtn, monthIdx === MONTHS.length - 1 && styles.navBtnDisabled]}
-          onPress={() => setMonthIdx(i => Math.min(MONTHS.length - 1, i + 1))}
+          style={[styles.navBtn, monthIdx === 11 && styles.navBtnDisabled]}
+          onPress={() => setMonthIdx(i => Math.min(11, i + 1))}
         >
           <Text style={styles.navArrow}>›</Text>
         </Pressable>
@@ -148,8 +156,8 @@ export function CalendarScreen() {
       {/* Calendar grid */}
       <View style={styles.calGrid}>
         {calDays.map((d, i) => {
-          const isToday = d === mon.today;
-          const hasEvent = d !== null && mon.eventDates.includes(d);
+          const isToday = d === TODAY_DATE && mon.month === TODAY_MONTH && mon.year === TODAY_YEAR;
+          const hasEvent = d !== null && eventDatesInMonth.has(d);
           return (
             <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
               {d !== null && (

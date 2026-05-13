@@ -372,7 +372,7 @@ export default function AttendanceScreen() {
             <View style={styles.errorIconWrap}>
               <Ionicons name="alert-circle-outline" size={28} color={RED} />
             </View>
-            <Text style={styles.errorTitle}>Couldn't load attendance</Text>
+            <Text style={styles.errorTitle}>{"Couldn't load attendance"}</Text>
             <Text style={styles.errorBody}>{error}</Text>
             <Pressable
               style={styles.retryBtn}
@@ -404,7 +404,7 @@ export default function AttendanceScreen() {
         {!loading && !error && students.length > 0 && filteredStudents.length === 0 && (
           <View style={styles.centered}>
             <Ionicons name="search-outline" size={40} color="#CCCCCC" />
-            <Text style={styles.emptyTitle}>No results for "{search}"</Text>
+            <Text style={styles.emptyTitle}>No results for {search}</Text>
             <Text style={styles.emptyBody}>Try a different name or roll number.</Text>
           </View>
         )}

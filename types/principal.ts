@@ -2,7 +2,7 @@ import type { UserRole } from "./auth";
 
 // School Configuration
 export interface SchoolConfig {
-  school_id: number;
+  school_id: string;
   attendance_frequency: "ONCE" | "TWICE";
   whatsapp_absent_automation_enabled: boolean;
   parent_query_enabled: boolean;
@@ -11,23 +11,23 @@ export interface SchoolConfig {
 
 // Teacher
 export interface TeacherSection {
-  id: number;
+  id: string;
   class_name: string;
   section_name: string;
 }
 
 export interface TeacherResponse {
-  id: number;
-  user: { id: number; username: string; role: string };
+  id: string;
+  user: { id: string; username: string; role: string };
   name: string;
   mobile_number: string;
-  primary_subject: { id: number; name: string };
+  primary_subject: { id: string; name: string };
   assigned_sections: TeacherSection[];
 }
 
 // Student bulk upload
 export interface BulkUploadBatch {
-  batch_id: number;
+  batch_id: string;
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
   total_rows: number;
   success_count: number;
@@ -36,18 +36,31 @@ export interface BulkUploadBatch {
 }
 
 // Announcements
+export interface AnnouncementAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  file_url: string;
+}
+
 export interface AnnouncementResponse {
-  id: number;
+  id: string;
   title: string;
   body: string;
+  author_role: "PRINCIPAL" | "TEACHER";
   audience: "SCHOOL" | "CLASS" | "SECTION";
   published_at: string;
-  attachments: string[];
+  attachments: AnnouncementAttachment[];
+}
+
+export interface AnnouncementsListResponse {
+  count: number;
+  results: AnnouncementResponse[];
 }
 
 // Calendar events
 export interface CalendarEventResponse {
-  id: number;
+  id: string;
   title: string;
   event_type: "HOLIDAY" | "EXAM" | "EVENT";
   start_date: string;
@@ -56,16 +69,21 @@ export interface CalendarEventResponse {
   visible_to: ("TEACHER" | "STUDENT" | "PARENT")[];
 }
 
+export interface CalendarEventsListResponse {
+  count: number;
+  results: CalendarEventResponse[];
+}
+
 // Exams
 export interface ExamSubject {
-  subject_id: number;
+  subject_id: string;
   subject_name: string;
   max_marks: number;
   pass_marks: number;
 }
 
 export interface ExamResponse {
-  id: number;
+  id: string;
   name: string;
   start_date: string;
   end_date: string;
@@ -75,14 +93,14 @@ export interface ExamResponse {
 
 // Results
 export interface StudentSubjectResult {
-  subject_id: number;
+  subject_id: string;
   subject_name: string;
   marks_obtained: number;
   max_marks: number;
 }
 
 export interface StudentResult {
-  student_id: number;
+  student_id: string;
   student_name: string;
   roll_number: string;
   total_marks: number;
@@ -100,7 +118,7 @@ export interface ResultSummary {
 }
 
 export interface ResultsResponse {
-  filters: { exam_id?: number; class_id?: number; section_id?: number };
+  filters: { exam_id?: string; class_id?: string; section_id?: string };
   summary: ResultSummary;
   results: StudentResult[];
 }
@@ -113,13 +131,72 @@ export interface AnalyticsResponse {
   student_growth_tracking: any[];
 }
 
+// Sections
+export interface SectionResponse {
+  id: string;
+  name: string;
+  academic_class: { id: string; name: string };
+  class_teacher: { id: string; name: string } | null;
+  parent_query_enabled: boolean;
+}
+
+export interface SectionsListResponse {
+  count: number;
+  results: SectionResponse[];
+}
+
+// Attendance
+export interface ClassAttendanceSummary {
+  class_id: string;
+  class_name: string;
+  total_students: number;
+  present_count: number;
+  absent_count: number;
+  attendance_percentage: number;
+}
+
+export interface DailySummaryResponse {
+  date: string;
+  classes: ClassAttendanceSummary[];
+}
+
+export interface StudentAttendanceEntry {
+  id: string;
+  name: string;
+  section?: string;
+}
+
+export interface SectionAttendanceDetail {
+  section_id: string;
+  section_name: string;
+  total_students: number;
+  present_count: number;
+  absent_count: number;
+  attendance_percentage: number;
+  present_students: StudentAttendanceEntry[];
+  absent_students: StudentAttendanceEntry[];
+}
+
+export interface ClassAttendanceDetailResponse {
+  date: string;
+  class_id: string;
+  class_name: string;
+  total_students: number;
+  present_count: number;
+  absent_count: number;
+  attendance_percentage: number;
+  present_students: StudentAttendanceEntry[];
+  absent_students: StudentAttendanceEntry[];
+  sections: SectionAttendanceDetail[];
+}
+
 // Auth — standard DRF simple-jwt response shape
 export interface LoginResponse {
   access: string;
   refresh: string;
 
   user: {
-    id: number;
+    id: string;
     username: string;
     phone_number: string;
     email: string;

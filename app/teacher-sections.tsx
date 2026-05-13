@@ -81,7 +81,7 @@ export default function SectionsScreen() {
 
   function handleSelectSection(section: TeacherSection) {
     setSelectedSection(section);
-    router.replace('/(tabs)/teacher/');
+    router.replace('/(tabs)/teacher/' as any);
   }
 
   async function handleLogout() {

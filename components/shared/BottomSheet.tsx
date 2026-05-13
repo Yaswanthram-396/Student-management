@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, View, StyleSheet } from "react-native";
+import { Modal, Pressable, View, StyleSheet, type DimensionValue } from "react-native";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 
@@ -7,7 +7,7 @@ interface BottomSheetProps {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  height?: string | number;
+  height?: DimensionValue;
 }
 
 export function BottomSheet({

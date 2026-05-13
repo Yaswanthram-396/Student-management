@@ -18,7 +18,20 @@ export interface ParentQuery {
   created_at: string;
 }
 
-export interface QueryReply {
+export interface QueryReplyItem {
+  id: string;
+  sender_id: string;
+  sender_role: 'TEACHER' | 'PARENT' | 'ADMIN';
+  message: string;
+  created_at: string;
+}
+
+export interface QueryDetail extends ParentQuery {
+  assigned_teacher: QueryPerson;
+  replies: QueryReplyItem[];
+}
+
+export interface QueryReplyResponse {
   id: string;
   query_id: string;
   sender_id: string;
@@ -44,9 +57,18 @@ export const teacherQueriesApi = {
     );
   },
 
-  reply: (queryId: string, message: string, markAnswered: boolean) =>
-    apiRequest<QueryReply>('POST', `/teacher/parent-queries/${queryId}/replies/`, {
+  getDetail: (queryId: string) =>
+    apiRequest<QueryDetail>('GET', `/teacher/parent-queries/${queryId}/`),
+
+  reply: (queryId: string, message: string, markAnswered = false) =>
+    apiRequest<QueryReplyResponse>('POST', `/teacher/parent-queries/${queryId}/replies/`, {
       message,
       mark_answered: markAnswered,
     }),
+
+  close: (queryId: string) =>
+    apiRequest<{ id: string; status: QueryStatus }>(
+      'POST',
+      `/teacher/parent-queries/${queryId}/close/`,
+    ),
 };

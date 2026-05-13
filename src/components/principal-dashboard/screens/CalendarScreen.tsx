@@ -57,7 +57,7 @@ export function CalendarScreen() {
   const [showSheet, setShowSheet] = useState(false);
   const [evtName, setEvtName] = useState('');
   const [audience, setAudience] = useState('All');
-  const [barColor, setBarColor] = useState(PRINCIPAL_ACCENT);
+  const [barColor, setBarColor] = useState<string>(PRINCIPAL_ACCENT);
   const [adding, setAdding] = useState(false);
 
   const mon = MONTHS[Math.min(monthIdx, MONTHS.length - 1)];
