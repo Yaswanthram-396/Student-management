@@ -114,7 +114,7 @@ export function AnnounceScreen() {
   useEffect(() => {
     setLoading(true);
     principalApi.getAnnouncements()
-      .then(data => setAnnouncements(data.map(mapApiAnn)))
+      .then(data => setAnnouncements(data.results.map(mapApiAnn)))
       .catch(() => {}) // keep mock data on network error
       .finally(() => setLoading(false));
   }, []);
@@ -128,7 +128,7 @@ export function AnnounceScreen() {
         title: annTitle || 'New Announcement',
         body: annMsg || 'No message body.',
         audience: apiAudience,
-        class_ids: apiAudience === 'CLASS' ? [1] : undefined, // ⚠ placeholder class ID
+        class_ids: apiAudience === 'CLASS' ? ["1"] : undefined, // ⚠ placeholder class ID
         publish_now: true,
       });
       setAnnouncements(prev => [mapApiAnn(created), ...prev]);

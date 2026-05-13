@@ -271,7 +271,7 @@ export default function ContentScreen() {
             <View style={styles.errorIconWrap}>
               <Ionicons name="cloud-offline-outline" size={28} color="#DC2626" />
             </View>
-            <Text style={styles.errorTitle}>Couldn't load materials</Text>
+            <Text style={styles.errorTitle}>{"Couldn't load materials"}</Text>
             <Text style={styles.errorBody}>{fetchError}</Text>
             <Pressable style={styles.retryBtn} onPress={() => fetchMaterials()}>
               <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />

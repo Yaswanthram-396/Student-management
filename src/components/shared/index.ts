@@ -4,3 +4,4 @@ export { MetricCard } from './MetricCard';
 export { BottomSheet } from './BottomSheet';
 export { ToggleSwitch } from './ToggleSwitch';
 export { SegmentedControl } from './SegmentedControl';
+export { LoadingScreen } from '../../../components/shared/LoadingScreen';

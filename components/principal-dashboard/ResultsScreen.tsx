@@ -50,7 +50,7 @@ function RankBadge({ rank }: { rank: number }) {
 export function ResultsScreen() {
   const [exams, setExams]                     = useState<string[]>([]);
   const [exam, setExam]                       = useState('');
-  const [examIdMap, setExamIdMap]             = useState<Record<string, number>>({});
+  const [examIdMap, setExamIdMap]             = useState<Record<string, string>>({});
   const [classFilter, setClassFilter]         = useState('All');
   const [students, setStudents]               = useState<Student[]>([]);
   const [summary, setSummary]                 = useState<ResultSummary | null>(null);
@@ -120,11 +120,11 @@ export function ResultsScreen() {
         name: newExamName.trim(),
         start_date: date,
         end_date: date,
-        class_ids: [1],    // ⚠ placeholder — needs class picker API
-        section_ids: [1],  // ⚠ placeholder — needs section picker API
+        class_ids: ["1"],    // ⚠ placeholder — needs class picker API
+        section_ids: ["1"],  // ⚠ placeholder — needs section picker API
         subjects: newExamSubjects.length > 0
-          ? newExamSubjects.map((_, i) => ({ subject_id: i + 1, max_marks: 100, pass_marks: 35 }))
-          : [{ subject_id: 1, max_marks: 100, pass_marks: 35 }],
+          ? newExamSubjects.map((_, i) => ({ subject_id: String(i + 1), max_marks: 100, pass_marks: 35 }))
+          : [{ subject_id: "1", max_marks: 100, pass_marks: 35 }],
       });
       setExams(prev => [...prev, created.name]);
       setExamIdMap(prev => ({ ...prev, [created.name]: created.id }));

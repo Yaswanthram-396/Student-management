@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Modal,
     Pressable,
@@ -17,6 +18,7 @@ import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { authApi } from "../../services/auth";
 import { principalApi } from "../../services/principal";
+import type { SectionResponse } from "../../types/principal";
 import {
     BottomSheet,
     HeaderBar,
@@ -90,10 +92,11 @@ export function SettingsScreen() {
   const [teacherName, setTeacherName] = useState("");
   const [teacherMobile, setTeacherMobile] = useState("");
   const [teacherSubject, setTeacherSubject] = useState("");
-  const [teacherClass, setTeacherClass] = useState("");
-  const [teacherSection, setTeacherSection] = useState("");
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherSuccess, setTeacherSuccess] = useState(false);
+  const [sections, setSections] = useState<SectionResponse[]>([]);
+  const [loadingSections, setLoadingSections] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
 
   // ── Load config on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -108,6 +111,17 @@ export function SettingsScreen() {
       .catch(() => {}) // keep defaults on network error
       .finally(() => setLoadingConfig(false));
   }, []);
+
+  // ── Load sections when teacher sheet opens ────────────────────────────────
+  useEffect(() => {
+    if (!showTeacherSheet) return;
+    setLoadingSections(true);
+    principalApi
+      .getSections()
+      .then((data) => setSections(data.results))
+      .catch(() => {})
+      .finally(() => setLoadingSections(false));
+  }, [showTeacherSheet]);
 
   if (loadingConfig) {
     return <LoadingScreen label="Loading school settings..." />;
@@ -151,8 +165,8 @@ export function SettingsScreen() {
         mobile_number: teacherMobile,
         username,
         password: "Welcome@123",
-        primary_subject_id: 1, // ⚠ placeholder — needs subject picker API
-        assigned_section_ids: [1], // ⚠ placeholder — needs section picker API
+        primary_subject_id: "", // ⚠ placeholder — needs subject picker API
+        assigned_section_ids: selectedSectionIds, // populated from sections API
       });
       setTeacherSuccess(true);
       setTimeout(() => {
@@ -160,8 +174,7 @@ export function SettingsScreen() {
         setTeacherName("");
         setTeacherMobile("");
         setTeacherSubject("");
-        setTeacherClass("");
-        setTeacherSection("");
+        setSelectedSectionIds([]);
         setShowTeacherSheet(false);
       }, 1500);
     } catch (err: any) {
@@ -204,7 +217,7 @@ export function SettingsScreen() {
     }
   }
 
-  function pollBatchStatus(batchId: number) {
+  function pollBatchStatus(batchId: string) {
     const interval = setInterval(async () => {
       try {
         const status = await principalApi.getBulkUploadStatus(batchId);
@@ -576,23 +589,35 @@ export function SettingsScreen() {
           placeholderTextColor={colors.textMuted}
         />
 
-        <Text style={styles.sheetFieldLabel}>Assigned Class</Text>
-        <TextInput
-          style={styles.textInput}
-          value={teacherClass}
-          onChangeText={setTeacherClass}
-          placeholder="e.g. Class 7"
-          placeholderTextColor={colors.textMuted}
-        />
-
-        <Text style={styles.sheetFieldLabel}>Assigned Section</Text>
-        <TextInput
-          style={styles.textInput}
-          value={teacherSection}
-          onChangeText={setTeacherSection}
-          placeholder="e.g. B"
-          placeholderTextColor={colors.textMuted}
-        />
+        <Text style={styles.sheetFieldLabel}>Assigned Sections</Text>
+        {loadingSections ? (
+          <ActivityIndicator color={colors.principal} style={{ marginBottom: spacing.md }} />
+        ) : sections.length === 0 ? (
+          <Text style={[styles.sheetFieldLabel, { marginBottom: spacing.md }]}>
+            No sections available
+          </Text>
+        ) : (
+          <View style={styles.sectionChips}>
+            {sections.map((sec) => {
+              const active = selectedSectionIds.includes(sec.id);
+              return (
+                <Pressable
+                  key={sec.id}
+                  style={[styles.sectionChip, active && styles.sectionChipActive]}
+                  onPress={() =>
+                    setSelectedSectionIds((prev) =>
+                      active ? prev.filter((id) => id !== sec.id) : [...prev, sec.id]
+                    )
+                  }
+                >
+                  <Text style={[styles.sectionChipText, active && styles.sectionChipTextActive]}>
+                    {sec.academic_class.name} – {sec.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {teacherSuccess ? (
           <View style={styles.successRow}>
@@ -901,4 +926,28 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontWeight: "500",
   },
+  sectionChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  sectionChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  sectionChipActive: {
+    backgroundColor: colors.principal,
+    borderColor: colors.principal,
+  },
+  sectionChipText: {
+    ...(typography.caption as object),
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  sectionChipTextActive: { color: colors.surface },
 });

@@ -160,3 +160,84 @@ export async function apiRequest<T>(
   }
   return data as T;
 }
+
+export async function apiRequestText(
+  method: "GET" | "POST",
+  path: string,
+  body?: object | FormData,
+  isMultipart = false,
+): Promise<string> {
+  const token = await storage.getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (!isMultipart) headers["Content-Type"] = "application/json";
+
+  const fullUrl = `${API_BASE}${path}`;
+  const requestBody =
+    body instanceof FormData
+      ? body
+      : body
+        ? JSON.stringify(body)
+        : undefined;
+
+  let res: Response;
+  try {
+    res = await fetch(fullUrl, {
+      method,
+      headers,
+      body: requestBody,
+    });
+  } catch (error) {
+    console.error(`[API] Network error on ${method} ${fullUrl}:`, error);
+    throw new ApiError(
+      "NETWORK_ERROR",
+      "Cannot reach the API server. Check the backend URL and make sure the server is running.",
+    );
+  }
+
+  if (res.status === 401 && path !== REFRESH_ENDPOINT) {
+    const newAccessToken = await tryRefreshAccessToken();
+
+    if (newAccessToken) {
+      try {
+        res = await fetch(fullUrl, {
+          method,
+          headers: {
+            ...headers,
+            Authorization: `Bearer ${newAccessToken}`,
+          },
+          body: requestBody,
+        });
+      } catch (error) {
+        console.error(`[API] Retry failed on ${method} ${fullUrl}:`, error);
+        throw new ApiError(
+          "NETWORK_ERROR",
+          "Cannot reach the API server. Check if the backend is running.",
+        );
+      }
+    }
+  }
+
+  if (res.status === 401) {
+    await storage.clearTokens();
+    router.replace("/");
+    throw new ApiError("UNAUTHORIZED", "Session expired. Please log in again.");
+  }
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    try {
+      const data = JSON.parse(text);
+      throw new ApiError(
+        data.code ?? "ERROR",
+        data.details ?? data.message ?? "Something went wrong.",
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError("ERROR", text || "Something went wrong.");
+    }
+  }
+
+  return text;
+}

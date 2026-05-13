@@ -29,6 +29,7 @@ export interface ParentStudent {
   id: string;
   name: string;
   roll_number: string;
+  is_parent_query_disabled?: boolean;
   academic_class: AcademicClass;
   section: ParentSection;
 }
@@ -41,6 +42,7 @@ export interface ParentProfile {
   id: string;
   name: string;
   mobile_number: string;
+  phone_number?: string;
   school: ParentSchool;
   students: ParentStudent[];
 }
@@ -75,6 +77,13 @@ export interface AttendanceResponse {
 }
 
 // Announcements
+export interface AnnouncementAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  file_url: string;
+}
+
 export interface ParentAnnouncement {
   id: string;
   title: string;
@@ -82,7 +91,7 @@ export interface ParentAnnouncement {
   author_role: 'PRINCIPAL' | 'TEACHER';
   audience: 'SCHOOL' | 'CLASS' | 'SECTION';
   published_at: string;
-  attachments: string[];
+  attachments: AnnouncementAttachment[];
 }
 
 export interface AnnouncementsResponse {
