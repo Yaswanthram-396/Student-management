@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Linking,
     Modal,
     Pressable,
     ScrollView,
@@ -18,6 +20,8 @@ import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { authApi } from "../../services/auth";
 import { principalApi } from "../../services/principal";
+import { subjectsApi, type Subject } from "../../services/subjects";
+import { useAuthStore } from "../../store/auth-store";
 import type { SectionResponse } from "../../types/principal";
 import {
     BottomSheet,
@@ -66,15 +70,15 @@ function SettingsRow({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export function SettingsScreen() {
+  const { currentUser } = useAuthStore();
+  const authSchoolName = currentUser?.school.name?.trim() || "School";
   const [attFreq, setAttFreq] = useState<"once" | "twice">("twice");
   const [whatsapp, setWhatsapp] = useState(true);
   const [parentQuery, setParentQuery] = useState(true);
   const [showLogout, setShowLogout] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
 
-  // School edit
-  const [showEditSchool, setShowEditSchool] = useState(false);
-  const [schoolName, setSchoolName] = useState("Delhi Public School");
+  const [schoolName, setSchoolName] = useState(authSchoolName);
   const [schoolUrl, setSchoolUrl] = useState("dps.schoolapp.in");
 
   // Student onboarding
@@ -86,17 +90,24 @@ export function SettingsScreen() {
   const [parentMobile, setParentMobile] = useState("");
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentSuccess, setStudentSuccess] = useState(false);
+  const [uploadingStudentsCsv, setUploadingStudentsCsv] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState("");
 
   // Teacher onboarding
   const [showTeacherSheet, setShowTeacherSheet] = useState(false);
   const [teacherName, setTeacherName] = useState("");
   const [teacherMobile, setTeacherMobile] = useState("");
-  const [teacherSubject, setTeacherSubject] = useState("");
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherSuccess, setTeacherSuccess] = useState(false);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [sections, setSections] = useState<SectionResponse[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
+  const [uploadingTeachersCsv, setUploadingTeachersCsv] = useState(false);
+  const [teacherUploadStatusText, setTeacherUploadStatusText] = useState("");
+  const [teacherErrorReportUrl, setTeacherErrorReportUrl] = useState<string | null>(null);
 
   // ── Load config on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -112,19 +123,47 @@ export function SettingsScreen() {
       .finally(() => setLoadingConfig(false));
   }, []);
 
+  useEffect(() => {
+    setSchoolName(authSchoolName);
+  }, [authSchoolName]);
+
   // ── Load sections when teacher sheet opens ────────────────────────────────
   useEffect(() => {
     if (!showTeacherSheet) return;
     setLoadingSections(true);
+    setLoadingSubjects(true);
+    setTeacherUploadStatusText("");
+    setTeacherErrorReportUrl(null);
     principalApi
       .getSections()
       .then((data) => setSections(data.results))
       .catch(() => {})
       .finally(() => setLoadingSections(false));
+    subjectsApi
+      .getAll()
+      .then((data) => setSubjects(data.results))
+      .catch(() => {})
+      .finally(() => setLoadingSubjects(false));
   }, [showTeacherSheet]);
 
   if (loadingConfig) {
     return <LoadingScreen label="Loading school settings..." />;
+  }
+
+  function resetTeacherForm() {
+    setTeacherName("");
+    setTeacherMobile("");
+    setSelectedSubject(null);
+    setSelectedSectionIds([]);
+    setTeacherSuccess(false);
+    setTeacherUploadStatusText("");
+    setTeacherErrorReportUrl(null);
+  }
+
+  function closeTeacherSheet() {
+    if (addingTeacher || uploadingTeachersCsv) return;
+    resetTeacherForm();
+    setShowTeacherSheet(false);
   }
 
   // ── Toggle handlers (fire PATCH immediately) ──────────────────────────────
@@ -152,11 +191,16 @@ export function SettingsScreen() {
 
   // ── Teacher onboarding ────────────────────────────────────────────────────
   async function handleAddTeacher() {
-    if (!teacherName || !teacherMobile) {
-      Alert.alert("Missing fields", "Teacher name and mobile are required.");
+    if (!teacherName || !teacherMobile || !selectedSubject) {
+      Alert.alert(
+        "Missing fields",
+        "Teacher name, mobile number, and subject are required.",
+      );
       return;
     }
     setAddingTeacher(true);
+    setTeacherUploadStatusText("");
+    setTeacherErrorReportUrl(null);
     try {
       const username =
         teacherName.toLowerCase().replace(/\s+/g, ".") + ".teacher";
@@ -165,16 +209,12 @@ export function SettingsScreen() {
         mobile_number: teacherMobile,
         username,
         password: "Welcome@123",
-        primary_subject_id: "", // ⚠ placeholder — needs subject picker API
-        assigned_section_ids: selectedSectionIds, // populated from sections API
+        primary_subject_id: selectedSubject.id,
+        assigned_section_ids: selectedSectionIds,
       });
       setTeacherSuccess(true);
       setTimeout(() => {
-        setTeacherSuccess(false);
-        setTeacherName("");
-        setTeacherMobile("");
-        setTeacherSubject("");
-        setSelectedSectionIds([]);
+        resetTeacherForm();
         setShowTeacherSheet(false);
       }, 1500);
     } catch (err: any) {
@@ -184,6 +224,38 @@ export function SettingsScreen() {
       );
     } finally {
       setAddingTeacher(false);
+    }
+  }
+
+  async function handleUploadTeacherCsv() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/comma-separated-values", "application/csv"],
+        multiple: false,
+      });
+
+      if (result.canceled || result.assets.length === 0) return;
+
+      const asset = result.assets[0];
+      const formData = new FormData();
+      formData.append("csv_file", {
+        uri: asset.uri,
+        name: asset.name || "teachers.csv",
+        type: asset.mimeType || "text/csv",
+      } as unknown as Blob);
+
+      setUploadingTeachersCsv(true);
+      setTeacherSuccess(false);
+      setTeacherUploadStatusText("Uploading CSV...");
+      setTeacherErrorReportUrl(null);
+      const batch = await principalApi.bulkUploadTeachers(formData);
+      setTeacherUploadStatusText("Processing CSV...");
+      pollBatchStatus(batch.batch_id, "teacher", "csv");
+    } catch (err: any) {
+      Alert.alert("Error", err.details ?? "Upload failed. Please try again.");
+      setTeacherUploadStatusText("");
+      setTeacherErrorReportUrl(null);
+      setUploadingTeachersCsv(false);
     }
   }
 
@@ -210,41 +282,133 @@ export function SettingsScreen() {
       formData.append("csv_file", blob as any, "student.csv");
 
       const batch = await principalApi.bulkUploadStudents(formData);
-      pollBatchStatus(batch.batch_id);
+      pollBatchStatus(batch.batch_id, "student", "single");
     } catch (err: any) {
       Alert.alert("Error", err.details ?? "Upload failed. Please try again.");
       setAddingStudent(false);
     }
   }
 
-  function pollBatchStatus(batchId: string) {
+  async function handleUploadStudentCsv() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/comma-separated-values", "application/csv"],
+        multiple: false,
+      });
+
+      if (result.canceled || result.assets.length === 0) return;
+
+      const asset = result.assets[0];
+      const formData = new FormData();
+      formData.append("csv_file", {
+        uri: asset.uri,
+        name: asset.name || "students.csv",
+        type: asset.mimeType || "text/csv",
+      } as unknown as Blob);
+
+      setUploadingStudentsCsv(true);
+      setUploadStatusText("Uploading CSV...");
+      const batch = await principalApi.bulkUploadStudents(formData);
+      setUploadStatusText("Processing CSV...");
+      pollBatchStatus(batch.batch_id, "student", "csv");
+    } catch (err: any) {
+      Alert.alert("Error", err.details ?? "Upload failed. Please try again.");
+      setUploadStatusText("");
+      setUploadingStudentsCsv(false);
+    }
+  }
+
+  function pollBatchStatus(
+    batchId: string,
+    entity: "student" | "teacher",
+    source: "single" | "csv",
+  ) {
+    const getStatus =
+      entity === "student"
+        ? principalApi.getBulkUploadStatus
+        : principalApi.getTeacherBulkUploadStatus;
     const interval = setInterval(async () => {
       try {
-        const status = await principalApi.getBulkUploadStatus(batchId);
+        const status = await getStatus(batchId);
         if (status.status === "COMPLETED" || status.status === "FAILED") {
           clearInterval(interval);
-          setAddingStudent(false);
+          if (entity === "student") {
+            if (source === "single") setAddingStudent(false);
+            if (source === "csv") {
+              setUploadingStudentsCsv(false);
+              setUploadStatusText("");
+            }
+          } else {
+            if (source === "single") setAddingTeacher(false);
+            if (source === "csv") {
+              setUploadingTeachersCsv(false);
+            }
+          }
+
           if (status.status === "COMPLETED") {
-            setStudentSuccess(true);
-            setTimeout(() => {
-              setStudentSuccess(false);
-              setStudentName("");
-              setStudentClass("");
-              setStudentSection("");
-              setParentName("");
-              setParentMobile("");
-              setShowStudentSheet(false);
-            }, 1500);
+            if (entity === "student") {
+              setStudentSuccess(true);
+              if (status.error_count > 0) {
+                Alert.alert(
+                  "Upload completed with errors",
+                  `${status.success_count} rows saved. ${status.error_count} rows had errors.`,
+                );
+              }
+              setTimeout(() => {
+                setStudentSuccess(false);
+                setStudentName("");
+                setStudentClass("");
+                setStudentSection("");
+                setParentName("");
+                setParentMobile("");
+                setShowStudentSheet(false);
+              }, 1500);
+            } else {
+              setTeacherErrorReportUrl(status.error_report_url ?? null);
+              setTeacherUploadStatusText(
+                status.error_count > 0
+                  ? `${status.success_count} teachers uploaded. ${status.error_count} rows need review.`
+                  : `${status.success_count} teachers uploaded successfully.`,
+              );
+              if (source === "single") {
+                setTeacherSuccess(true);
+                setTimeout(() => {
+                  resetTeacherForm();
+                  setShowTeacherSheet(false);
+                }, 1500);
+              } else if (status.error_count > 0) {
+                Alert.alert(
+                  "Upload completed with errors",
+                  `${status.success_count} teachers uploaded. ${status.error_count} rows had errors.`,
+                );
+              }
+            }
           } else {
             Alert.alert(
               "Upload failed",
               `${status.error_count} rows had errors.`,
             );
+            if (entity === "teacher") {
+              setTeacherUploadStatusText("Upload failed. Review the CSV and try again.");
+              setTeacherErrorReportUrl(status.error_report_url ?? null);
+            }
           }
         }
       } catch {
         clearInterval(interval);
-        setAddingStudent(false);
+        if (entity === "student") {
+          if (source === "single") setAddingStudent(false);
+          if (source === "csv") {
+            setUploadingStudentsCsv(false);
+            setUploadStatusText("");
+          }
+        } else {
+          if (source === "single") setAddingTeacher(false);
+          if (source === "csv") {
+            setUploadingTeachersCsv(false);
+            setTeacherUploadStatusText("");
+          }
+        }
       }
     }, 2000);
   }
@@ -272,12 +436,6 @@ export function SettingsScreen() {
             <Text style={styles.schoolName}>{schoolName}</Text>
             <Text style={styles.schoolUrl}>{schoolUrl}</Text>
           </View>
-          <Pressable
-            style={styles.editBtn}
-            onPress={() => setShowEditSchool(true)}
-          >
-            <Text style={styles.editBtnText}>Edit</Text>
-          </Pressable>
         </View>
 
         {/* Attendance */}
@@ -409,48 +567,6 @@ export function SettingsScreen() {
         </Pressable>
       </ScrollView>
 
-      {/* Edit School BottomSheet */}
-      <BottomSheet
-        visible={showEditSchool}
-        onClose={() => setShowEditSchool(false)}
-      >
-        <Text style={styles.sheetTitle}>Edit School Info</Text>
-
-        <Text style={styles.sheetFieldLabel}>School Name</Text>
-        <TextInput
-          style={styles.textInput}
-          value={schoolName}
-          onChangeText={setSchoolName}
-          placeholder="School name"
-          placeholderTextColor={colors.textMuted}
-        />
-
-        <Text style={styles.sheetFieldLabel}>School URL</Text>
-        <TextInput
-          style={styles.textInput}
-          value={schoolUrl}
-          onChangeText={setSchoolUrl}
-          placeholder="e.g. dps.schoolapp.in"
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-        />
-
-        <View style={styles.sheetBtns}>
-          <Pressable
-            style={styles.cancelBtn}
-            onPress={() => setShowEditSchool(false)}
-          >
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            style={styles.saveBtn}
-            onPress={() => setShowEditSchool(false)}
-          >
-            <Text style={styles.saveBtnText}>Save</Text>
-          </Pressable>
-        </View>
-      </BottomSheet>
-
       {/* Student Onboarding BottomSheet */}
       <BottomSheet
         visible={showStudentSheet}
@@ -466,15 +582,35 @@ export function SettingsScreen() {
           <Text style={styles.downloadLink}>Download Sample CSV</Text>
         </Pressable>
 
-        <Pressable style={styles.uploadBtn}>
-          <Ionicons
-            name="cloud-upload-outline"
-            size={18}
-            color={colors.surface}
-            style={{ marginRight: spacing.sm }}
-          />
-          <Text style={styles.uploadBtnText}>Upload CSV File</Text>
+        <Pressable
+          style={[
+            styles.uploadBtn,
+            (uploadingStudentsCsv || addingStudent) && styles.uploadBtnDisabled,
+          ]}
+          onPress={handleUploadStudentCsv}
+          disabled={uploadingStudentsCsv || addingStudent}
+        >
+          {uploadingStudentsCsv ? (
+            <ActivityIndicator
+              size="small"
+              color={colors.surface}
+              style={{ marginRight: spacing.sm }}
+            />
+          ) : (
+            <Ionicons
+              name="cloud-upload-outline"
+              size={18}
+              color={colors.surface}
+              style={{ marginRight: spacing.sm }}
+            />
+          )}
+          <Text style={styles.uploadBtnText}>
+            {uploadingStudentsCsv ? "Uploading..." : "Upload CSV File"}
+          </Text>
         </Pressable>
+        {uploadStatusText ? (
+          <Text style={styles.uploadStatusText}>{uploadStatusText}</Text>
+        ) : null}
 
         <View style={styles.dividerRow}>
           <View style={styles.dividerLine} />
@@ -557,9 +693,56 @@ export function SettingsScreen() {
       {/* Teacher Onboarding BottomSheet */}
       <BottomSheet
         visible={showTeacherSheet}
-        onClose={() => setShowTeacherSheet(false)}
+        onClose={closeTeacherSheet}
       >
         <Text style={styles.sheetTitle}>Add Teacher</Text>
+        <Text style={styles.sheetSubtext}>
+          Bulk upload CSV columns: name, phone_number, username, password,
+          primary_subject_id, assigned_section_ids.
+        </Text>
+
+        <Pressable
+          style={[
+            styles.uploadBtn,
+            (uploadingTeachersCsv || addingTeacher) && styles.uploadBtnDisabled,
+          ]}
+          onPress={handleUploadTeacherCsv}
+          disabled={uploadingTeachersCsv || addingTeacher}
+        >
+          {uploadingTeachersCsv ? (
+            <ActivityIndicator
+              size="small"
+              color={colors.surface}
+              style={{ marginRight: spacing.sm }}
+            />
+          ) : (
+            <Ionicons
+              name="cloud-upload-outline"
+              size={18}
+              color={colors.surface}
+              style={{ marginRight: spacing.sm }}
+            />
+          )}
+          <Text style={styles.uploadBtnText}>
+            {uploadingTeachersCsv ? "Uploading..." : "Upload Teacher CSV"}
+          </Text>
+        </Pressable>
+        {teacherUploadStatusText ? (
+          <Text style={styles.uploadStatusText}>{teacherUploadStatusText}</Text>
+        ) : null}
+        {teacherErrorReportUrl ? (
+          <Pressable onPress={() => Linking.openURL(teacherErrorReportUrl)}>
+            <Text style={styles.downloadLink}>Open Error Report</Text>
+          </Pressable>
+        ) : null}
+
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <Text style={styles.sheetSubheading}>Add Single Teacher</Text>
 
         <Text style={styles.sheetFieldLabel}>Teacher Name</Text>
         <TextInput
@@ -581,13 +764,43 @@ export function SettingsScreen() {
         />
 
         <Text style={styles.sheetFieldLabel}>Subject</Text>
-        <TextInput
-          style={styles.textInput}
-          value={teacherSubject}
-          onChangeText={setTeacherSubject}
-          placeholder="e.g. Mathematics"
-          placeholderTextColor={colors.textMuted}
-        />
+        {loadingSubjects ? (
+          <ActivityIndicator
+            color={colors.principal}
+            style={{ marginBottom: spacing.md }}
+          />
+        ) : subjects.length === 0 ? (
+          <Text style={[styles.sheetFieldLabel, { marginBottom: spacing.md }]}>
+            No subjects available
+          </Text>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subjectChips}
+            style={{ marginBottom: spacing.md }}
+          >
+            {subjects.map((subject) => {
+              const active = selectedSubject?.id === subject.id;
+              return (
+                <Pressable
+                  key={subject.id}
+                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  onPress={() => setSelectedSubject(subject)}
+                >
+                  <Text
+                    style={[
+                      styles.subjectChipText,
+                      active && styles.subjectChipTextActive,
+                    ]}
+                  >
+                    {subject.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
 
         <Text style={styles.sheetFieldLabel}>Assigned Sections</Text>
         {loadingSections ? (
@@ -632,9 +845,12 @@ export function SettingsScreen() {
           <Pressable
             style={[
               styles.saveBtn,
-              addingTeacher && { backgroundColor: colors.success },
+              (addingTeacher || uploadingTeachersCsv) && {
+                backgroundColor: colors.success,
+              },
             ]}
             onPress={handleAddTeacher}
+            disabled={addingTeacher || uploadingTeachersCsv}
           >
             <Text style={styles.saveBtnText}>
               {addingTeacher ? "Adding..." : "Add Teacher"}
@@ -704,18 +920,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: "monospace",
     marginTop: spacing.xs,
-  },
-  editBtn: {
-    borderWidth: 1.5,
-    borderColor: colors.principal,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-  },
-  editBtnText: {
-    ...(typography.caption as object),
-    fontWeight: "500",
-    color: colors.principal,
   },
   // Settings section
   section: {
@@ -870,9 +1074,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing.md,
   },
+  uploadBtnDisabled: {
+    opacity: 0.7,
+  },
   uploadBtnText: {
     ...(typography.h3 as object),
     fontWeight: "500",
+    color: colors.surface,
+  },
+  uploadStatusText: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  subjectChips: {
+    gap: spacing.sm,
+    paddingRight: spacing.sm,
+  },
+  subjectChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  subjectChipActive: {
+    borderColor: colors.principal,
+    backgroundColor: colors.principal,
+  },
+  subjectChipText: {
+    ...(typography.caption as object),
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
+  subjectChipTextActive: {
     color: colors.surface,
   },
   dividerRow: {

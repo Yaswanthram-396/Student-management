@@ -57,10 +57,7 @@ export default function PrincipalLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'Calendar',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

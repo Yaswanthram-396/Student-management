@@ -1,5 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
     Dimensions,
@@ -14,6 +14,7 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { principalApi } from "../../services/principal";
+import { useAuthStore } from "../../store/auth-store";
 import type { ClassAttendanceSummary } from "../../types/principal";
 import { HeaderBar, LoadingScreen } from "../shared";
 
@@ -51,9 +52,17 @@ const FALLBACK_ANNOUNCEMENTS: Announcement[] = [
 ];
 
 export function HomeScreen() {
+  const { currentUser } = useAuthStore();
   const [announcements, setAnnouncements] = useState<Announcement[]>(FALLBACK_ANNOUNCEMENTS);
   const [attendanceClasses, setAttendanceClasses] = useState<ClassAttendanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const schoolName = currentUser?.school.name?.trim() || "School";
+  const schoolInitials = schoolName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
@@ -104,15 +113,21 @@ export function HomeScreen() {
       <HeaderBar
         left={
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>DPS</Text>
+            <Text style={styles.logoText}>{schoolInitials || "SC"}</Text>
           </View>
         }
-        center={<Text style={styles.headerTitle}>Delhi Public School</Text>}
+        center={<Text style={styles.headerTitle}>{schoolName}</Text>}
         right={
-          <View>
-            <Ionicons name="notifications-outline" size={22} color={colors.textMuted} />
-            <View style={styles.notifDot} />
-          </View>
+          <Pressable
+            onPress={() => router.push("/(tabs)/principal/calendar")}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={22}
+              color={colors.textPrimary}
+            />
+          </Pressable>
         }
       />
 
@@ -196,12 +211,6 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   logoText: { ...(typography.label as object), color: colors.surface, fontWeight: "700" },
-  notifDot: {
-    position: "absolute", top: 0, right: 0,
-    width: 7, height: 7, borderRadius: 999,
-    backgroundColor: colors.danger,
-    borderWidth: 1.5, borderColor: colors.surface,
-  },
   listContent: { padding: spacing.lg, gap: spacing.lg },
   listHeader: { gap: spacing.lg },
   heatmapSection: { gap: spacing.sm },

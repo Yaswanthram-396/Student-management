@@ -7,6 +7,7 @@ import type {
   AnnouncementsListResponse,
   CalendarEventResponse,
   CalendarEventsListResponse,
+  DeleteSuccessResponse,
   ExamResponse,
   ResultsResponse,
   AnalyticsResponse,
@@ -52,6 +53,12 @@ export const principalApi = {
     assigned_section_ids?: string[];
   }) => apiRequest<TeacherResponse>('PATCH', `/principal/teachers/${id}/`, body),
 
+  bulkUploadTeachers: (formData: FormData) =>
+    apiRequest<BulkUploadBatch>('POST', '/principal/teachers/bulk-upload/', formData, true),
+
+  getTeacherBulkUploadStatus: (batchId: string) =>
+    apiRequest<BulkUploadBatch>('GET', `/principal/teachers/bulk-upload/${batchId}/`),
+
   // ── Student bulk upload ───────────────────────────────────────────────────────
   bulkUploadStudents: (formData: FormData) =>
     apiRequest<BulkUploadBatch>('POST', '/principal/students/bulk-upload/', formData, true),
@@ -90,7 +97,13 @@ export const principalApi = {
     visible_to: string[];
   }) => apiRequest<CalendarEventResponse>('POST', '/principal/calendar-events/', body),
 
-  getCalendarEvents: (params?: { event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT'; start_date?: string; end_date?: string }) => {
+  getCalendarEvents: (params?: {
+    event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT';
+    start_date?: string;
+    end_date?: string;
+    month?: number;
+    year?: number;
+  }) => {
     const qs = params
       ? '?' + new URLSearchParams(
           Object.entries(params)
@@ -100,6 +113,18 @@ export const principalApi = {
       : '';
     return apiRequest<CalendarEventsListResponse>('GET', `/calendar-events/${qs}`);
   },
+
+  updateCalendarEvent: (eventId: string, body: {
+    title?: string;
+    event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT';
+    start_date?: string;
+    end_date?: string;
+    description?: string;
+    visible_to?: string[];
+  }) => apiRequest<CalendarEventResponse>('PATCH', `/principal/calendar-events/${eventId}/`, body),
+
+  deleteCalendarEvent: (eventId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/calendar-events/${eventId}/`),
 
   // ── Sections ──────────────────────────────────────────────────────────────────
   getSections: (params?: { class_id?: string }) => {

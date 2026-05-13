@@ -21,7 +21,7 @@ export interface TeacherResponse {
   user: { id: string; username: string; role: string };
   name: string;
   mobile_number: string;
-  primary_subject: { id: string; name: string };
+  primary_subject?: { id: string; name: string } | null;
   assigned_sections: TeacherSection[];
 }
 
@@ -70,8 +70,14 @@ export interface CalendarEventResponse {
 }
 
 export interface CalendarEventsListResponse {
+  today: string;
   count: number;
   results: CalendarEventResponse[];
+}
+
+export interface DeleteSuccessResponse {
+  success: boolean;
+  message: string;
 }
 
 // Exams
