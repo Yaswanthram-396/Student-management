@@ -31,7 +31,17 @@
       "Bash(git commit -m 'feat: add student search to attendance screen *)",
       "Bash(git commit -m 'fix: use display:none to fully remove hidden attendance tab space *)",
       "Bash(git commit -m 'fix: replace tab options with custom tab bar to properly hide attendance *)",
-      "Bash(git commit -m 'fix: proper file download using expo-file-system + expo-sharing *)"
+      "Bash(git commit -m 'fix: proper file download using expo-file-system + expo-sharing *)",
+      "Bash(git commit -m 'fix: use expo-file-system/legacy to suppress deprecation warning *)",
+      "Bash(git commit -m 'fix: save file directly to device folder on Android via SAF *)",
+      "Bash(git commit -m 'fix: add auth header to download + show real error message *)",
+      "Bash(git commit -m 'revert: open file in browser via Linking.openURL *)",
+      "Bash(git commit -m 'chore: rename Download button to View with eye icon *)",
+      "Bash(git commit -m 'fix: show full name in greeting instead of first word only *)",
+      "Bash(git commit -m 'feat: hamburger icon + right-to-left panel animation on sections screen *)",
+      "Bash(git commit -m 'feat: profile picture lightbox in menu panel *)",
+      "WebFetch(domain:docs.expo.dev)",
+      "Bash(git commit -m 'fix: redesign close query as outlined red button in chat header *)"
     ]
   }
 }

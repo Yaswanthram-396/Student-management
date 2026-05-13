@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SectionPickerBar } from "../../../components/teacher-dashboard/SectionPickerBar";
 import { useTeacherStore } from "../../../store/teacher-store";
@@ -10,6 +10,7 @@ const ACCENT = "#185FA5";
 
 const TAB_ICONS: Record<string, { name: string; label: string }> = {
   index:      { name: "home-outline",           label: "Home"      },
+  results:    { name: "bar-chart-outline",      label: "Results"   },
   attendance: { name: "checkmark-circle-outline",label: "Attendance"},
   homework:   { name: "book-outline",            label: "Homework"  },
   content:    { name: "document-outline",        label: "Materials" },
@@ -30,34 +31,36 @@ function TeacherTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View style={[styles.tabBar, { paddingBottom: insets.bottom || 8 }]}>
-      {visibleRoutes.map(route => {
-        const isFocused = state.routes[state.index]?.key === route.key;
-        const cfg = TAB_ICONS[route.name] ?? { name: "ellipse-outline", label: route.name };
-        const color = isFocused ? ACCENT : "#AAAAAA";
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollContainer}>
+        {visibleRoutes.map(route => {
+          const isFocused = state.routes[state.index]?.key === route.key;
+          const cfg = TAB_ICONS[route.name] ?? { name: "ellipse-outline", label: route.name };
+          const color = isFocused ? ACCENT : "#AAAAAA";
 
-        function onPress() {
-          const event = navigation.emit({
-            type: "tabPress",
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
+          function onPress() {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
           }
-        }
 
-        return (
-          <Pressable
-            key={route.key}
-            style={({ pressed }) => [styles.tabItem, pressed && styles.tabItemPressed]}
-            onPress={onPress}
-            android_ripple={{ color: "#EBF2FB", borderless: true, radius: 28 }}
-          >
-            <Ionicons name={cfg.name as any} size={22} color={color} />
-            <Text style={[styles.tabLabel, { color }]}>{cfg.label}</Text>
-          </Pressable>
-        );
-      })}
+          return (
+            <Pressable
+              key={route.key}
+              style={({ pressed }) => [styles.tabItem, pressed && styles.tabItemPressed]}
+              onPress={onPress}
+              android_ripple={{ color: "#EBF2FB", borderless: true, radius: 28 }}
+            >
+              <Ionicons name={cfg.name as any} size={22} color={color} />
+              <Text style={[styles.tabLabel, { color }]}>{cfg.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -71,6 +74,7 @@ export default function TeacherLayout() {
         screenOptions={{ headerShown: false }}
       >
         <Tabs.Screen name="index" />
+        <Tabs.Screen name="results" />
         <Tabs.Screen name="attendance" />
         <Tabs.Screen name="homework" />
         <Tabs.Screen name="content" />
@@ -89,8 +93,13 @@ const styles = StyleSheet.create({
     borderTopColor: "#EEEEEE",
     paddingTop: 6,
   },
+  tabScrollContainer: {
+    flexGrow: 1,
+    justifyContent: "space-around",
+    paddingHorizontal: 8,
+  },
   tabItem: {
-    flex: 1,
+    minWidth: 70,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 4,
