@@ -1,6 +1,6 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,61 +9,378 @@ import {
   StyleSheet,
   Text,
   View,
-  Dimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  fetchTeacherExams,
   fetchTeacherExamOverview,
+  fetchTeacherExams,
   type Exam,
   type ExamOverview,
-} from '../../../services/teacher-results';
+  type SectionAvg,
+  type SubjectAvg,
+} from "../../../services/teacher-results";
 
-const ACCENT = '#185FA5';
-const GREEN = '#1D9E75';
-const AMBER = '#D97706';
-const PURPLE = '#8B5CF6';
-const RED = '#EF4444';
-
-const PROGRESS_COLORS = [ACCENT, GREEN, PURPLE, AMBER, RED];
+const ACCENT = "#185FA5";
+const GREEN = "#16825D";
+const AMBER = "#C76A00";
+const RED = "#D92D20";
+const INK = "#101828";
+const MUTED = "#667085";
+const LINE = "#EAECF0";
+const BG = "#F6F8FB";
+const SURFACE = "#FFFFFF";
+const PROGRESS_COLORS = [ACCENT, GREEN, "#7A5AF8", AMBER, "#0E9384"];
 
 function formatDate(iso: string) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   });
 }
 
-function getRankIconColor(rank: number) {
-  if (rank === 1) return '#F59E0B'; // Gold
-  if (rank === 2) return '#94A3B8'; // Silver
-  if (rank === 3) return '#D97706'; // Bronze
-  return '#E2E8F0'; // Default gray
+function getOverallAverage(subjects: SubjectAvg[]) {
+  if (!subjects.length) return 0;
+  const ratioSum = subjects.reduce((sum, subject) => sum + subject.avg / subject.max_marks, 0);
+  return (ratioSum / subjects.length) * 100;
+}
+
+function getExamStatusMeta(status: Exam["analytics_status"]) {
+  switch (status) {
+    case "DONE":
+      return { label: "Ready", color: GREEN, bg: "#EAF7F1", icon: "checkmark-circle" };
+    case "PROCESSING":
+      return { label: "Processing", color: AMBER, bg: "#FFF5E6", icon: "time-outline" };
+    case "PENDING":
+      return { label: "Pending", color: AMBER, bg: "#FFF5E6", icon: "hourglass-outline" };
+    case "CREATED":
+      return { label: "Waiting for upload", color: "#475467", bg: "#F2F4F7", icon: "cloud-upload-outline" };
+    case "FAILED":
+      return { label: "Failed", color: RED, bg: "#FEEDEB", icon: "alert-circle-outline" };
+  }
+}
+
+function safeParam(value: string) {
+  return encodeURIComponent(value);
+}
+
+function SkeletonBlock({ style }: { style?: object }) {
+  return <View style={[styles.skeletonBlock, style]} />;
+}
+
+function LoadingState() {
+  return (
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <View>
+            <SkeletonBlock style={styles.skeletonTitle} />
+            <SkeletonBlock style={styles.skeletonSubtitle} />
+          </View>
+          <SkeletonBlock style={styles.skeletonIcon} />
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examRail}>
+          {[0, 1, 2].map((item) => (
+            <View key={item} style={styles.examCardSkeleton}>
+              <SkeletonBlock style={{ width: 118, height: 16 }} />
+              <SkeletonBlock style={{ width: 86, height: 12 }} />
+              <SkeletonBlock style={{ width: 92, height: 24, borderRadius: 12 }} />
+            </View>
+          ))}
+        </ScrollView>
+        <View style={styles.heroCard}>
+          <View style={styles.loadingHero}>
+            <ActivityIndicator color="#FFFFFF" />
+            <Text style={styles.loadingText}>Preparing analytics preview</Text>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function FailureState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <View style={styles.failureWrap}>
+        <View style={styles.failureIcon}>
+          <Ionicons name="cloud-offline-outline" size={34} color={RED} />
+        </View>
+        <Text style={styles.failureTitle}>Analytics could not load</Text>
+        <Text style={styles.failureText}>Try again to reload the exam dashboard.</Text>
+        <Pressable style={styles.primaryButton} onPress={onRetry}>
+          <Ionicons name="refresh-outline" size={17} color="#FFFFFF" />
+          <Text style={styles.primaryButtonText}>Try Again</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function StatusPill({ status }: { status: Exam["analytics_status"] }) {
+  const meta = getExamStatusMeta(status);
+  return (
+    <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+      <Ionicons name={meta.icon as any} size={13} color={meta.color} />
+      <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+    </View>
+  );
+}
+
+function ExamCard({ exam, selected, onPress }: { exam: Exam; selected: boolean; onPress: () => void }) {
+  const ready = exam.analytics_status === "DONE";
+
+  return (
+    <Pressable
+      onPress={ready ? onPress : undefined}
+      style={({ pressed }) => [
+        styles.examCard,
+        selected && styles.examCardSelected,
+        !ready && styles.examCardDisabled,
+        pressed && ready && styles.pressed,
+      ]}
+    >
+      <View style={styles.examCardTop}>
+        <View style={styles.examTypeIcon}>
+          <Ionicons name={exam.type === "CLASS" ? "school-outline" : "people-outline"} size={18} color={ACCENT} />
+        </View>
+        <Text style={styles.examTypeText}>{exam.type}</Text>
+      </View>
+      <Text style={styles.examName} numberOfLines={2}>{exam.exam_name}</Text>
+      <Text style={styles.examDate}>{formatDate(exam.exam_date)}</Text>
+      <StatusPill status={exam.analytics_status} />
+    </Pressable>
+  );
+}
+
+function HeroOverview({ overview }: { overview: ExamOverview }) {
+  const overallAvg = getOverallAverage(overview.class_avgs);
+  const weakestSubject = [...overview.class_avgs].sort(
+    (a, b) => a.avg / a.max_marks - b.avg / b.max_marks
+  )[0];
+
+  return (
+    <View style={styles.heroCard}>
+      <View style={styles.heroTop}>
+        <View style={styles.heroIcon}>
+          <Ionicons name="analytics-outline" size={24} color="#FFFFFF" />
+        </View>
+        <View style={styles.heroTitleWrap}>
+          <Text style={styles.heroEyebrow}>Exam overview</Text>
+          <Text style={styles.heroTitle}>{overview.exam.exam_name}</Text>
+          <Text style={styles.heroMeta}>{formatDate(overview.exam.exam_date)} - {overview.exam.type}</Text>
+        </View>
+      </View>
+      <View style={styles.heroStats}>
+        <View style={styles.heroStat}>
+          <Text style={styles.heroStatValue}>{overallAvg.toFixed(0)}%</Text>
+          <Text style={styles.heroStatLabel}>Class avg</Text>
+        </View>
+        <View style={styles.heroDivider} />
+        <View style={styles.heroStat}>
+          <Text style={styles.heroStatValue}>{overview.sections.length}</Text>
+          <Text style={styles.heroStatLabel}>Sections</Text>
+        </View>
+        <View style={styles.heroDivider} />
+        <View style={styles.heroStat}>
+          <Text style={styles.heroStatValue}>{weakestSubject?.subject_name ?? "NA"}</Text>
+          <Text style={styles.heroStatLabel}>Needs focus</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function SectionPerformance({
+  exam,
+  sections,
+}: {
+  exam: Exam;
+  sections: SectionAvg[];
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const visibleSections = showAll ? sections : sections.slice(0, 4);
+  const hasMore = sections.length > visibleSections.length;
+
+  function openSection(section: SectionAvg) {
+    router.push(
+      `/teacher-section-analytics?examId=${safeParam(exam.id)}&examName=${safeParam(exam.exam_name)}&sectionId=${safeParam(section.section_id)}&sectionName=${safeParam(section.section_name)}&sectionAvg=${section.avg}` as any
+    );
+  }
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTitleRow}>
+        <View style={styles.cardTitleIcon}>
+          <Ionicons name="grid-outline" size={18} color={ACCENT} />
+        </View>
+        <View style={styles.cardTitleText}>
+          <Text style={styles.cardTitle}>Section Performance</Text>
+          <Text style={styles.cardSubtitle}>Open a section for subject comparison</Text>
+        </View>
+        {sections.length > 4 && (
+          <Pressable style={styles.textButton} onPress={() => setShowAll((value) => !value)}>
+            <Text style={styles.textButtonText}>{showAll ? "Show less" : "View all"}</Text>
+          </Pressable>
+        )}
+      </View>
+
+      <View style={styles.sectionGrid}>
+        {visibleSections.map((section) => (
+          <Pressable
+            key={section.section_id}
+            onPress={() => openSection(section)}
+            style={({ pressed }) => [styles.sectionBox, pressed && styles.pressed]}
+          >
+            <View style={styles.sectionBoxTop}>
+              <Text style={styles.sectionName}>Section {section.section_name}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+            </View>
+            <Text style={styles.sectionAvg}>{section.avg.toFixed(1)}%</Text>
+            <Text style={styles.sectionHint}>average score</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {hasMore && (
+        <Pressable style={styles.viewMoreButton} onPress={() => setShowAll(true)}>
+          <Text style={styles.viewMoreText}>View {sections.length - visibleSections.length} more sections</Text>
+          <Ionicons name="chevron-down" size={16} color={ACCENT} />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function SubjectAverages({ exam, subjects }: { exam: Exam; subjects: SubjectAvg[] }) {
+  function openSubject(subject: SubjectAvg) {
+    router.push(
+      `/teacher-question-analysis?examId=${safeParam(exam.id)}&examName=${safeParam(exam.exam_name)}&subjectId=${safeParam(subject.subject_id)}&subjectName=${safeParam(subject.subject_name)}` as any
+    );
+  }
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTitleRow}>
+        <View style={styles.cardTitleIcon}>
+          <Ionicons name="bar-chart-outline" size={18} color={ACCENT} />
+        </View>
+        <View>
+          <Text style={styles.cardTitle}>Subject Averages</Text>
+          <Text style={styles.cardSubtitle}>Open class-level question analysis</Text>
+        </View>
+      </View>
+      <View style={styles.subjectList}>
+        {subjects.map((subject, index) => {
+          const percent = (subject.avg / subject.max_marks) * 100;
+          const color = PROGRESS_COLORS[index % PROGRESS_COLORS.length];
+
+          return (
+            <Pressable
+              key={subject.subject_id}
+              onPress={() => openSubject(subject)}
+              style={({ pressed }) => [styles.subjectRow, pressed && styles.pressed]}
+            >
+              <View style={styles.subjectHeader}>
+                <View style={styles.subjectNameRow}>
+                  <View style={[styles.subjectDot, { backgroundColor: color }]} />
+                  <Text style={styles.subjectName}>{subject.subject_name}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+              </View>
+              <View style={styles.subjectMetricRow}>
+                <Text style={styles.subjectMarks}>
+                  <Text style={styles.subjectMarksStrong}>{subject.avg.toFixed(1)}</Text> / {subject.max_marks}
+                </Text>
+                <Text style={styles.subjectPercent}>{percent.toFixed(0)}%</Text>
+              </View>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${Math.min(percent, 100)}%`, backgroundColor: color }]} />
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function TopStudents({ students }: { students: ExamOverview["top_students"] }) {
+  function getRankColor(rank: number) {
+    if (rank === 1) return "#EAAA08";
+    if (rank === 2) return "#98A2B3";
+    if (rank === 3) return "#B54708";
+    return "#D0D5DD";
+  }
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTitleRow}>
+        <View style={styles.cardTitleIcon}>
+          <Ionicons name="trophy-outline" size={18} color={ACCENT} />
+        </View>
+        <View>
+          <Text style={styles.cardTitle}>Top Students</Text>
+          <Text style={styles.cardSubtitle}>Ranked by total marks</Text>
+        </View>
+      </View>
+      {students.map((student, index) => (
+        <View key={student.student_id} style={[styles.studentRow, index < students.length - 1 && styles.rowBorder]}>
+          <View style={[styles.rankBadge, { backgroundColor: student.rank <= 3 ? getRankColor(student.rank) : "#F2F4F7" }]}>
+            {student.rank <= 3 ? (
+              <Ionicons name="trophy" size={15} color="#FFFFFF" />
+            ) : (
+              <Text style={styles.rankNumber}>{student.rank}</Text>
+            )}
+          </View>
+          <View style={styles.studentInfo}>
+            <Text style={styles.studentName}>{student.name}</Text>
+            <Text style={styles.studentId}>{student.student_ref_id}</Text>
+          </View>
+          <View style={styles.studentMarks}>
+            <Text style={styles.studentMarksValue}>{student.total_marks}</Text>
+            <Text style={styles.studentMarksLabel}>marks</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 export default function ResultsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
-
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const [overview, setOverview] = useState<ExamOverview | null>(null);
-  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  const readyExams = useMemo(() => exams.filter((exam) => exam.analytics_status === "DONE"), [exams]);
+
+  const loadOverview = useCallback(async (examId: string) => {
+    try {
+      const data = await fetchTeacherExamOverview(examId);
+      setOverview(data);
+    } catch (err) {
+      console.error(err);
+      setOverview(null);
+      setError(true);
+    }
+  }, []);
 
   const loadExams = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
+    setRefreshing(isRefresh);
     setError(false);
+
     try {
       const data = await fetchTeacherExams();
-      // Sort exams by date descending
-      const sorted = data.sort((a, b) => new Date(b.exam_date).getTime() - new Date(a.exam_date).getTime());
+      const sorted = [...data].sort((a, b) => new Date(b.exam_date).getTime() - new Date(a.exam_date).getTime());
       setExams(sorted);
-      if (sorted.length > 0 && !isRefresh) {
-        setSelectedExamId(sorted[0].id);
-      }
+      const nextExamId = selectedExamId ?? sorted.find((exam) => exam.analytics_status === "DONE")?.id ?? null;
+      setSelectedExamId(nextExamId);
+      if (nextExamId) await loadOverview(nextExamId);
     } catch (err) {
       console.error(err);
       setError(true);
@@ -71,20 +388,7 @@ export default function ResultsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
-
-  const loadOverview = useCallback(async (id: string) => {
-    setOverviewLoading(true);
-    try {
-      const data = await fetchTeacherExamOverview(id);
-      setOverview(data);
-    } catch (err) {
-      console.error(err);
-      setOverview(null);
-    } finally {
-      setOverviewLoading(false);
-    }
-  }, []);
+  }, [loadOverview, selectedExamId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,447 +396,294 @@ export default function ResultsScreen() {
     }, [loadExams])
   );
 
-  React.useEffect(() => {
-    if (selectedExamId) {
-      loadOverview(selectedExamId);
-    }
-  }, [selectedExamId, loadOverview]);
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={ACCENT} />
-          <Text style={styles.loadingText}>Loading exams…</Text>
-        </View>
-      </SafeAreaView>
-    );
+  async function selectExam(examId: string) {
+    setSelectedExamId(examId);
+    await loadOverview(examId);
   }
 
-  if (error) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
-        <View style={styles.centered}>
-          <Ionicons name="cloud-offline-outline" size={48} color="#CCCCCC" />
-          <Text style={styles.errorTitle}>Couldn't load results</Text>
-          <Pressable style={styles.retryBtn} onPress={() => loadExams()}>
-            <Ionicons name="refresh-outline" size={15} color="#FFFFFF" />
-            <Text style={styles.retryText}>Try Again</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Calculate overall class avg from subject avgs for the overview card
-  const overallAvg = overview?.class_avgs?.length
-    ? overview.class_avgs.reduce((acc, curr) => acc + (curr.avg / curr.max_marks), 0) / overview.class_avgs.length * 100
-    : 0;
+  if (loading) return <LoadingState />;
+  if (error) return <FailureState onRetry={() => loadExams()} />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadExams(true);
-            }}
+            onRefresh={() => loadExams(true)}
             tintColor={ACCENT}
             colors={[ACCENT]}
           />
         }
       >
-        {/* ── Header ── */}
         <View style={styles.headerRow}>
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.pageTitle}>Exam Results</Text>
-            <Text style={styles.pageSubtitle}>Analytics for your classes</Text>
+            <Text style={styles.pageSubtitle}>Analytics for assigned classes and sections</Text>
           </View>
-          <View style={styles.headerIconWrap}>
+          <View style={styles.headerIcon}>
             <Ionicons name="bar-chart" size={24} color={ACCENT} />
           </View>
         </View>
 
-        {/* ── Exams Horizontal List ── */}
-        {exams.length > 0 ? (
-          <View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.examListContainer}
-            >
-              {exams.map((exam) => {
-                const isSelected = exam.id === selectedExamId;
-                const isPending = exam.analytics_status === 'PENDING' || exam.analytics_status === 'PROCESSING';
-                return (
-                  <Pressable
-                    key={exam.id}
-                    style={[
-                      styles.examTabCard,
-                      isSelected && styles.examTabCardSelected,
-                    ]}
-                    onPress={() => setSelectedExamId(exam.id)}
-                  >
-                    <Text style={[styles.examTabTitle, isSelected && styles.examTabTitleSelected]}>
-                      {exam.exam_name}
-                    </Text>
-                    <Text style={[styles.examTabDate, isSelected && styles.examTabDateSelected]}>
-                      {formatDate(exam.exam_date)}
-                    </Text>
-                    {isPending && (
-                      <View style={styles.pendingBadge}>
-                        <Text style={styles.pendingBadgeText}>Pending</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="document-text-outline" size={48} color="#CCCCCC" />
-            <Text style={styles.emptyTitle}>No Exams Found</Text>
-            <Text style={styles.emptyBody}>There are no exam results available for your classes yet.</Text>
-          </View>
-        )}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examRail}>
+          {exams.map((exam) => (
+            <ExamCard
+              key={exam.id}
+              exam={exam}
+              selected={exam.id === selectedExamId}
+              onPress={() => selectExam(exam.id)}
+            />
+          ))}
+        </ScrollView>
 
-        {/* ── Selected Exam Overview ── */}
-        {selectedExamId && overviewLoading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="small" color={ACCENT} />
+        {!readyExams.length ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="document-text-outline" size={42} color="#98A2B3" />
+            <Text style={styles.emptyTitle}>No completed analytics yet</Text>
+            <Text style={styles.emptyText}>Completed exams will appear here when processing is finished.</Text>
           </View>
         ) : overview ? (
-          <View style={styles.overviewContainer}>
-            {/* Main Stats Card */}
-            <View style={styles.card}>
-              <View style={styles.examMainInfoRow}>
-                <View style={styles.examIconWrap}>
-                  <Ionicons name="school-outline" size={24} color={ACCENT} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.examMainTitle}>{overview.exam.exam_name}</Text>
-                  <Text style={styles.examMainDate}>{formatDate(overview.exam.exam_date)}</Text>
-                </View>
-                <View style={styles.typeBadge}>
-                  <Text style={styles.typeBadgeText}>{overview.exam.type}</Text>
-                </View>
-              </View>
-
-              <View style={styles.divider} />
-
-              <View style={styles.statsRow}>
-                <View style={styles.statCol}>
-                  <Text style={styles.statValue}>{overallAvg.toFixed(0)}%</Text>
-                  <Text style={styles.statLabel}>Class Avg</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statCol}>
-                  <Text style={styles.statValue}>{overview.sections?.length || 0}</Text>
-                  <Text style={styles.statLabel}>Sections</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statCol}>
-                  <Text style={styles.statValue}>{overview.top_students?.length || 0}</Text>
-                  <Text style={styles.statLabel}>Top Ranked</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Section Performance */}
-            {overview.sections && overview.sections.length > 0 && (
-              <View style={styles.card}>
-                <View style={styles.cardTitleRow}>
-                  <Ionicons name="grid-outline" size={20} color={ACCENT} />
-                  <Text style={styles.cardTitle}>Section Performance</Text>
-                </View>
-                <View style={styles.sectionGrid}>
-                  {overview.sections.map((sec) => (
-                    <View key={sec.section_id} style={styles.sectionBox}>
-                      <Text style={styles.sectionBoxName}>Section {sec.section_name}</Text>
-                      <Text style={styles.sectionBoxAvg}>{sec.avg.toFixed(1)}%</Text>
-                      <Text style={styles.sectionBoxLabel}>class avg</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Subject Averages */}
-            {overview.class_avgs && overview.class_avgs.length > 0 && (
-              <View style={styles.card}>
-                <View style={styles.cardTitleRow}>
-                  <Ionicons name="bar-chart-outline" size={20} color={ACCENT} />
-                  <Text style={styles.cardTitle}>Subject Averages</Text>
-                </View>
-                <View style={styles.subjectList}>
-                  {overview.class_avgs.map((subj, idx) => {
-                    const percentage = (subj.avg / subj.max_marks) * 100;
-                    const color = PROGRESS_COLORS[idx % PROGRESS_COLORS.length];
-                    return (
-                      <View key={subj.subject_id} style={styles.subjectItem}>
-                        <View style={styles.subjectHeader}>
-                          <View style={styles.subjectNameRow}>
-                            <View style={[styles.subjectDot, { backgroundColor: color }]} />
-                            <Text style={styles.subjectName}>{subj.subject_name}</Text>
-                          </View>
-                          <Text style={styles.subjectMarks}>
-                            <Text style={styles.subjectMarksBold}>{subj.avg.toFixed(1)}</Text> / {subj.max_marks}
-                          </Text>
-                        </View>
-                        <View style={styles.progressBarBg}>
-                          <View
-                            style={[
-                              styles.progressBarFill,
-                              { width: `${percentage}%`, backgroundColor: color },
-                            ]}
-                          />
-                        </View>
-                        <Text style={styles.progressPercent}>{percentage.toFixed(0)}%</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* Top Students */}
-            {overview.top_students && overview.top_students.length > 0 && (
-              <View style={styles.card}>
-                <View style={styles.cardTitleRow}>
-                  <Ionicons name="trophy-outline" size={20} color={ACCENT} />
-                  <Text style={styles.cardTitle}>Top Students</Text>
-                </View>
-                <View style={styles.studentList}>
-                  {overview.top_students.map((student, idx) => {
-                    const isTop3 = student.rank <= 3;
-                    const iconColor = getRankIconColor(student.rank);
-                    return (
-                      <View key={student.student_id} style={[styles.studentItem, idx < overview.top_students.length - 1 && styles.studentItemBorder]}>
-                        <View style={[styles.rankIcon, { backgroundColor: isTop3 ? iconColor : '#F1F5F9' }]}>
-                          {isTop3 ? (
-                            <Ionicons name="trophy" size={16} color="#FFFFFF" />
-                          ) : (
-                            <Text style={styles.rankTextNum}>{student.rank}</Text>
-                          )}
-                        </View>
-                        <View style={styles.studentInfo}>
-                          <Text style={styles.studentName}>{student.name}</Text>
-                          <Text style={styles.studentRefId}>{student.student_ref_id}</Text>
-                        </View>
-                        <View style={styles.studentMarksCol}>
-                          <Text style={styles.studentTotalMarks}>{student.total_marks}</Text>
-                          <Text style={styles.studentMarksLabel}>marks</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-          </View>
+          <>
+            <HeroOverview overview={overview} />
+            <SectionPerformance exam={overview.exam} sections={overview.sections} />
+            <SubjectAverages exam={overview.exam} subjects={overview.class_avgs} />
+            <TopStudents students={overview.top_students} />
+          </>
         ) : null}
-        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' }, // A slightly cooler gray/blue background
-  scrollContent: { padding: 16, gap: 16 },
-
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32, marginTop: 40 },
-  loadingText: { fontSize: 14, color: '#888888' },
-  errorTitle: { fontSize: 16, fontWeight: '600', color: '#444444' },
-  retryBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#DC2626', borderRadius: 10,
-    paddingHorizontal: 18, paddingVertical: 10,
-  },
-  retryText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+  safe: { flex: 1, backgroundColor: BG },
+  scrollContent: { padding: 16, gap: 16, paddingBottom: 28 },
+  pressed: { opacity: 0.76 },
 
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  pageTitle: { fontSize: 24, fontWeight: '800', color: '#0F172A', letterSpacing: -0.5 },
-  pageSubtitle: { fontSize: 14, color: '#64748B', marginTop: 2 },
-  headerIconWrap: {
-    width: 44, height: 44, borderRadius: 14,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  examListContainer: {
-    paddingRight: 16,
-    gap: 12,
-  },
-  examTabCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    minWidth: 140,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-    position: 'relative',
-  },
-  examTabCardSelected: {
-    backgroundColor: '#EFF6FF',
-    borderColor: ACCENT,
-  },
-  examTabTitle: { fontSize: 15, fontWeight: '600', color: '#334155', marginBottom: 4 },
-  examTabTitleSelected: { color: ACCENT },
-  examTabDate: { fontSize: 12, color: '#94A3B8' },
-  examTabDateSelected: { color: '#60A5FA' },
-  pendingBadge: {
-    position: 'absolute',
-    bottom: -8,
-    right: 12,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  pendingBadgeText: { fontSize: 10, fontWeight: '600', color: '#D97706' },
-
-  overviewContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 16,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 3,
+  headerText: { flex: 1 },
+  pageTitle: { fontSize: 26, fontWeight: "800", color: INK },
+  pageSubtitle: { marginTop: 3, fontSize: 14, color: MUTED, lineHeight: 20 },
+  headerIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#EAF2FB",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
 
-  examMainInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  examIconWrap: {
-    width: 48, height: 48, borderRadius: 14,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  examMainTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  examMainDate: { fontSize: 13, color: '#64748B', marginTop: 2 },
-  typeBadge: {
-    backgroundColor: '#F3E8FF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  typeBadgeText: { fontSize: 10, fontWeight: '700', color: '#7E22CE', letterSpacing: 0.5 },
-
-  divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 20 },
-
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statCol: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 24, fontWeight: '800', color: ACCENT },
-  statLabel: { fontSize: 12, color: '#94A3B8', marginTop: 4 },
-  statDivider: { width: 1, height: 30, backgroundColor: '#F1F5F9' },
-
-  sectionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  sectionBox: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#F8FAFC',
+  skeletonBlock: { backgroundColor: "#EAECF0", borderRadius: 8 },
+  skeletonTitle: { width: 160, height: 24, marginBottom: 10 },
+  skeletonSubtitle: { width: 230, height: 14 },
+  skeletonIcon: { width: 46, height: 46, borderRadius: 14 },
+  examCardSkeleton: {
+    width: 180,
+    minHeight: 142,
+    backgroundColor: SURFACE,
     borderRadius: 16,
     padding: 16,
-    alignItems: 'center',
+    gap: 16,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: LINE,
   },
-  sectionBoxName: { fontSize: 13, fontWeight: '500', color: '#64748B', marginBottom: 8 },
-  sectionBoxAvg: { fontSize: 24, fontWeight: '800', color: '#0F172A' },
-  sectionBoxLabel: { fontSize: 11, color: '#94A3B8', marginTop: 4 },
+  loadingHero: { minHeight: 118, alignItems: "center", justifyContent: "center", gap: 10 },
+  loadingText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
 
-  subjectList: { gap: 16 },
-  subjectItem: {},
-  subjectHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  examRail: { gap: 12, paddingRight: 10 },
+  examCard: {
+    width: 180,
+    minHeight: 146,
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: LINE,
+    gap: 9,
   },
-  subjectNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  subjectDot: { width: 8, height: 8, borderRadius: 4 },
-  subjectName: { fontSize: 13, fontWeight: '600', color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 },
-  subjectMarks: { fontSize: 12, color: '#94A3B8' },
-  subjectMarksBold: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 4,
-    overflow: 'hidden',
+  examCardSelected: { borderColor: ACCENT, backgroundColor: "#F3F8FE" },
+  examCardDisabled: { opacity: 0.72 },
+  examCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  examTypeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF2FB",
   },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
+  examTypeText: { fontSize: 11, fontWeight: "800", color: MUTED },
+  examName: { fontSize: 16, fontWeight: "800", color: INK, lineHeight: 21 },
+  examDate: { fontSize: 12, color: MUTED },
+  statusPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
-  progressPercent: {
-    textAlign: 'right',
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 4,
-    fontWeight: '500',
-  },
+  statusText: { fontSize: 11, fontWeight: "800" },
 
-  studentList: { gap: 0 },
-  studentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  heroCard: {
+    backgroundColor: ACCENT,
+    borderRadius: 18,
+    padding: 18,
+    gap: 18,
+  },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: 13 },
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroTitleWrap: { flex: 1 },
+  heroEyebrow: { color: "#D5E7F8", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  heroTitle: { color: "#FFFFFF", fontSize: 21, fontWeight: "900", marginTop: 2 },
+  heroMeta: { color: "#D5E7F8", fontSize: 13, marginTop: 3 },
+  heroStats: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 14,
     paddingVertical: 14,
-    gap: 12,
   },
-  studentItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  rankIcon: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  rankTextNum: { fontSize: 14, fontWeight: '700', color: '#94A3B8' },
-  studentInfo: { flex: 1 },
-  studentName: { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 2 },
-  studentRefId: { fontSize: 12, color: '#94A3B8' },
-  studentMarksCol: { alignItems: 'flex-end' },
-  studentTotalMarks: { fontSize: 16, fontWeight: '700', color: ACCENT },
-  studentMarksLabel: { fontSize: 11, color: '#94A3B8', marginTop: 1 },
+  heroStat: { flex: 1, alignItems: "center", paddingHorizontal: 8 },
+  heroStatValue: { color: "#FFFFFF", fontSize: 19, fontWeight: "900" },
+  heroStatLabel: { color: "#D5E7F8", fontSize: 11, marginTop: 4, fontWeight: "700" },
+  heroDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.18)" },
 
-  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 10, marginTop: 20 },
-  emptyTitle: { fontSize: 16, fontWeight: '600', color: '#444444' },
-  emptyBody: { fontSize: 13, color: '#AAAAAA', textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
+  card: {
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: LINE,
+  },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
+  cardTitleIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: "#EAF2FB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardTitleText: { flex: 1 },
+  cardTitle: { fontSize: 16, fontWeight: "900", color: INK },
+  cardSubtitle: { fontSize: 12, color: MUTED, marginTop: 2 },
+  textButton: { paddingHorizontal: 8, paddingVertical: 6 },
+  textButtonText: { color: ACCENT, fontSize: 12, fontWeight: "900" },
+
+  sectionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  sectionBox: {
+    flexGrow: 1,
+    flexBasis: "47%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: LINE,
+  },
+  sectionBoxTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  sectionName: { fontSize: 13, color: MUTED, fontWeight: "700" },
+  sectionAvg: { fontSize: 24, color: INK, fontWeight: "900", marginTop: 8 },
+  sectionHint: { fontSize: 11, color: "#98A2B3", marginTop: 4 },
+  viewMoreButton: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D5E7F8",
+    backgroundColor: "#F3F8FE",
+    paddingVertical: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  viewMoreText: { color: ACCENT, fontSize: 13, fontWeight: "900" },
+
+  subjectList: { gap: 12 },
+  subjectRow: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: LINE,
+    gap: 10,
+  },
+  subjectHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  subjectNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  subjectDot: { width: 9, height: 9, borderRadius: 5 },
+  subjectName: { fontSize: 15, color: INK, fontWeight: "800" },
+  subjectMetricRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  subjectMarks: { color: MUTED, fontSize: 12 },
+  subjectMarksStrong: { color: INK, fontSize: 14, fontWeight: "900" },
+  subjectPercent: { color: ACCENT, fontSize: 12, fontWeight: "900" },
+  progressTrack: { height: 8, borderRadius: 999, backgroundColor: "#EAECF0", overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 999 },
+
+  studentRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: LINE },
+  rankBadge: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  rankNumber: { color: MUTED, fontWeight: "900" },
+  studentInfo: { flex: 1 },
+  studentName: { color: INK, fontSize: 14, fontWeight: "800" },
+  studentId: { color: MUTED, fontSize: 12, marginTop: 2 },
+  studentMarks: { alignItems: "flex-end" },
+  studentMarksValue: { color: ACCENT, fontSize: 16, fontWeight: "900" },
+  studentMarksLabel: { color: MUTED, fontSize: 11 },
+
+  failureWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+    gap: 14,
+  },
+  failureIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    backgroundColor: "#FEEDEB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  failureTitle: { color: INK, fontSize: 20, fontWeight: "900", textAlign: "center" },
+  failureText: { color: MUTED, fontSize: 14, lineHeight: 21, textAlign: "center" },
+  primaryButton: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: ACCENT,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: LINE,
+    padding: 28,
+    gap: 8,
+  },
+  emptyTitle: { color: INK, fontSize: 16, fontWeight: "900" },
+  emptyText: { color: MUTED, fontSize: 13, textAlign: "center", lineHeight: 19 },
 });
