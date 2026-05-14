@@ -41,7 +41,8 @@
       "Bash(git commit -m 'feat: hamburger icon + right-to-left panel animation on sections screen *)",
       "Bash(git commit -m 'feat: profile picture lightbox in menu panel *)",
       "WebFetch(domain:docs.expo.dev)",
-      "Bash(git commit -m 'fix: redesign close query as outlined red button in chat header *)"
+      "Bash(git commit -m 'fix: redesign close query as outlined red button in chat header *)",
+      "Bash(xargs grep -l \"Serializer\\\\|serializers\")"
     ]
   }
 }
