@@ -13,6 +13,7 @@ const TAB_ICONS: Record<string, { name: string; label: string }> = {
   results:    { name: "bar-chart-outline",      label: "Results"   },
   attendance: { name: "checkmark-circle-outline",label: "Attendance"},
   homework:   { name: "book-outline",            label: "Homework"  },
+  results:    { name: "bar-chart-outline",       label: "Results"   },
   content:    { name: "document-outline",        label: "Materials" },
   announce:   { name: "megaphone-outline",        label: "Announce"  },
   queries:    { name: "chatbubbles-outline",      label: "Queries"   },
@@ -77,6 +78,7 @@ export default function TeacherLayout() {
         <Tabs.Screen name="results" />
         <Tabs.Screen name="attendance" />
         <Tabs.Screen name="homework" />
+        <Tabs.Screen name="results" />
         <Tabs.Screen name="content" />
         <Tabs.Screen name="announce" />
         <Tabs.Screen name="queries" />
