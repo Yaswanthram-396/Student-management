@@ -46,6 +46,15 @@ export default function PrincipalLayout() {
         }}
       />
       <Tabs.Screen
+        name="classes-directory"
+        options={{
+          title: 'Classes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="school-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="analytics"
         options={{
           href: null,
@@ -70,12 +79,17 @@ export default function PrincipalLayout() {
         name="class-attendance"
         options={{ href: null }}
       />
+      <Tabs.Screen name="class-people" options={{ href: null }} />
+      <Tabs.Screen name="class-teachers" options={{ href: null }} />
+      <Tabs.Screen name="class-students" options={{ href: null }} />
       <Tabs.Screen name="class-detail" options={{ href: null }} />
       <Tabs.Screen name="exam-overview"    options={{ href: null }} />
       <Tabs.Screen name="section-detail"   options={{ href: null }} />
       <Tabs.Screen name="section-students" options={{ href: null }} />
       <Tabs.Screen name="question-heatmap" options={{ href: null }} />
       <Tabs.Screen name="question-detail"  options={{ href: null }} />
+      <Tabs.Screen name="student-detail"   options={{ href: null }} />
+      <Tabs.Screen name="student-exams"    options={{ href: null }} />
       <Tabs.Screen name="student-summary"  options={{ href: null }} />
       <Tabs.Screen name="student-subject"  options={{ href: null }} />
     </Tabs>

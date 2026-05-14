@@ -187,6 +187,41 @@ export interface SectionsListResponse {
   results: SectionResponse[];
 }
 
+// Students
+export interface StudentProfileSummary {
+  id: string;
+  user_id: string;
+  name: string;
+  roll_number: string;
+  admission_number: string;
+  academic_class: { id: string; name: string };
+  section: { id: string; name: string };
+}
+
+export interface SectionStudentsListResponse {
+  count: number;
+  results: StudentProfileSummary[];
+}
+
+export interface StudentAttendanceRecord {
+  slot: "MORNING" | "AFTERNOON";
+  status: "PRESENT" | "ABSENT";
+  confirmed_at: string;
+}
+
+export interface StudentAttendanceStatus {
+  date: string;
+  status: "PRESENT" | "ABSENT" | "PARTIAL" | "NOT_MARKED";
+  present_count: number;
+  absent_count: number;
+  records: StudentAttendanceRecord[];
+}
+
+export interface StudentDetailResponse {
+  student: StudentProfileSummary;
+  attendance: StudentAttendanceStatus;
+}
+
 // Attendance
 export interface ClassAttendanceSummary {
   class_id: string;

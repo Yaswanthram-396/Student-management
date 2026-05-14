@@ -18,6 +18,8 @@ import type {
   AnalyticsResponse,
   SectionResponse,
   SectionsListResponse,
+  SectionStudentsListResponse,
+  StudentDetailResponse,
   DailySummaryResponse,
   ClassAttendanceDetailResponse,
 } from '../types/principal';
@@ -171,6 +173,17 @@ export const principalApi = {
   getSections: (params?: { class_id?: string }) => {
     const qs = params?.class_id ? `?class_id=${params.class_id}` : '';
     return apiRequest<SectionsListResponse>('GET', `/sections/${qs}`);
+  },
+
+  getSectionStudents: (sectionId: string) =>
+    apiRequest<SectionStudentsListResponse>(
+      'GET',
+      `/sections/${sectionId}/students/`,
+    ),
+
+  getStudentDetail: (studentId: string, params?: { date?: string }) => {
+    const qs = params?.date ? `?date=${params.date}` : '';
+    return apiRequest<StudentDetailResponse>('GET', `/students/${studentId}/${qs}`);
   },
 
   createSection: (body: {
