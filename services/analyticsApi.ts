@@ -22,8 +22,10 @@ import type {
 export const analyticsApi = {
   // ── Exam management ─────────────────────────────────────────────────────────
 
-  listExams: () =>
-    apiRequest<ListExamsResponse>('GET', '/analytics/exams/'),
+  listExams: (classId?: string) => {
+    const qs = classId ? `?class_id=${encodeURIComponent(classId)}` : '';
+    return apiRequest<ListExamsResponse>('GET', `/analytics/exams/${qs}`);
+  },
 
   createExam: (body: CreateExamRequest) =>
     apiRequest<CreateExamResponse>('POST', '/analytics/exams/', body),

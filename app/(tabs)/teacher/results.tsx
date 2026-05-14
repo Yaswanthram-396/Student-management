@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -19,6 +19,7 @@ import {
   type SectionAvg,
   type SubjectAvg,
 } from "../../../services/teacher-results";
+import { useTeacherStore } from "../../../store/teacher-store";
 
 const ACCENT = "#185FA5";
 const GREEN = "#16825D";
@@ -349,12 +350,18 @@ function TopStudents({ students }: { students: ExamOverview["top_students"] }) {
 }
 
 export default function ResultsScreen() {
+  const { selectedSection } = useTeacherStore();
+  const classId = selectedSection?.class_id || undefined;
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const [overview, setOverview] = useState<ExamOverview | null>(null);
+
+  const prevClassIdRef = useRef<string | undefined>(classId);
+  const selectedExamIdRef = useRef<string | null>(null);
 
   const readyExams = useMemo(() => exams.filter((exam) => exam.analytics_status === "DONE"), [exams]);
 
@@ -374,13 +381,22 @@ export default function ResultsScreen() {
     setRefreshing(isRefresh);
     setError(false);
 
+    const classChanged = prevClassIdRef.current !== classId;
+    prevClassIdRef.current = classId;
+
     try {
-      const data = await fetchTeacherExams();
+      const data = await fetchTeacherExams(classId);
       const sorted = [...data].sort((a, b) => new Date(b.exam_date).getTime() - new Date(a.exam_date).getTime());
       setExams(sorted);
-      const nextExamId = selectedExamId ?? sorted.find((exam) => exam.analytics_status === "DONE")?.id ?? null;
+      const previousExamId = selectedExamIdRef.current;
+      const previousExamStillExists = sorted.some((exam) => exam.id === previousExamId && exam.analytics_status === "DONE");
+      const nextExamId = !classChanged && previousExamStillExists
+        ? previousExamId
+        : sorted.find((exam) => exam.analytics_status === "DONE")?.id ?? null;
       setSelectedExamId(nextExamId);
+      selectedExamIdRef.current = nextExamId;
       if (nextExamId) await loadOverview(nextExamId);
+      else setOverview(null);
     } catch (err) {
       console.error(err);
       setError(true);
@@ -388,7 +404,7 @@ export default function ResultsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [loadOverview, selectedExamId]);
+  }, [loadOverview, classId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -398,6 +414,7 @@ export default function ResultsScreen() {
 
   async function selectExam(examId: string) {
     setSelectedExamId(examId);
+    selectedExamIdRef.current = examId;
     await loadOverview(examId);
   }
 

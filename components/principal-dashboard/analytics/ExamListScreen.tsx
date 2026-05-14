@@ -125,7 +125,7 @@ export function ExamListScreen() {
   const loadExams = useCallback(() => {
     setLoading(true);
     analyticsApi.listExams()
-      .then(res => setExams(res.exams))
+      .then(res => setExams(res.exams ?? res.results ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

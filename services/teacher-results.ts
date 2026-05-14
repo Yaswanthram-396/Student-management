@@ -1,7 +1,12 @@
-export type AnalyticsStatus = "CREATED" | "PENDING" | "PROCESSING" | "DONE" | "FAILED";
-export type ExamType = "CLASS" | "SECTION";
-export type DifficultyTag = "EASY" | "MEDIUM" | "HARD";
-export type AnswerGroup = "correct" | "wrong" | "unattempted";
+import { analyticsApi } from './analyticsApi';
+import type { ExamOverviewClass, ExamOverviewSection, RiskLabel, SectionStudent } from '../types/analytics';
+
+// ── Types (unchanged — all screens import these) ──────────────────────────────
+
+export type AnalyticsStatus = 'CREATED' | 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED';
+export type ExamType = 'CLASS' | 'SECTION';
+export type DifficultyTag = 'EASY' | 'MEDIUM' | 'HARD';
+export type AnswerGroup = 'correct' | 'wrong' | 'unattempted';
 
 export interface Exam {
   id: string;
@@ -34,7 +39,7 @@ export interface TopStudent {
 
 export interface ExamOverview {
   exam: Exam;
-  role_view: "STAFF";
+  role_view: 'STAFF';
   class_avgs: SubjectAvg[];
   sections: SectionAvg[];
   top_students: TopStudent[];
@@ -46,6 +51,22 @@ export interface SectionSubjectDetail {
   section_avg: number;
   class_avg: number;
   delta: number;
+}
+
+export interface TeacherSectionStudentSubject {
+  subject_id?: string;
+  subject_name: string;
+  subject_percentage: number;
+}
+
+export interface TeacherSectionStudent {
+  student_id: string;
+  student_ref_id: string;
+  name: string;
+  subject_details: TeacherSectionStudentSubject[];
+  total_pct: number;
+  subject_risk: Record<string, RiskLabel>;
+  overall_risk: RiskLabel;
 }
 
 export interface QuestionStat {
@@ -71,189 +92,196 @@ export interface QuestionStudents {
 }
 
 export interface SubjectQuestionSet {
-  exam: Pick<Exam, "id" | "exam_name">;
+  exam: Pick<Exam, 'id' | 'exam_name'>;
   subject: { id: string; name: string };
   total_questions: number;
   questions: QuestionStat[];
 }
 
-const DUMMY_EXAMS: Exam[] = [
-  {
-    id: "exam-001",
-    exam_name: "Unit Test 1",
-    exam_date: "2026-04-15",
-    analytics_status: "DONE",
-    type: "CLASS",
-  },
-  {
-    id: "exam-002",
-    exam_name: "Mid-Term 2026",
-    exam_date: "2026-03-10",
-    analytics_status: "DONE",
-    type: "CLASS",
-  },
-  {
-    id: "exam-003",
-    exam_name: "Section Quiz",
-    exam_date: "2026-02-20",
-    analytics_status: "PROCESSING",
-    type: "SECTION",
-  },
-  {
-    id: "exam-004",
-    exam_name: "Annual Exam",
-    exam_date: "2026-01-05",
-    analytics_status: "FAILED",
-    type: "CLASS",
-  },
-];
+// ── Normalisation helpers ─────────────────────────────────────────────────────
 
-const DUMMY_OVERVIEWS: Record<string, ExamOverview> = {
-  "exam-001": {
-    exam: DUMMY_EXAMS[0],
-    role_view: "STAFF",
-    class_avgs: [
-      { subject_id: "maths", subject_name: "Maths", avg: 62.5, max_marks: 80 },
-      { subject_id: "physics", subject_name: "Physics", avg: 28.0, max_marks: 40 },
-      { subject_id: "english", subject_name: "English", avg: 71.2, max_marks: 80 },
-      { subject_id: "chemistry", subject_name: "Chemistry", avg: 33.5, max_marks: 40 },
-    ],
-    sections: [
-      { section_id: "sec-a", section_name: "A", avg: 64.2 },
-      { section_id: "sec-b", section_name: "B", avg: 58.7 },
-    ],
-    top_students: [
-      { student_id: "st1", name: "Aarav Mehta", student_ref_id: "S001", total_marks: 148, rank: 1 },
-      { student_id: "st2", name: "Priya Sharma", student_ref_id: "S014", total_marks: 142, rank: 2 },
-      { student_id: "st3", name: "Rohan Patel", student_ref_id: "S027", total_marks: 138, rank: 3 },
-      { student_id: "st4", name: "Ananya Reddy", student_ref_id: "S033", total_marks: 135, rank: 4 },
-      { student_id: "st5", name: "Kabir Singh", student_ref_id: "S041", total_marks: 131, rank: 5 },
-    ],
-  },
-  "exam-002": {
-    exam: DUMMY_EXAMS[1],
-    role_view: "STAFF",
-    class_avgs: [
-      { subject_id: "maths", subject_name: "Maths", avg: 55.0, max_marks: 80 },
-      { subject_id: "physics", subject_name: "Physics", avg: 31.5, max_marks: 40 },
-      { subject_id: "english", subject_name: "English", avg: 68.0, max_marks: 80 },
-      { subject_id: "biology", subject_name: "Biology", avg: 36.0, max_marks: 40 },
-    ],
-    sections: [
-      { section_id: "sec-a", section_name: "A", avg: 72.1 },
-      { section_id: "sec-b", section_name: "B", avg: 61.4 },
-      { section_id: "sec-c", section_name: "C", avg: 55.8 },
-    ],
-    top_students: [
-      { student_id: "st2", name: "Priya Sharma", student_ref_id: "S014", total_marks: 220, rank: 1 },
-      { student_id: "st1", name: "Aarav Mehta", student_ref_id: "S001", total_marks: 215, rank: 2 },
-      { student_id: "st6", name: "Meera Iyer", student_ref_id: "S009", total_marks: 208, rank: 3 },
-    ],
-  },
-};
+// Backend returns 'RUNNING'; screens expect 'PROCESSING'
+function mapStatus(status: string): AnalyticsStatus {
+  if (status === 'RUNNING') return 'PROCESSING';
+  return status as AnalyticsStatus;
+}
 
-const DUMMY_SECTION_DETAILS: Record<string, Record<string, SectionSubjectDetail[]>> = {
-  "exam-001": {
-    "sec-a": [
-      { subject_id: "maths", subject_name: "Maths", section_avg: 66.8, class_avg: 62.5, delta: 4.3 },
-      { subject_id: "physics", subject_name: "Physics", section_avg: 30.5, class_avg: 28.0, delta: 2.5 },
-      { subject_id: "english", subject_name: "English", section_avg: 69.2, class_avg: 71.2, delta: -2.0 },
-      { subject_id: "chemistry", subject_name: "Chemistry", section_avg: 34.8, class_avg: 33.5, delta: 1.3 },
-    ],
-    "sec-b": [
-      { subject_id: "maths", subject_name: "Maths", section_avg: 58.1, class_avg: 62.5, delta: -4.4 },
-      { subject_id: "physics", subject_name: "Physics", section_avg: 25.2, class_avg: 28.0, delta: -2.8 },
-      { subject_id: "english", subject_name: "English", section_avg: 73.1, class_avg: 71.2, delta: 1.9 },
-      { subject_id: "chemistry", subject_name: "Chemistry", section_avg: 32.1, class_avg: 33.5, delta: -1.4 },
-    ],
-  },
-};
+// ── API functions ─────────────────────────────────────────────────────────────
 
-const QUESTION_BANK: QuestionStat[] = [
-  { q_no: 1, correct_count: 18, wrong_count: 3, unattempted_count: 0, difficulty_tag: "EASY", difficulty_index: 85.7, has_key_error: false },
-  { q_no: 2, correct_count: 12, wrong_count: 8, unattempted_count: 1, difficulty_tag: "MEDIUM", difficulty_index: 57.1, has_key_error: false },
-  { q_no: 3, correct_count: 7, wrong_count: 11, unattempted_count: 3, difficulty_tag: "HARD", difficulty_index: 33.3, has_key_error: false },
-  { q_no: 4, correct_count: 10, wrong_count: 6, unattempted_count: 5, difficulty_tag: "MEDIUM", difficulty_index: 47.6, has_key_error: true },
-  { q_no: 5, correct_count: 16, wrong_count: 4, unattempted_count: 1, difficulty_tag: "EASY", difficulty_index: 76.2, has_key_error: false },
-  { q_no: 6, correct_count: 6, wrong_count: 13, unattempted_count: 2, difficulty_tag: "HARD", difficulty_index: 28.6, has_key_error: false },
-];
+/**
+ * GET /analytics/exams/?class_id=<uuid>
+ * Returns exams for the teacher's class. Pass classId to filter by specific class.
+ */
+export async function fetchTeacherExams(classId?: string): Promise<Exam[]> {
+  const data = await analyticsApi.listExams(classId);
+  const exams = data.exams ?? data.results ?? [];
 
-const STUDENTS: QuestionStudent[] = [
-  { student_id: "st1", student_ref_id: "S001", name: "Aarav Mehta" },
-  { student_id: "st2", student_ref_id: "S014", name: "Priya Sharma" },
-  { student_id: "st3", student_ref_id: "S027", name: "Rohan Patel" },
-  { student_id: "st4", student_ref_id: "S033", name: "Ananya Reddy" },
-  { student_id: "st5", student_ref_id: "S041", name: "Kabir Singh" },
-  { student_id: "st6", student_ref_id: "S009", name: "Meera Iyer" },
-];
+  return exams.map(exam => ({
+    id: exam.id,
+    exam_name: exam.exam_name,
+    exam_date: exam.exam_date ?? '',
+    analytics_status: mapStatus(exam.analytics_status),
+    type: (exam.type ?? 'CLASS') as ExamType,
+  }));
+}
 
-export const fetchTeacherExams = async (): Promise<Exam[]> => DUMMY_EXAMS;
+/**
+ * GET /analytics/exams/{examId}/overview/
+ * Normalises both CLASS and SECTION exam shapes into a single ExamOverview.
+ */
+export async function fetchTeacherExamOverview(examId: string): Promise<ExamOverview> {
+  const data = await analyticsApi.getExamOverview(examId);
 
-export const fetchTeacherExamOverview = async (examId: string): Promise<ExamOverview> => {
-  const data = DUMMY_OVERVIEWS[examId];
-  if (!data) throw new Error(`No overview found for exam ${examId}`);
-  return data;
-};
+  let class_avgs: SubjectAvg[];
+  let sections: SectionAvg[];
 
-export const fetchTeacherSectionDetail = async (
-  examId: string,
-  sectionId: string
-): Promise<SectionSubjectDetail[]> => {
-  const existing = DUMMY_SECTION_DETAILS[examId]?.[sectionId];
-  if (existing) return existing;
-
-  const overview = DUMMY_OVERVIEWS[examId];
-  return overview.class_avgs.map((subject, index) => {
-    const delta = index % 2 === 0 ? 2.4 : -1.8;
-    const classAvg = (subject.avg / subject.max_marks) * 100;
-
-    return {
-      subject_id: subject.subject_id,
-      subject_name: subject.subject_name,
-      section_avg: Math.max(0, Math.min(100, classAvg + delta)),
-      class_avg: classAvg,
-      delta,
-    };
-  });
-};
-
-export const fetchTeacherSubjectQuestions = async (
-  examId: string,
-  subjectId: string,
-  sectionId?: string
-): Promise<SubjectQuestionSet> => {
-  const overview = await fetchTeacherExamOverview(examId);
-  const subject = overview.class_avgs.find((item) => item.subject_id === subjectId);
-  if (!subject) throw new Error(`No subject found for ${subjectId}`);
-
-  const sectionOffset = sectionId ? 1 : 0;
+  if (data.exam.type === 'CLASS') {
+    const d = data as ExamOverviewClass;
+    class_avgs = d.class_avgs ?? [];
+    sections = (d.sections ?? []).map(s => ({
+      section_id: s.section_id,
+      section_name: s.section_name,
+      avg: s.avg ?? 0,
+    }));
+  } else {
+    // SECTION exam — avgs are under subject_avgs, no sections list
+    const d = data as ExamOverviewSection;
+    class_avgs = d.subject_avgs ?? [];
+    sections = [];
+  }
 
   return {
-    exam: { id: overview.exam.id, exam_name: overview.exam.exam_name },
-    subject: { id: subject.subject_id, name: subject.subject_name },
-    total_questions: QUESTION_BANK.length,
-    questions: QUESTION_BANK.map((question, index) => ({
-      ...question,
-      correct_count: Math.max(0, question.correct_count - sectionOffset * (index % 2)),
-      wrong_count: question.wrong_count + sectionOffset * (index % 2),
+    exam: {
+      id: data.exam.id,
+      exam_name: data.exam.exam_name,
+      exam_date: data.exam.exam_date ?? '',
+      analytics_status: mapStatus(data.exam.analytics_status),
+      type: data.exam.type as ExamType,
+    },
+    role_view: 'STAFF',
+    class_avgs,
+    sections,
+    top_students: (data.top_students ?? []).map((s, idx) => ({
+      student_id: s.student_id,
+      name: s.name,
+      student_ref_id: s.student_ref_id,
+      total_marks: s.total_marks,
+      rank: s.rank ?? idx + 1,
     })),
   };
-};
+}
 
-export const fetchTeacherQuestionStudents = async (
+/**
+ * GET /analytics/exams/{examId}/sections/{sectionId}/
+ * Returns per-subject comparison (section avg vs class avg) for the section.
+ */
+export async function fetchTeacherSectionDetail(
+  examId: string,
+  sectionId: string,
+): Promise<SectionSubjectDetail[]> {
+  const data = await analyticsApi.getSectionDetail(examId, sectionId);
+  return (data.subjects ?? []).map(s => ({
+    subject_id: s.subject_id,
+    subject_name: s.subject_name,
+    section_avg: s.section_avg ?? 0,
+    class_avg: s.class_avg ?? 0,
+    delta: s.delta ?? 0,
+  }));
+}
+
+function normalizeStudentSubjects(student: SectionStudent): TeacherSectionStudentSubject[] {
+  if (student.subject_details?.length) {
+    return student.subject_details.map(subject => ({
+      subject_id: subject.subject_id,
+      subject_name: subject.subject_name,
+      subject_percentage: subject.subject_percentage ?? 0,
+    }));
+  }
+
+  return [
+    { subject_name: 'MATHS', subject_percentage: student.maths_pct },
+    { subject_name: 'PHYSICS', subject_percentage: student.physics_pct },
+    { subject_name: 'CHEMISTRY', subject_percentage: student.chem_pct },
+  ].filter((subject): subject is TeacherSectionStudentSubject => subject.subject_percentage !== undefined);
+}
+
+/**
+ * GET /analytics/section/{sectionId}/?exam_id={examId}
+ * Returns section students with per-subject percentages and risk labels.
+ */
+export async function fetchTeacherSectionStudents(
+  examId: string,
+  sectionId: string,
+): Promise<TeacherSectionStudent[]> {
+  const data = await analyticsApi.getSectionStudents(sectionId, examId);
+
+  return (data.students ?? [])
+    .map(student => ({
+      student_id: student.student_id,
+      student_ref_id: student.student_ref_id,
+      name: student.name,
+      subject_details: normalizeStudentSubjects(student),
+      total_pct: student.total_pct ?? 0,
+      subject_risk: student.subject_risk ?? {},
+      overall_risk: student.overall_risk,
+    }))
+    .sort((a, b) => b.total_pct - a.total_pct);
+}
+
+/**
+ * GET /analytics/exams/{examId}/sections/{sectionId}/subjects/{subjectId}/questions/
+ * OR GET /analytics/exams/{examId}/subjects/{subjectId}/questions/
+ * Returns question-level stats for a subject, optionally scoped to a section.
+ */
+export async function fetchTeacherSubjectQuestions(
+  examId: string,
+  subjectId: string,
+  sectionId?: string,
+): Promise<SubjectQuestionSet> {
+  const data = sectionId
+    ? await analyticsApi.getSectionQuestionStats(examId, sectionId, subjectId)
+    : await analyticsApi.getClassQuestionStats(examId, subjectId);
+
+  return {
+    exam: { id: data.exam.id, exam_name: data.exam.exam_name },
+    subject: { id: data.subject.id, name: data.subject.name },
+    total_questions: data.total_questions,
+    questions: (data.questions ?? []).map(q => ({
+      q_no: q.q_no,
+      correct_count: q.correct_count,
+      wrong_count: q.wrong_count,
+      // Backend uses either unattempted_count or skip_count
+      unattempted_count: q.unattempted_count ?? (q as any).skip_count ?? 0,
+      difficulty_tag: q.difficulty_tag as DifficultyTag,
+      difficulty_index: q.difficulty_index,
+      has_key_error: q.has_key_error,
+    })),
+  };
+}
+
+/**
+ * GET /analytics/exams/{examId}/sections/{sectionId}/subjects/{subjectId}/questions/{qNo}/students/
+ * OR GET /analytics/exams/{examId}/subjects/{subjectId}/questions/{qNo}/students/
+ * Returns which students answered a question correctly / wrongly / skipped it.
+ */
+export async function fetchTeacherQuestionStudents(
   examId?: string,
   subjectId?: string,
   qNo?: number,
-  sectionId?: string
-): Promise<QuestionStudents> => {
-  void examId;
-  void subjectId;
-  void qNo;
-  void sectionId;
+  sectionId?: string,
+): Promise<QuestionStudents> {
+  if (!examId || !subjectId || qNo === undefined) {
+    return { correct: [], wrong: [], unattempted: [] };
+  }
 
+  const data = sectionId
+    ? await analyticsApi.getSectionQuestionStudents(examId, sectionId, subjectId, qNo)
+    : await analyticsApi.getClassQuestionStudents(examId, subjectId, qNo);
+
+  const students = data.students ?? { correct: [], wrong: [], unattempted: [] };
   return {
-    correct: STUDENTS.slice(0, 3),
-    wrong: STUDENTS.slice(3, 5),
-    unattempted: STUDENTS.slice(5),
+    correct: students.correct ?? [],
+    wrong: students.wrong ?? [],
+    unattempted: students.unattempted ?? [],
   };
-};
+}

@@ -1,5 +1,6 @@
 export interface TeacherSection {
   id: string;
+  class_id: string;
   class_name: string;
   section_name: string;
   is_class_teacher: boolean;

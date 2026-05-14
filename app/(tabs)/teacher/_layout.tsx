@@ -23,9 +23,10 @@ function TeacherTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const isClassTeacher = selectedSection?.is_class_teacher ?? false;
   const insets = useSafeAreaInsets();
 
-  // Filter out attendance for non-class-teachers; no slot reserved
+  // Filter out attendance and results for non-class-teachers; no slot reserved
   const visibleRoutes = state.routes.filter(route => {
     if (route.name === "attendance") return isClassTeacher;
+    if (route.name === "results") return isClassTeacher;
     return true;
   });
 

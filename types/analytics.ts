@@ -18,11 +18,28 @@ export interface AnalyticsExam {
   exam_name: string;
   exam_date: string;
   analytics_status: AnalyticsStatus;
+  type?: 'CLASS' | 'SECTION';
+  academic_class?: { id: string; name: string } | null;
+  sections?: {
+    section_id: string;
+    section_name: string;
+    student_count?: number;
+    subjects?: {
+      subject_id?: string;
+      subject_name: string;
+      avg_marks?: number;
+      avg?: number;
+      max_marks?: number;
+    }[];
+  }[];
 }
 
 export interface ListExamsResponse {
   success: boolean;
-  exams: AnalyticsExam[];
+  exams?: AnalyticsExam[];
+  results?: AnalyticsExam[];
+  class_id?: string;
+  class_name?: string;
 }
 
 export interface CreateExamRequest {
@@ -240,9 +257,14 @@ export interface SectionStudent {
   student_id: string;
   student_ref_id: string;
   name: string;
-  maths_pct: number;
-  physics_pct: number;
-  chem_pct: number;
+  subject_details?: {
+    subject_id?: string;
+    subject_name: string;
+    subject_percentage: number;
+  }[];
+  maths_pct?: number;
+  physics_pct?: number;
+  chem_pct?: number;
   total_pct: number;
   subject_risk: Record<string, RiskLabel>;
   overall_risk: RiskLabel;
