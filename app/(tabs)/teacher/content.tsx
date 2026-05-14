@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { teacherMaterialsApi, type StudyMaterial } from '../../../services/teacher-materials';
 import { subjectsApi, type Subject } from '../../../services/subjects';
+import type { UploadAsset } from '../../../services/upload';
 import { useTeacherStore } from '../../../store/teacher-store';
 
 const ACCENT = '#185FA5';
@@ -77,7 +78,7 @@ export default function ContentScreen() {
   const [description, setDescription] = useState('');
   const [matDate, setMatDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [pickedFile, setPickedFile] = useState<{ uri: string; name: string; mime: string } | null>(null);
+  const [pickedFile, setPickedFile] = useState<UploadAsset | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -146,7 +147,8 @@ export default function ContentScreen() {
         setPickedFile({
           uri: asset.uri,
           name: asset.name ?? 'file',
-          mime: asset.mimeType ?? 'application/octet-stream',
+          mimeType: asset.mimeType ?? 'application/octet-stream',
+          file: asset.file,
         });
         setFormError('');
       }
@@ -170,9 +172,7 @@ export default function ContentScreen() {
         title: title.trim(),
         description: description.trim(),
         material_date: toDateString(matDate),
-        fileUri: pickedFile.uri,
-        fileName: pickedFile.name,
-        fileMime: pickedFile.mime,
+        file: pickedFile,
       });
       setMaterials(prev => [created, ...prev]);
       setSheetVisible(false);

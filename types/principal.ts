@@ -21,7 +21,7 @@ export interface TeacherResponse {
   user: { id: string; username: string; role: string };
   name: string;
   mobile_number: string;
-  primary_subject: { id: string; name: string };
+  primary_subject?: { id: string; name: string } | null;
   assigned_sections: TeacherSection[];
 }
 
@@ -70,8 +70,39 @@ export interface CalendarEventResponse {
 }
 
 export interface CalendarEventsListResponse {
+  today: string;
   count: number;
   results: CalendarEventResponse[];
+}
+
+export interface DeleteSuccessResponse {
+  success: boolean;
+  message: string;
+}
+
+// Classes
+export interface AcademicClassResponse {
+  id: string;
+  name: string;
+  display_order: number;
+}
+
+export interface AcademicClassesListResponse {
+  count: number;
+  results: AcademicClassResponse[];
+}
+
+// Subjects
+export interface SubjectResponse {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+}
+
+export interface SubjectsListResponse {
+  count: number;
+  results: SubjectResponse[];
 }
 
 // Exams
@@ -129,6 +160,12 @@ export interface AnalyticsResponse {
   subject_wise_analysis: any[];
   teacher_effectiveness: any[];
   student_growth_tracking: any[];
+}
+
+export interface PrincipalFeatureUnavailableResponse {
+  success?: boolean;
+  code: string;
+  details: string;
 }
 
 // Sections

@@ -1,12 +1,17 @@
 import { apiRequest } from './api';
 import type {
+  AcademicClassResponse,
+  AcademicClassesListResponse,
   SchoolConfig,
+  SubjectResponse,
+  SubjectsListResponse,
   TeacherResponse,
   BulkUploadBatch,
   AnnouncementResponse,
   AnnouncementsListResponse,
   CalendarEventResponse,
   CalendarEventsListResponse,
+  DeleteSuccessResponse,
   ExamResponse,
   ResultsResponse,
   AnalyticsResponse,
@@ -23,6 +28,42 @@ export const principalApi = {
 
   updateConfig: (body: Partial<Omit<SchoolConfig, 'school_id' | 'subdomain'>>) =>
     apiRequest<SchoolConfig>('PATCH', '/principal/configuration/', body),
+
+  // ── Classes ──────────────────────────────────────────────────────────────────
+  getClasses: () =>
+    apiRequest<AcademicClassesListResponse>('GET', '/classes/'),
+
+  createClass: (body: {
+    name: string;
+    display_order: number;
+  }) => apiRequest<AcademicClassResponse>('POST', '/principal/classes/', body),
+
+  updateClass: (classId: string, body: {
+    name?: string;
+    display_order?: number;
+  }) => apiRequest<AcademicClassResponse>('PATCH', `/principal/classes/${classId}/`, body),
+
+  deleteClass: (classId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/classes/${classId}/`),
+
+  // ── Subjects ─────────────────────────────────────────────────────────────────
+  getSubjects: () =>
+    apiRequest<SubjectsListResponse>('GET', '/subjects/'),
+
+  createSubject: (body: {
+    name: string;
+    code: string;
+    is_active: boolean;
+  }) => apiRequest<SubjectResponse>('POST', '/principal/subjects/', body),
+
+  updateSubject: (subjectId: string, body: {
+    name?: string;
+    code?: string;
+    is_active?: boolean;
+  }) => apiRequest<SubjectResponse>('PATCH', `/principal/subjects/${subjectId}/`, body),
+
+  deleteSubject: (subjectId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/subjects/${subjectId}/`),
 
   // ── Teachers ─────────────────────────────────────────────────────────────────
   createTeacher: (body: {
@@ -51,6 +92,12 @@ export const principalApi = {
     primary_subject_id?: string;
     assigned_section_ids?: string[];
   }) => apiRequest<TeacherResponse>('PATCH', `/principal/teachers/${id}/`, body),
+
+  bulkUploadTeachers: (formData: FormData) =>
+    apiRequest<BulkUploadBatch>('POST', '/principal/teachers/bulk-upload/', formData, true),
+
+  getTeacherBulkUploadStatus: (batchId: string) =>
+    apiRequest<BulkUploadBatch>('GET', `/principal/teachers/bulk-upload/${batchId}/`),
 
   // ── Student bulk upload ───────────────────────────────────────────────────────
   bulkUploadStudents: (formData: FormData) =>
@@ -90,7 +137,13 @@ export const principalApi = {
     visible_to: string[];
   }) => apiRequest<CalendarEventResponse>('POST', '/principal/calendar-events/', body),
 
-  getCalendarEvents: (params?: { event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT'; start_date?: string; end_date?: string }) => {
+  getCalendarEvents: (params?: {
+    event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT';
+    start_date?: string;
+    end_date?: string;
+    month?: number;
+    year?: number;
+  }) => {
     const qs = params
       ? '?' + new URLSearchParams(
           Object.entries(params)
@@ -101,14 +154,40 @@ export const principalApi = {
     return apiRequest<CalendarEventsListResponse>('GET', `/calendar-events/${qs}`);
   },
 
+  updateCalendarEvent: (eventId: string, body: {
+    title?: string;
+    event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT';
+    start_date?: string;
+    end_date?: string;
+    description?: string;
+    visible_to?: string[];
+  }) => apiRequest<CalendarEventResponse>('PATCH', `/principal/calendar-events/${eventId}/`, body),
+
+  deleteCalendarEvent: (eventId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/calendar-events/${eventId}/`),
+
   // ── Sections ──────────────────────────────────────────────────────────────────
   getSections: (params?: { class_id?: string }) => {
     const qs = params?.class_id ? `?class_id=${params.class_id}` : '';
-    return apiRequest<SectionsListResponse>('GET', `/principal/sections/${qs}`);
+    return apiRequest<SectionsListResponse>('GET', `/sections/${qs}`);
   },
 
-  updateSection: (sectionId: string, body: { parent_query_enabled: boolean }) =>
+  createSection: (body: {
+    class_id: string;
+    name: string;
+    class_teacher_id?: string | null;
+    parent_query_enabled: boolean;
+  }) => apiRequest<SectionResponse>('POST', '/principal/sections/', body),
+
+  updateSection: (sectionId: string, body: {
+    name?: string;
+    class_teacher_id?: string | null;
+    parent_query_enabled?: boolean;
+  }) =>
     apiRequest<SectionResponse>('PATCH', `/principal/sections/${sectionId}/`, body),
+
+  deleteSection: (sectionId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/sections/${sectionId}/`),
 
   // ── Attendance ────────────────────────────────────────────────────────────────
   getAttendanceDailySummary: (params?: { date?: string }) => {

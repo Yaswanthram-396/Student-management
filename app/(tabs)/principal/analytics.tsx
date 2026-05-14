@@ -1,1 +1,1 @@
-export { AnalyticsScreen as default } from '../../../components/principal-dashboard/AnalyticsScreen';
+export { ExamListScreen as default } from '../../../components/principal-dashboard/analytics/ExamListScreen';
