@@ -4,17 +4,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  ViewToken,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    FlatList,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    ViewToken,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -25,11 +25,11 @@ import { notificationsApi } from "../../services/notifications";
 import { parentApi } from "../../services/parent";
 import { formatQueryDate } from "../../src/lib/formatDate";
 import {
-  getQueryById,
-  QueryDetail,
-  QueryReply,
-  QueryStatus,
-  replyToQuery,
+    getQueryById,
+    QueryDetail,
+    QueryReply,
+    QueryStatus,
+    replyToQuery,
 } from "../../src/lib/parentQueryApi";
 import type { ParentAnnouncement, ParentProfile } from "../../types/parent";
 import { BottomSheet, StatusPill } from "../shared";
@@ -878,13 +878,6 @@ const styles = StyleSheet.create({
     ...(typography.caption as object),
     color: colors.textSecondary,
     marginTop: 2,
-  },
-  dots: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: spacing.xs,
-    marginBottom: spacing.xl,
   },
   dots: {
     flexDirection: "row",

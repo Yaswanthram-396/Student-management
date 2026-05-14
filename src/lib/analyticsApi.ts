@@ -1,7 +1,7 @@
 import { apiRequest } from "../../services/api";
 import { storage } from "../../services/storage";
 
-const USE_DUMMY_DATA = false; // Toggle this to false to use the real API
+const USE_DUMMY_DATA = true; // Toggle this to false to use the real API
 
 export async function getStudentSummary(student_id: string, exam_id: string) {
   if (USE_DUMMY_DATA) {
@@ -190,6 +190,9 @@ export async function getStudentExamsTimeline(student_id: string) {
   const token = await storage.getAccessToken();
   console.log("[analyticsApi] getStudentExamsTimeline called");
   console.log("[analyticsApi]   student_id :", student_id);
-  console.log("[analyticsApi]   token      :", token ? `${token.slice(0, 20)}...` : "MISSING");
+  console.log(
+    "[analyticsApi]   token      :",
+    token ? `${token.slice(0, 20)}...` : "MISSING",
+  );
   return apiRequest("GET", `/analytics/student/${student_id}/exams/`);
 }

@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import React, {
   useCallback,
   useEffect,
@@ -9,23 +9,24 @@ import React, {
 import {
   Dimensions,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { parentApi } from "../../services/parent";
-import type { ParentStudent } from "../../types/parent";
 import {
   getStudentExamsTimeline,
   getStudentSummary,
   getSubjectDrilldown,
 } from "../../src/lib/analyticsApi";
-import { BottomSheet, HeaderBar, MetricCard, StatusPill } from "../shared";
+import type { ParentStudent } from "../../types/parent";
+import { HeaderBar, MetricCard } from "../shared";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
@@ -33,6 +34,16 @@ const CARD_INNER_WIDTH = CARD_WIDTH - spacing.lg * 2;
 const GRID_GAP = spacing.sm;
 const GRID_PADDING = spacing.lg * 2;
 const GRID_TILE_SIZE = (SCREEN_WIDTH - GRID_PADDING - GRID_GAP * 5) / 6;
+const INLINE_QUESTION_TILE = 58;
+const TREND_BAR_HEIGHT = 88;
+const SUBJECT_COLORS = [
+  colors.primary,
+  colors.teacher,
+  colors.principal,
+  colors.amber,
+  "#14B8A6",
+  "#7C3AED",
+];
 
 interface ExamOption {
   id: string;
@@ -209,14 +220,6 @@ function getRiskColor(risk: SubjectResult["risk_label"]): string {
   return colors.danger;
 }
 
-function riskVariant(
-  risk: SubjectResult["risk_label"],
-): "success" | "warning" | "danger" {
-  if (risk === "SAFE") return "success";
-  if (risk === "WATCH") return "warning";
-  return "danger";
-}
-
 function formatFirstName(name: string): string {
   const first = name.trim().split(" ")[0] ?? name;
   return toTitleCase(first);
@@ -231,6 +234,24 @@ function formatClassBadge(className: string): string {
 function truncateExamName(name: string): string {
   if (name.length <= 14) return name;
   return `${name.slice(0, 14)}...`;
+}
+
+function formatExamDate(date?: string): string {
+  if (!date) return "";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getSubjectColor(name: string, index = 0): string {
+  const seed = name
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), index);
+  return SUBJECT_COLORS[Math.abs(seed) % SUBJECT_COLORS.length];
 }
 
 function SkeletonBlock({
@@ -256,6 +277,33 @@ function SkeletonBlock({
         },
       ]}
     />
+  );
+}
+
+function PickerPopup({
+  visible,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.popupLayer}>
+        <Pressable style={styles.popupDismiss} onPress={onClose} />
+        <View style={styles.popupCard}>
+          <View style={styles.popupHandle} />
+          {children}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -295,7 +343,7 @@ export function ResultsScreen() {
   const [activeScreen, setActiveScreen] = useState<"summary" | "drilldown">(
     "summary",
   );
-  // Start empty — auto-selected via useEffect once students load
+  // Start empty; auto-selected via useEffect once students load
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSubject, setSelectedSubject] = useState<SubjectResult | null>(
@@ -325,7 +373,11 @@ export function ResultsScreen() {
   }, []);
 
   const activeStudent = useMemo(
-    () => students.find((entry) => entry.id === selectedStudentId),
+    () =>
+      students.find(
+        (entry) =>
+          entry.id === selectedStudentId || entry.user_id === selectedStudentId,
+      ),
     [students, selectedStudentId],
   );
 
@@ -401,8 +453,8 @@ export function ResultsScreen() {
     if (students.length === 0) return; // still loading or no students linked
     setSelectedStudentId((prev) => {
       // Keep current selection if it's still valid, otherwise pick first
-      const stillValid = students.some((s) => s.id === prev);
-      return stillValid ? prev : (students[0]?.id ?? "");
+      const stillValid = students.some((s) => s.user_id === prev);
+      return stillValid ? prev : (students[0]?.user_id ?? "");
     });
   }, [students]);
 
@@ -430,9 +482,25 @@ export function ResultsScreen() {
     );
   };
 
-  const handleViewDrilldown = (subject: SubjectResult) => {
+  const handleViewDrilldown = async (subject: SubjectResult) => {
     setSelectedSubject(subject);
-    setActiveScreen("drilldown");
+    setDrilldownData(null);
+    setDrilldownError(null);
+    setDrilldownLoading(true);
+    try {
+      const response = (await getSubjectDrilldown(
+        selectedStudentId,
+        subject.subject_name,
+        selectedExamId,
+      )) as SubjectDrilldownResponse;
+      setDrilldownData(response);
+    } catch (error) {
+      setDrilldownError(
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    } finally {
+      setDrilldownLoading(false);
+    }
   };
 
   const handleStudentPress = (studentId: string) => {
@@ -526,9 +594,193 @@ export function ResultsScreen() {
     );
   };
 
-  const renderSummaryHeader = () => (
-    <View style={styles.summaryHeader}>{renderRiskBanner()}</View>
-  );
+  const renderSummaryHeader = () => {
+    const subjects = summaryData?.subjects ?? [];
+    const totalMarks = subjects.reduce((sum, item) => sum + item.total_marks, 0);
+    const maxMarks = subjects.reduce((sum, item) => sum + item.max_marks, 0);
+    const overallPct = maxMarks > 0 ? Math.round((totalMarks / maxMarks) * 100) : 0;
+    const bestSubject = subjects.reduce<SubjectResult | null>(
+      (best, item) => (!best || item.percentage > best.percentage ? item : best),
+      null,
+    );
+    const focusSubject = subjects.reduce<SubjectResult | null>(
+      (focus, item) =>
+        !focus || item.percentage < focus.percentage ? item : focus,
+      null,
+    );
+    const avgRank =
+      subjects.length > 0
+        ? Math.round(
+            subjects.reduce((sum, item) => sum + item.exam_rank, 0) /
+              subjects.length,
+          )
+        : 0;
+    const questionTotal = subjects.reduce(
+      (sum, item) => sum + item.correct + item.wrong + item.unattempted,
+      0,
+    );
+    const correctTotal = subjects.reduce((sum, item) => sum + item.correct, 0);
+    const trendPoints = (examTimeline.length > 0 ? examTimeline : [])
+      .slice(0, 5)
+      .reverse();
+    const maxTrend = Math.max(...trendPoints.map((exam) => exam.total_marks), 1);
+
+    return (
+      <View style={styles.summaryHeader}>
+        <View style={styles.pageIntro}>
+          <View style={styles.pageIntroText}>
+            <Text style={styles.pageEyebrow}>Exam Results</Text>
+            <Text style={styles.pageTitle}>
+              {activeExam?.exam_name ?? summaryData?.exam.exam_name ?? "Results"}
+            </Text>
+            <Text style={styles.pageSubtitle}>
+              {formatExamDate(activeExam?.exam_date ?? summaryData?.exam.exam_date)}
+              {summaryClass ? ` - ${summaryClass}` : ""}
+              {summarySection ? ` - ${summarySection}` : ""}
+            </Text>
+          </View>
+          <View style={styles.pageIcon}>
+            <Ionicons name="stats-chart" size={25} color={colors.parent} />
+          </View>
+        </View>
+
+        <View style={styles.heroCard}>
+          <View style={styles.heroGlow} />
+          <View style={styles.heroTopRow}>
+            <View>
+              <Text style={styles.heroLabel}>Performance Overview</Text>
+              <Text style={styles.heroName}>
+                {formatFirstName(summaryStudentName ?? "Student")}
+              </Text>
+            </View>
+            <View style={styles.heroBadge}>
+              <Ionicons name="shield-checkmark" size={14} color={colors.surface} />
+              <Text style={styles.heroBadgeText}>
+                {summaryData?.overall_risk?.replace("_", " ") ?? "READY"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.heroScoreRow}>
+            <View style={styles.scoreRing}>
+              <Text style={styles.scoreRingValue}>{overallPct}%</Text>
+              <Text style={styles.scoreRingLabel}>Overall</Text>
+            </View>
+            <View style={styles.heroMetrics}>
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricValue}>
+                  {totalMarks.toFixed(totalMarks % 1 === 0 ? 0 : 1)}
+                </Text>
+                <Text style={styles.heroMetricLabel}>Marks</Text>
+              </View>
+              <View style={styles.heroMetricDivider} />
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricValue}>#{avgRank || "-"}</Text>
+                <Text style={styles.heroMetricLabel}>Avg rank</Text>
+              </View>
+              <View style={styles.heroMetricDivider} />
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricValue}>{subjects.length}</Text>
+                <Text style={styles.heroMetricLabel}>Subjects</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.heroProgressTrack}>
+            <View
+              style={[
+                styles.heroProgressFill,
+                { width: `${Math.min(100, Math.max(0, overallPct))}%` },
+              ]}
+            />
+          </View>
+        </View>
+
+        <View style={styles.insightGrid}>
+          <View style={styles.insightCard}>
+            <View style={[styles.insightIcon, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="trending-up" size={18} color={colors.primary} />
+            </View>
+            <Text style={styles.insightValue}>
+              {bestSubject ? toTitleCase(bestSubject.subject_name) : "-"}
+            </Text>
+            <Text style={styles.insightLabel}>Strongest subject</Text>
+          </View>
+          <View style={styles.insightCard}>
+            <View style={[styles.insightIcon, { backgroundColor: colors.warningBg }]}>
+              <Ionicons name="flash-outline" size={18} color={colors.warning} />
+            </View>
+            <Text style={styles.insightValue}>
+              {focusSubject ? toTitleCase(focusSubject.subject_name) : "-"}
+            </Text>
+            <Text style={styles.insightLabel}>Needs focus</Text>
+          </View>
+        </View>
+
+        <View style={styles.analyticsCard}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.sectionIcon}>
+              <Ionicons name="pulse-outline" size={18} color={colors.parent} />
+            </View>
+            <View>
+              <Text style={styles.sectionTitle}>Progress Trend</Text>
+              <Text style={styles.sectionSubtitle}>Recent exam total marks</Text>
+            </View>
+          </View>
+          <View style={styles.trendBars}>
+            {trendPoints.map((exam) => (
+              <View key={exam.id} style={styles.trendItem}>
+                <View style={styles.trendBarTrack}>
+                  <View
+                    style={[
+                      styles.trendBarFill,
+                      {
+                        height: Math.max(
+                          12,
+                          (exam.total_marks / maxTrend) * TREND_BAR_HEIGHT,
+                        ),
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.trendLabel} numberOfLines={1}>
+                  {truncateExamName(exam.exam_name)}
+                </Text>
+              </View>
+            ))}
+            {trendPoints.length === 0 && (
+              <Text style={styles.emptyTrendText}>Trend appears after exams are published.</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.analyticsCard}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.sectionIcon}>
+              <Ionicons name="bulb-outline" size={18} color={colors.parent} />
+            </View>
+            <View>
+              <Text style={styles.sectionTitle}>Parent Insight</Text>
+              <Text style={styles.sectionSubtitle}>
+                {questionTotal > 0
+                  ? `${correctTotal} of ${questionTotal} questions correct across subjects`
+                  : "Question-level clarity will appear here"}
+              </Text>
+            </View>
+          </View>
+          {renderRiskBanner()}
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Subject Averages</Text>
+            <Text style={styles.sectionSubtitle}>Tap a card for question-level analysis</Text>
+          </View>
+          <Text style={styles.subjectCount}>{subjects.length} subjects</Text>
+        </View>
+      </View>
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -570,7 +822,7 @@ export function ResultsScreen() {
           setSelectedSubject(null);
         }}
       >
-        <Text style={styles.backLinkText}>← Back to Summary</Text>
+        <Text style={styles.backLinkText}>Back to Summary</Text>
       </Pressable>
     </View>
   );
@@ -634,35 +886,87 @@ export function ResultsScreen() {
     </View>
   );
 
-  const renderSubjectCard = ({ item }: { item: SubjectResult }) => {
+  const renderSubjectCard = ({
+    item,
+    index,
+  }: {
+    item: SubjectResult;
+    index: number;
+  }) => {
     const isExpanded = expandedSubject === item.subject_name;
     const performance = mapPerformanceLabel(item.performance_label);
-    const pctColor = getPercentageColor(item.percentage);
+    const pctColor = getSubjectColor(item.subject_name, index);
     const totalQuestions = item.correct + item.wrong + item.unattempted;
     const zPosition = getZScorePosition(item.z_score) * CARD_INNER_WIDTH;
+    const isBreakdownOpen = selectedSubject?.subject_name === item.subject_name;
+    const inlineQuestions = isBreakdownOpen ? (drilldownData?.questions ?? []) : [];
+    const questionColumns = inlineQuestions.reduce<QuestionResult[][]>(
+      (columns, question, questionIndex) => {
+        if (questionIndex % 2 === 0) columns.push([question]);
+        else columns[columns.length - 1]?.push(question);
+        return columns;
+      },
+      [],
+    );
 
     return (
       <Pressable
-        style={styles.subjectCard}
+        style={[
+          styles.subjectCard,
+          isExpanded && { borderColor: pctColor, backgroundColor: colors.surface },
+        ]}
         onPress={() => handleSubjectPress(item)}
       >
+        <View style={[styles.subjectAccent, { backgroundColor: pctColor }]} />
         <View style={styles.subjectRowTop}>
-          <Text style={styles.subjectTitle}>
-            {item.subject_name.toUpperCase()}
-          </Text>
-          <View style={styles.rankBadge}>
-            <Text style={styles.rankBadgeText}>Rank #{item.exam_rank}</Text>
+          <View style={styles.subjectNameRow}>
+            <View style={[styles.subjectDot, { backgroundColor: pctColor }]} />
+            <Text style={styles.subjectTitle}>
+              {toTitleCase(item.subject_name)}
+            </Text>
           </View>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color={isExpanded ? pctColor : colors.textMuted}
+            style={{
+              transform: [{ rotate: isExpanded ? "90deg" : "0deg" }],
+            }}
+          />
         </View>
 
-        <View style={styles.subjectRowMid}>
-          <View style={styles.subjectScoreBlock}>
+        <View style={styles.subjectScoreLine}>
+          <View>
+            <Text style={styles.subjectMarksLarge}>
+              {item.total_marks}
+              <Text style={styles.subjectMarksMuted}> / {item.max_marks}</Text>
+            </Text>
+            <Text style={styles.subjectMarks}>Marks scored</Text>
+          </View>
+          <View style={styles.subjectPctBlock}>
             <Text style={[styles.subjectPct, { color: pctColor }]}>
               {Math.round(item.percentage)}%
             </Text>
-            <Text style={styles.subjectMarks}>
-              {item.total_marks} / {item.max_marks} marks
-            </Text>
+            <Text style={styles.subjectMarks}>Score</Text>
+          </View>
+        </View>
+
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${Math.min(100, Math.max(0, item.percentage))}%`,
+                backgroundColor: pctColor,
+              },
+            ]}
+          />
+        </View>
+
+        <View style={styles.subjectMetaRow}>
+          <View style={styles.rankBadge}>
+            <Ionicons name="trophy-outline" size={12} color={colors.parent} />
+            <Text style={styles.rankBadgeText}>Rank #{item.exam_rank}</Text>
           </View>
           <View
             style={[
@@ -681,35 +985,6 @@ export function ResultsScreen() {
               {performance.display}
             </Text>
           </View>
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: (item.percentage / 100) * CARD_INNER_WIDTH,
-                backgroundColor: pctColor,
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.riskRow}>
-          <StatusPill
-            variant={riskVariant(item.risk_label)}
-            label={item.risk_label.replace("_", " ")}
-          />
-        </View>
-        <View style={styles.tapHintRow}>
-          <Text style={styles.tapHintText}>Tap to see details</Text>
-          <Ionicons
-            name="chevron-down"
-            size={12}
-            color={colors.textMuted}
-            style={{
-              transform: [{ rotate: isExpanded ? "180deg" : "0deg" }],
-            }}
-          />
         </View>
 
         {isExpanded && (
@@ -806,14 +1081,95 @@ export function ResultsScreen() {
             </View>
 
             <Pressable
-              style={styles.drilldownButton}
-              onPress={() => handleViewDrilldown(item)}
+              style={[
+                styles.drilldownButton,
+                drilldownLoading && isBreakdownOpen && styles.drilldownButtonDisabled,
+              ]}
+              onPress={(event) => {
+                event.stopPropagation();
+                handleViewDrilldown(item);
+              }}
             >
               <Text style={styles.drilldownButtonText}>
-                View Question Breakdown
+                {drilldownLoading && isBreakdownOpen
+                  ? "Loading Breakdown"
+                  : isBreakdownOpen
+                    ? "Refresh Question Breakdown"
+                    : "View Question Breakdown"}
               </Text>
-              <Ionicons name="arrow-forward" size={14} color={colors.parent} />
+              <Ionicons name="chevron-down" size={14} color={colors.parent} />
             </Pressable>
+
+            {isBreakdownOpen && (
+              <View style={styles.inlineBreakdown}>
+                {drilldownError ? (
+                  <Text style={styles.inlineBreakdownError}>
+                    {drilldownError}
+                  </Text>
+                ) : drilldownLoading ? (
+                  <Text style={styles.inlineBreakdownHint}>
+                    Loading question analysis...
+                  </Text>
+                ) : (
+                  <>
+                    <View style={styles.inlineBreakdownTop}>
+                      <Text style={styles.inlineBreakdownTitle}>
+                        Question Breakdown
+                      </Text>
+                      <Text style={styles.inlineBreakdownHint}>
+                        Slide to view more
+                      </Text>
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      decelerationRate="fast"
+                      snapToInterval={INLINE_QUESTION_TILE + spacing.sm}
+                      disableIntervalMomentum
+                      contentContainerStyle={styles.inlineQuestionScroller}
+                    >
+                      {questionColumns.map((column) => (
+                        <View key={column[0]?.q_no} style={styles.inlineQuestionColumn}>
+                          {column.map((question) => {
+                            const bgColor =
+                              question.status === "C"
+                                ? colors.primary
+                                : question.status === "W"
+                                  ? colors.danger
+                                  : colors.surface2;
+                            const textColor =
+                              question.status === "U"
+                                ? colors.textMuted
+                                : colors.surface;
+                            return (
+                              <View
+                                key={question.q_no}
+                                style={[
+                                  styles.inlineQuestionTile,
+                                  { backgroundColor: bgColor },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.inlineQuestionText,
+                                    { color: textColor },
+                                  ]}
+                                >
+                                  {question.q_no}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                          {column.length === 1 && (
+                            <View style={styles.inlineQuestionPlaceholder} />
+                          )}
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+              </View>
+            )}
           </View>
         )}
       </Pressable>
@@ -979,8 +1335,8 @@ export function ResultsScreen() {
   const renderDrilldownFooter = () => {
     if (!drilldownData) return null;
     const summaryText =
-      `${drilldownData.result.correct} Correct  ·  ` +
-      `${drilldownData.result.wrong} Wrong  ·  ` +
+      `${drilldownData.result.correct} Correct  |  ` +
+      `${drilldownData.result.wrong} Wrong  |  ` +
       `${drilldownData.result.unattempted} Unattempted`;
     return (
       <View style={styles.legendWrapper}>
@@ -1013,23 +1369,25 @@ export function ResultsScreen() {
     // Students still loading from /parent/students/
     if (studentsLoading) return renderSummarySkeleton();
     // Students fetch failed
-    if (studentsError) return (
-      <View style={styles.errorState}>
-        <Ionicons name="warning-outline" size={32} color={colors.warning} />
-        <Text style={styles.errorTitle}>Could not load students</Text>
-        <Text style={styles.errorMessage}>{studentsError}</Text>
-      </View>
-    );
+    if (studentsError)
+      return (
+        <View style={styles.errorState}>
+          <Ionicons name="warning-outline" size={32} color={colors.warning} />
+          <Text style={styles.errorTitle}>Could not load students</Text>
+          <Text style={styles.errorMessage}>{studentsError}</Text>
+        </View>
+      );
     // No students linked to this parent account
-    if (students.length === 0) return (
-      <View style={styles.emptyState}>
-        <Ionicons name="people-outline" size={60} color={colors.border} />
-        <Text style={styles.emptyTitle}>No students linked</Text>
-        <Text style={styles.emptySubtitle}>
-          Contact your school to link a student to this account
-        </Text>
-      </View>
-    );
+    if (students.length === 0)
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="people-outline" size={60} color={colors.border} />
+          <Text style={styles.emptyTitle}>No students linked</Text>
+          <Text style={styles.emptySubtitle}>
+            Contact your school to link a student to this account
+          </Text>
+        </View>
+      );
     if (examsLoading || summaryLoading) return renderSummarySkeleton();
     if (summaryError) return renderSummaryError();
     if (exams.length === 0) return renderEmptyState();
@@ -1096,9 +1454,9 @@ export function ResultsScreen() {
         right={activeScreen === "drilldown" ? <View /> : undefined}
       />
 
-      <View style={styles.studentSelector}>
+      <View style={styles.filterPanel}>
         <Pressable
-          style={styles.studentDropdownBtn}
+          style={styles.primaryStudentFilter}
           onPress={() => setShowStudentPicker(true)}
         >
           <View style={styles.studentDropdownLeft}>
@@ -1109,7 +1467,9 @@ export function ResultsScreen() {
             </View>
             <View>
               <Text style={styles.studentDropdownName}>
-                {activeStudent ? toTitleCase(activeStudent.name) : "Select Student"}
+                {activeStudent
+                  ? toTitleCase(activeStudent.name)
+                  : "Select Student"}
               </Text>
               {activeStudent && (
                 <Text style={styles.studentDropdownMeta}>
@@ -1118,41 +1478,48 @@ export function ResultsScreen() {
               )}
             </View>
           </View>
-          <View style={styles.studentDropdownChevron}>
+          <View style={styles.filterChevron}>
             <Ionicons name="chevron-down" size={14} color={colors.parent} />
           </View>
         </Pressable>
-      </View>
 
-      <View style={styles.identityStrip}>
-        <View style={styles.identityLeft}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {getInitials(summaryStudentName ?? "")}
-            </Text>
+        <View style={styles.filterRow}>
+          <View style={styles.childSummary}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {getInitials(summaryStudentName ?? "")}
+              </Text>
+            </View>
+            <View style={styles.identityInfo}>
+              <Text style={styles.identityName}>
+                {toTitleCase(summaryStudentName ?? "Student")}
+              </Text>
+              <Text style={styles.identityMeta} numberOfLines={1}>
+                {[
+                  summaryClass,
+                  summarySection ? `Section ${summarySection}` : "",
+                  summaryRef ? `Ref: ${summaryRef}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" - ")}
+              </Text>
+            </View>
           </View>
-          <View style={styles.identityInfo}>
-            <Text style={styles.identityName}>
-              {toTitleCase(summaryStudentName ?? "")}
+
+          <Pressable
+            style={styles.examPicker}
+            onPress={() => setShowExamPicker(true)}
+          >
+            <Text style={styles.examPickerText} numberOfLines={1}>
+              {truncateExamName(activeExam?.exam_name ?? "Select Exam")}
             </Text>
-            <Text style={styles.identityMeta}>
-              {summaryClass} · Section {summarySection} · Ref: {summaryRef}
-            </Text>
-          </View>
+            <Ionicons
+              name="chevron-down"
+              size={13}
+              color={colors.textSecondary}
+            />
+          </Pressable>
         </View>
-        <Pressable
-          style={styles.examPicker}
-          onPress={() => setShowExamPicker(true)}
-        >
-          <Text style={styles.examPickerText}>
-            {truncateExamName(activeExam?.exam_name ?? "Select Exam")}
-          </Text>
-          <Ionicons
-            name="chevron-down"
-            size={12}
-            color={colors.textSecondary}
-          />
-        </Pressable>
       </View>
 
       <View style={styles.content}>
@@ -1161,10 +1528,9 @@ export function ResultsScreen() {
           : renderDrilldownContent()}
       </View>
 
-      <BottomSheet
+      <PickerPopup
         visible={showExamPicker}
         onClose={() => setShowExamPicker(false)}
-        height="50%"
       >
         <Text style={styles.sheetTitle}>Select Exam</Text>
         <FlatList
@@ -1191,7 +1557,9 @@ export function ResultsScreen() {
                   </Text>
                 </View>
                 <View style={styles.examRowRight}>
-                  <Text style={styles.examRowDate}>{item.exam_date}</Text>
+                  <Text style={styles.examRowDate}>
+                    {formatExamDate(item.exam_date)}
+                  </Text>
                   {isActive && (
                     <Ionicons
                       name="checkmark"
@@ -1206,24 +1574,24 @@ export function ResultsScreen() {
           ItemSeparatorComponent={() => <View style={styles.examRowDivider} />}
           showsVerticalScrollIndicator={false}
         />
-      </BottomSheet>
+      </PickerPopup>
 
-      <BottomSheet
+      <PickerPopup
         visible={showStudentPicker}
         onClose={() => setShowStudentPicker(false)}
-        height="50%"
       >
         <Text style={styles.sheetTitle}>Select Student</Text>
         <FlatList
           data={students}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
-            const isActive = item.id === selectedStudentId;
+            const isActive =
+              item.id === selectedStudentId || item.user_id === selectedStudentId;
             return (
               <Pressable
                 style={styles.examRowItem}
                 onPress={() => {
-                  handleStudentPress(item.id);
+                  handleStudentPress(item.user_id);
                   setShowStudentPicker(false);
                 }}
               >
@@ -1254,7 +1622,7 @@ export function ResultsScreen() {
                     </Text>
                     <Text style={styles.examRowDate}>
                       {item.academic_class.name}
-                      {item.section?.name ? ` · Sec ${item.section.name}` : ""}
+                      {item.section?.name ? ` - Sec ${item.section.name}` : ""}
                     </Text>
                   </View>
                 </View>
@@ -1267,7 +1635,7 @@ export function ResultsScreen() {
           ItemSeparatorComponent={() => <View style={styles.examRowDivider} />}
           showsVerticalScrollIndicator={false}
         />
-      </BottomSheet>
+      </PickerPopup>
     </SafeAreaView>
   );
 }
@@ -1286,23 +1654,27 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
 
-  studentSelector: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.sm,
+  filterPanel: {
+    backgroundColor: colors.background,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
   },
-  studentDropdownBtn: {
+  primaryStudentFilter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.surface2,
-    borderRadius: 12,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: spacing.md,
+    borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   studentDropdownLeft: {
     flexDirection: "row",
@@ -1333,13 +1705,29 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 1,
   },
-  studentDropdownChevron: {
+  filterChevron: {
     width: 28,
     height: 28,
     borderRadius: 999,
     backgroundColor: colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  childSummary: {
+    flex: 1,
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    paddingVertical: spacing.sm,
   },
   studentPickerRow: {
     flexDirection: "row",
@@ -1412,9 +1800,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     backgroundColor: colors.surface2,
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    maxWidth: 136,
   },
   examPickerText: {
     fontSize: 12,
@@ -1422,15 +1811,288 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 
+  pageIntro: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.lg,
+  },
+  pageIntroText: { flex: 1, paddingRight: spacing.md },
+  pageEyebrow: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.parent,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  pageTitle: {
+    fontSize: 30,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginTop: 4,
+  },
+  pageSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    lineHeight: 20,
+  },
+  pageIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.parent,
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  heroCard: {
+    backgroundColor: colors.primaryDark,
+    borderRadius: 26,
+    padding: spacing.xl,
+    overflow: "hidden",
+    shadowColor: colors.parent,
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  heroGlow: {
+    position: "absolute",
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    right: -62,
+    top: -82,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  heroLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.74)",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  heroName: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: colors.surface,
+    marginTop: spacing.xs,
+  },
+  heroBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.surface,
+  },
+  heroScoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  scoreRing: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    borderWidth: 10,
+    borderColor: "rgba(255,255,255,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  scoreRingValue: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: colors.surface,
+  },
+  scoreRingLabel: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.74)",
+    marginTop: 2,
+  },
+  heroMetrics: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 18,
+    flexDirection: "row",
+    paddingVertical: spacing.lg,
+  },
+  heroMetric: { flex: 1, alignItems: "center" },
+  heroMetricValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.surface,
+  },
+  heroMetricLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.72)",
+    marginTop: spacing.xs,
+  },
+  heroMetricDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.22)",
+  },
+  heroProgressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    overflow: "hidden",
+    marginTop: spacing.xl,
+  },
+  heroProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+  },
+  insightGrid: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  insightCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  insightIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.md,
+  },
+  insightValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  insightLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  analyticsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    marginTop: spacing.md,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sectionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 3,
+  },
+  trendBars: {
+    height: 128,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: spacing.sm,
+  },
+  trendItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  trendBarTrack: {
+    height: TREND_BAR_HEIGHT,
+    width: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surface2,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+  },
+  trendBarFill: {
+    width: "100%",
+    borderTopLeftRadius: 13,
+    borderTopRightRadius: 13,
+    backgroundColor: colors.parent,
+  },
+  trendLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: "center",
+    width: "100%",
+  },
+  emptyTrendText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    flex: 1,
+    alignSelf: "center",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  subjectCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.parent,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
   riskBanner: {
     flexDirection: "row",
     alignItems: "center",
     padding: spacing.md,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   summaryHeader: {
-    marginBottom: spacing.lg,
-    marginHorizontal: -spacing.lg,
+    marginBottom: spacing.sm,
   },
   riskBannerText: { flex: 1, marginLeft: spacing.sm },
   riskBannerTitle: { fontSize: 14, fontWeight: "600" },
@@ -1438,40 +2100,80 @@ const styles = StyleSheet.create({
 
   subjectCard: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 22,
     padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: colors.border,
+    overflow: "hidden",
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  subjectAccent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   subjectRowTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  subjectNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flex: 1,
+  },
+  subjectDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
   subjectTitle: {
-    fontSize: 15,
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  subjectScoreLine: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: spacing.lg,
+    gap: spacing.md,
+  },
+  subjectMarksLarge: {
+    fontSize: 26,
     fontWeight: "700",
     color: colors.textPrimary,
   },
+  subjectMarksMuted: {
+    fontSize: 20,
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  subjectPctBlock: { alignItems: "flex-end" },
   rankBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
     backgroundColor: colors.surface2,
-    paddingVertical: 4,
+    paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
   },
   rankBadgeText: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.textSecondary,
   },
-  subjectRowMid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.md,
-  },
-  subjectScoreBlock: { flex: 1 },
   subjectPct: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: "700",
   },
   subjectMarks: {
@@ -1479,39 +2181,31 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   performancePill: {
-    flexDirection: "column",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: 999,
-  },
-  performanceText: { fontSize: 11, fontWeight: "500" },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.surface2,
-    marginTop: spacing.md,
-  },
-  progressFill: {
-    height: 6,
-    borderRadius: 3,
-  },
-  riskRow: {
-    alignItems: "flex-end",
-    marginTop: spacing.md,
-  },
-  tapHintRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    justifyContent: "space-between",
-    marginTop: spacing.sm,
-    alignSelf: "stretch",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: 999,
   },
-  tapHintText: {
-    fontSize: 11,
-    color: colors.textMuted,
+  performanceText: { fontSize: 11, fontWeight: "700" },
+  progressTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surface2,
+    marginTop: spacing.lg,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  subjectMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
 
   subjectExpanded: { marginTop: spacing.md },
@@ -1583,6 +2277,58 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: colors.parent,
   },
+  drilldownButtonDisabled: { opacity: 0.7 },
+  inlineBreakdown: {
+    marginTop: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  inlineBreakdownTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+  inlineBreakdownTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
+  inlineBreakdownHint: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  inlineBreakdownError: {
+    fontSize: 12,
+    color: colors.danger,
+  },
+  inlineQuestionScroller: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  inlineQuestionColumn: {
+    gap: spacing.sm,
+  },
+  inlineQuestionTile: {
+    width: INLINE_QUESTION_TILE,
+    height: INLINE_QUESTION_TILE,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlineQuestionText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  inlineQuestionPlaceholder: {
+    width: INLINE_QUESTION_TILE,
+    height: INLINE_QUESTION_TILE,
+  },
 
   drilldownSummaryCard: {
     backgroundColor: colors.surface,
@@ -1636,6 +2382,36 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  popupLayer: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  popupDismiss: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "transparent",
+  },
+  popupCard: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxl,
+    maxHeight: "58%",
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 10,
+  },
+  popupHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    alignSelf: "center",
+    marginBottom: spacing.lg,
+  },
   sheetTitle: {
     fontSize: 16,
     fontWeight: "500",

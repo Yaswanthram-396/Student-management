@@ -3,7 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Dimensions,
+    Animated,
+    Easing,
     FlatList,
     PanResponder,
     Pressable,
@@ -18,9 +19,6 @@ import { typography } from "../../constants/typography";
 import { parentApi } from "../../services/parent";
 import type { ParentCalendarEvent } from "../../types/parent";
 import { HeaderBar } from "../shared";
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const CELL_SIZE = (SCREEN_WIDTH - spacing.lg * 2) / 7;
 
 const WEEK_DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = [
@@ -50,6 +48,13 @@ const EVENT_TYPE_LABELS: Record<ParentCalendarEvent["event_type"], string> = {
   EVENT: "Event",
 };
 
+const EVENT_FILTERS: (ParentCalendarEvent["event_type"] | "ALL")[] = [
+  "ALL",
+  "HOLIDAY",
+  "EXAM",
+  "EVENT",
+];
+
 function buildCalDays(year: number, month: number): (number | null)[] {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -70,8 +75,8 @@ function eventDaysInMonth(
   events: ParentCalendarEvent[],
   year: number,
   month: number,
-): Set<number> {
-  const days = new Set<number>();
+): Record<number, string> {
+  const days: Record<number, string> = {};
   const monthStart = toDateStr(year, month, 1);
   const monthEnd = toDateStr(year, month, daysInMonth(year, month));
   for (const ev of events) {
@@ -80,7 +85,7 @@ function eventDaysInMonth(
       const end = new Date(ev.end_date);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         if (d.getFullYear() === year && d.getMonth() === month) {
-          days.add(d.getDate());
+          days[d.getDate()] = EVENT_TYPE_COLORS[ev.event_type];
         }
       }
     }
@@ -93,7 +98,7 @@ function formatDateRange(start: string, end: string): string {
   const e = new Date(end);
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
   if (start === end) return s.toLocaleDateString("en-IN", opts);
-  return `${s.toLocaleDateString("en-IN", opts)} – ${e.toLocaleDateString("en-IN", opts)}`;
+  return `${s.toLocaleDateString("en-IN", opts)} - ${e.toLocaleDateString("en-IN", opts)}`;
 }
 
 function EventRow({ item }: { item: ParentCalendarEvent }) {
@@ -132,11 +137,14 @@ export function CalendarScreen() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState<number | null>(null);
+  const [filterType, setFilterType] = useState<ParentCalendarEvent["event_type"] | null>(null);
 
   const [studentId, setStudentId] = useState<string | null>(null);
   const [events, setEvents] = useState<ParentCalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const monthAnim = useRef(new Animated.Value(0)).current;
 
   // Load first student ID from profile once
   useEffect(() => {
@@ -167,18 +175,33 @@ export function CalendarScreen() {
     if (studentId) fetchEvents(year, month, studentId);
   }, [studentId, year, month, fetchEvents]);
 
-  const goBack = () => {
-    if (month === 0) {
-      setMonth(11);
-      setYear((y) => y - 1);
-    } else setMonth((m) => m - 1);
+  const animateMonth = (direction: -1 | 1) => {
+    monthAnim.setValue(direction * 38);
+    Animated.timing(monthAnim, {
+      toValue: 0,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
   };
-  const goNext = () => {
-    if (month === 11) {
-      setMonth(0);
-      setYear((y) => y + 1);
-    } else setMonth((m) => m + 1);
+
+  const shiftMonth = (direction: -1 | 1) => {
+    animateMonth(direction);
+    setSelectedDate(null);
+    setMonth((currentMonth) => {
+      if (direction === -1 && currentMonth === 0) {
+        setYear((currentYear) => currentYear - 1);
+        return 11;
+      }
+      if (direction === 1 && currentMonth === 11) {
+        setYear((currentYear) => currentYear + 1);
+        return 0;
+      }
+      return currentMonth + direction;
+    });
   };
+  const goBack = () => shiftMonth(-1);
+  const goNext = () => shiftMonth(1);
 
   const swipeResponder = useRef(
     PanResponder.create({
@@ -196,6 +219,12 @@ export function CalendarScreen() {
   const eventDays = eventDaysInMonth(events, year, month);
   const isCurrentMonth =
     month === today.getMonth() && year === today.getFullYear();
+  const filteredEvents = events.filter((event) => {
+    if (filterType && event.event_type !== filterType) return false;
+    if (!selectedDate) return true;
+    const selected = toDateStr(year, month, selectedDate);
+    return event.start_date <= selected && event.end_date >= selected;
+  });
 
   const CalHeader = (
     <View style={styles.calHeader} {...swipeResponder.panHandlers}>
@@ -219,39 +248,94 @@ export function CalendarScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.weekRow}>
-        {WEEK_DAYS.map((d, i) => (
-          <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
-            <Text style={styles.weekDayLabel}>{d}</Text>
-          </View>
-        ))}
-      </View>
+      <Animated.View
+        style={[
+          styles.calendarCard,
+          {
+            opacity: monthAnim.interpolate({
+              inputRange: [-38, 0, 38],
+              outputRange: [0.72, 1, 0.72],
+            }),
+            transform: [{ translateX: monthAnim }],
+          },
+        ]}
+      >
+        <View style={styles.weekRow}>
+          {WEEK_DAYS.map((d, i) => (
+            <Text key={i} style={styles.weekDayLabel}>{d}</Text>
+          ))}
+        </View>
 
-      <View style={styles.calGrid}>
-        {calDays.map((d, i) => {
-          const isToday = isCurrentMonth && d === today.getDate();
-          const hasEvent = d !== null && eventDays.has(d);
-          return (
-            <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
-              {d !== null && (
-                <>
-                  <View
-                    style={[styles.dayCircle, isToday && styles.todayCircle]}
+        <View style={styles.calGrid}>
+          {calDays.map((d, i) => {
+            const isToday = isCurrentMonth && d === today.getDate();
+            const isSelected = selectedDate === d;
+            const eventColor = d !== null ? eventDays[d] : undefined;
+            return (
+              <View key={i} style={styles.dayCell}>
+                {d !== null && (
+                  <Pressable
+                    style={[
+                      styles.dayCircle,
+                      isToday && !isSelected && styles.todayCircle,
+                      isSelected && styles.selectedDayCircle,
+                    ]}
+                    onPress={() => setSelectedDate((prev) => (prev === d ? null : d))}
                   >
-                    <Text style={[styles.dayNum, isToday && styles.todayNum]}>
+                    <Text
+                      style={[
+                        styles.dayNum,
+                        isToday && !isSelected && styles.todayNum,
+                        isSelected && styles.selectedDayNum,
+                      ]}
+                    >
                       {d}
                     </Text>
-                  </View>
-                  {hasEvent && <View style={styles.eventDot} />}
-                </>
-              )}
-            </View>
+                    {!!eventColor && (
+                      <View
+                        style={[
+                          styles.eventDot,
+                          { backgroundColor: isSelected ? colors.surface : eventColor },
+                        ]}
+                      />
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
+
+      <View style={styles.filterChipRow}>
+        {EVENT_FILTERS.map((type) => {
+          const active = type === "ALL" ? !filterType : filterType === type;
+          const color = type === "ALL" ? colors.parent : EVENT_TYPE_COLORS[type];
+          const label = type === "ALL" ? "All" : EVENT_TYPE_LABELS[type];
+          return (
+            <Pressable
+              key={type}
+              style={[
+                styles.filterChip,
+                { borderColor: color },
+                active && { backgroundColor: color },
+              ]}
+              onPress={() => setFilterType(type === "ALL" ? null : type)}
+            >
+              <Text style={[styles.filterChipText, { color: active ? colors.surface : color }]}>
+                {label}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
 
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionLabel}>Events This Month</Text>
+        <Text style={styles.sectionLabel}>
+          {selectedDate
+            ? `Events on ${selectedDate} ${MONTH_NAMES[month]}`
+            : "Events This Month"}
+        </Text>
         {eventsLoading && (
           <ActivityIndicator size="small" color={colors.parent} />
         )}
@@ -293,7 +377,7 @@ export function CalendarScreen() {
       />
 
       <FlatList
-        data={events}
+        data={filteredEvents}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <EventRow item={item} />}
         contentContainerStyle={styles.listContent}
@@ -307,7 +391,9 @@ export function CalendarScreen() {
             </View>
           ) : (
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyText}>No events this month</Text>
+              <Text style={styles.emptyText}>
+                {selectedDate ? "No events on this day" : "No events this month"}
+              </Text>
             </View>
           )
         }
@@ -348,31 +434,71 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.textPrimary,
   },
+  calendarCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    shadowColor: colors.textPrimary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   weekRow: { flexDirection: "row", marginBottom: spacing.xs },
   weekDayLabel: {
     ...(typography.caption as object),
     fontWeight: "500",
     color: colors.textMuted,
     textAlign: "center",
+    flex: 1,
+    paddingVertical: spacing.sm,
   },
-  calGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: spacing.xl },
-  dayCell: { alignItems: "center", paddingVertical: 3 },
+  calGrid: { flexDirection: "row", flexWrap: "wrap" },
+  dayCell: {
+    width: `${100 / 7}%`,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    minHeight: 42,
+  },
   dayCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },
-  todayCircle: { backgroundColor: colors.parent },
+  todayCircle: { backgroundColor: colors.primaryLight },
+  selectedDayCircle: { backgroundColor: colors.parent },
   dayNum: { ...(typography.caption as object), color: colors.textPrimary },
-  todayNum: { color: colors.surface, fontWeight: "600" },
+  todayNum: { color: colors.parent, fontWeight: "600" },
+  selectedDayNum: { color: colors.surface, fontWeight: "700" },
   eventDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
     backgroundColor: colors.parent,
     marginTop: 2,
+  },
+  filterChipRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  filterChip: {
+    borderWidth: 1.2,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    backgroundColor: colors.surface,
+  },
+  filterChipText: {
+    ...(typography.caption as object),
+    fontWeight: "600",
   },
   sectionRow: {
     flexDirection: "row",

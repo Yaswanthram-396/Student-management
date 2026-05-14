@@ -27,6 +27,7 @@ export interface PersonRef {
 // Profile & Students
 export interface ParentStudent {
   id: string;
+  user_id: string;
   name: string;
   roll_number: string;
   is_parent_query_disabled?: boolean;
@@ -36,6 +37,7 @@ export interface ParentStudent {
 
 export interface ParentStudentDetail extends ParentStudent {
   admission_number: string;
+  user_id: string;
 }
 
 export interface ParentProfile {
@@ -59,8 +61,8 @@ export interface ProfilePicResponse {
 // Attendance
 export interface AttendanceRecord {
   date: string;
-  slot: 'MORNING' | 'AFTERNOON';
-  status: 'PRESENT' | 'ABSENT' | 'LATE';
+  slot: "MORNING" | "AFTERNOON";
+  status: "PRESENT" | "ABSENT" | "LATE";
   confirmed_at: string;
 }
 
@@ -88,8 +90,8 @@ export interface ParentAnnouncement {
   id: string;
   title: string;
   body: string;
-  author_role: 'PRINCIPAL' | 'TEACHER';
-  audience: 'SCHOOL' | 'CLASS' | 'SECTION';
+  author_role: "PRINCIPAL" | "TEACHER";
+  audience: "SCHOOL" | "CLASS" | "SECTION";
   published_at: string;
   attachments: AnnouncementAttachment[];
 }
@@ -133,7 +135,7 @@ export interface HomeworkResponse {
 export interface ParentCalendarEvent {
   id: string;
   title: string;
-  event_type: 'HOLIDAY' | 'EXAM' | 'EVENT';
+  event_type: "HOLIDAY" | "EXAM" | "EVENT";
   start_date: string;
   end_date: string;
   description?: string;

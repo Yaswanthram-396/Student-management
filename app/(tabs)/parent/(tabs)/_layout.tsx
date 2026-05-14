@@ -16,8 +16,10 @@ function ParentTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.pillWrap]} pointerEvents="box-none">
-      <View style={styles.pillBar}>
+    <View style={styles.pillWrap} pointerEvents="box-none">
+      <View
+        style={[styles.pillBar, { paddingBottom: Math.max(insets.bottom, 8) }]}
+      >
         {state.routes.map((route) => {
           const isFocused = state.routes[state.index]?.key === route.key;
           const cfg = TAB_ICONS[route.name] ?? {
@@ -86,10 +88,8 @@ export default function ParentTabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  pillWrap: { width: "100%", position: "absolute", bottom: 0 },
+  pillWrap: { width: "100%", backgroundColor: "#FFFFFF" },
   pillBar: {
-    paddingBottom: 8,
-
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
     borderBottomLeftRadius: 0,
