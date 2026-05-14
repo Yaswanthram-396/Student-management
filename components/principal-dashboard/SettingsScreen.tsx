@@ -3,16 +3,16 @@ import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Linking,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -29,11 +29,11 @@ import type {
   TeacherResponse,
 } from "../../types/principal";
 import {
-    BottomSheet,
-    HeaderBar,
-    LoadingScreen,
-    SegmentedControl,
-    ToggleSwitch,
+  BottomSheet,
+  HeaderBar,
+  LoadingScreen,
+  SegmentedControl,
+  ToggleSwitch,
 } from "../shared";
 
 // ─── Local sub-components ─────────────────────────────────────────────────────
@@ -108,13 +108,16 @@ export function SettingsScreen() {
   const [teacherSuccess, setTeacherSuccess] = useState(false);
   const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
-  const [selectedSubject, setSelectedSubject] = useState<SubjectResponse | null>(null);
+  const [selectedSubject, setSelectedSubject] =
+    useState<SubjectResponse | null>(null);
   const [sections, setSections] = useState<SectionResponse[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [uploadingTeachersCsv, setUploadingTeachersCsv] = useState(false);
   const [teacherUploadStatusText, setTeacherUploadStatusText] = useState("");
-  const [teacherErrorReportUrl, setTeacherErrorReportUrl] = useState<string | null>(null);
+  const [teacherErrorReportUrl, setTeacherErrorReportUrl] = useState<
+    string | null
+  >(null);
 
   // Management data
   const [classes, setClasses] = useState<AcademicClassResponse[]>([]);
@@ -138,19 +141,26 @@ export function SettingsScreen() {
   const [subjectCodeInput, setSubjectCodeInput] = useState("");
   const [subjectActiveInput, setSubjectActiveInput] = useState(true);
   const [savingSubject, setSavingSubject] = useState(false);
-  const [deletingSubjectId, setDeletingSubjectId] = useState<string | null>(null);
+  const [deletingSubjectId, setDeletingSubjectId] = useState<string | null>(
+    null,
+  );
 
   // Section management
   const [showSectionSheet, setShowSectionSheet] = useState(false);
   const [sectionMode, setSectionMode] = useState<ManageMode>("create");
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [selectedManageClassId, setSelectedManageClassId] = useState("");
-  const [selectedSectionFilterClassId, setSelectedSectionFilterClassId] = useState("");
+  const [selectedSectionFilterClassId, setSelectedSectionFilterClassId] =
+    useState("");
   const [sectionNameInput, setSectionNameInput] = useState("");
-  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<
+    string | null
+  >(null);
   const [sectionParentQueryInput, setSectionParentQueryInput] = useState(true);
   const [savingSection, setSavingSection] = useState(false);
-  const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
+  const [deletingSectionId, setDeletingSectionId] = useState<string | null>(
+    null,
+  );
 
   // ── Load config on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -181,52 +191,55 @@ export function SettingsScreen() {
           principalApi.getTeachers(),
         ]);
 
-      const sectionResults = sectionsResult.status === "fulfilled"
-        ? sectionsResult.value.results
-        : [];
-      const classResults = classesResult.status === "fulfilled"
-        ? classesResult.value.results
-        : Array.from(
-          new Map(
-            sectionResults.map((section) => [
-              section.academic_class.id,
-              {
-                id: section.academic_class.id,
-                name: section.academic_class.name,
-                display_order: 0,
-              },
-            ]),
-          ).values(),
-        );
-      const subjectResults = subjectsResult.status === "fulfilled"
-        ? subjectsResult.value.results
-        : [];
-      const teacherResults = teachersResult.status === "fulfilled"
-        ? teachersResult.value
-        : [];
+      const sectionResults =
+        sectionsResult.status === "fulfilled"
+          ? sectionsResult.value.results
+          : [];
+      const classResults =
+        classesResult.status === "fulfilled"
+          ? classesResult.value.results
+          : Array.from(
+              new Map(
+                sectionResults.map((section) => [
+                  section.academic_class.id,
+                  {
+                    id: section.academic_class.id,
+                    name: section.academic_class.name,
+                    display_order: 0,
+                  },
+                ]),
+              ).values(),
+            );
+      const subjectResults =
+        subjectsResult.status === "fulfilled"
+          ? subjectsResult.value.results
+          : [];
+      const teacherResults =
+        teachersResult.status === "fulfilled" ? teachersResult.value.results : [];
 
       setClasses(
         classResults
           .slice()
-          .sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)),
+          .sort(
+            (a, b) =>
+              a.display_order - b.display_order || a.name.localeCompare(b.name),
+          ),
       );
       setSubjects(
-        subjectResults
-          .slice()
-          .sort((a, b) => a.name.localeCompare(b.name)),
+        subjectResults.slice().sort((a, b) => a.name.localeCompare(b.name)),
       );
       setSections(
-        sectionResults
-          .slice()
-          .sort((a, b) => {
-            const classCompare = a.academic_class.name.localeCompare(b.academic_class.name);
-            return classCompare !== 0 ? classCompare : a.name.localeCompare(b.name);
-          }),
+        sectionResults.slice().sort((a, b) => {
+          const classCompare = a.academic_class.name.localeCompare(
+            b.academic_class.name,
+          );
+          return classCompare !== 0
+            ? classCompare
+            : a.name.localeCompare(b.name);
+        }),
       );
       setTeachers(
-        teacherResults
-          .slice()
-          .sort((a, b) => a.name.localeCompare(b.name)),
+        teacherResults.slice().sort((a, b) => a.name.localeCompare(b.name)),
       );
       setSelectedManageClassId((prev) => prev || classResults[0]?.id || "");
       setSelectedSectionFilterClassId((prev) => prev);
@@ -247,24 +260,23 @@ export function SettingsScreen() {
     setLoadingSubjects(true);
     setTeacherUploadStatusText("");
     setTeacherErrorReportUrl(null);
-    Promise.allSettled([
-      principalApi.getSections(),
-      principalApi.getSubjects(),
-    ]).then(([sectionsResult, subjectsResult]) => {
-      if (sectionsResult.status === "fulfilled") {
-        setSections(sectionsResult.value.results);
-      }
-      if (subjectsResult.status === "fulfilled") {
-        setSubjects(
-          subjectsResult.value.results
-            .slice()
-            .sort((a, b) => a.name.localeCompare(b.name)),
-        );
-      }
-    }).finally(() => {
-      setLoadingSections(false);
-      setLoadingSubjects(false);
-    });
+    Promise.allSettled([principalApi.getSections(), principalApi.getSubjects()])
+      .then(([sectionsResult, subjectsResult]) => {
+        if (sectionsResult.status === "fulfilled") {
+          setSections(sectionsResult.value.results);
+        }
+        if (subjectsResult.status === "fulfilled") {
+          setSubjects(
+            subjectsResult.value.results
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          );
+        }
+      })
+      .finally(() => {
+        setLoadingSections(false);
+        setLoadingSubjects(false);
+      });
   }, [showTeacherSheet]);
 
   if (loadingConfig) {
@@ -393,7 +405,7 @@ export function SettingsScreen() {
         teacherName.toLowerCase().replace(/\s+/g, ".") + ".teacher";
       await principalApi.createTeacher({
         name: teacherName,
-        mobile_number: teacherMobile,
+        phone_number: teacherMobile,
         username,
         password: "Welcome@123",
         primary_subject_id: selectedSubject.id,
@@ -568,7 +580,9 @@ export function SettingsScreen() {
               `${status.error_count} rows had errors.`,
             );
             if (entity === "teacher") {
-              setTeacherUploadStatusText("Upload failed. Review the CSV and try again.");
+              setTeacherUploadStatusText(
+                "Upload failed. Review the CSV and try again.",
+              );
               setTeacherErrorReportUrl(status.error_report_url ?? null);
             }
           }
@@ -595,7 +609,10 @@ export function SettingsScreen() {
   async function handleSaveClass() {
     const parsedOrder = Number(classOrderInput);
     if (!classNameInput.trim() || !Number.isFinite(parsedOrder)) {
-      Alert.alert("Missing fields", "Class name and display order are required.");
+      Alert.alert(
+        "Missing fields",
+        "Class name and display order are required.",
+      );
       return;
     }
 
@@ -722,14 +739,14 @@ export function SettingsScreen() {
   }
 
   function confirmDeleteClass(item: AcademicClassResponse) {
-    Alert.alert(
-      "Delete class",
-      `Delete ${item.name}? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => handleDeleteClass(item.id) },
-      ],
-    );
+    Alert.alert("Delete class", `Delete ${item.name}? This cannot be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => handleDeleteClass(item.id),
+      },
+    ]);
   }
 
   function confirmDeleteSubject(item: SubjectResponse) {
@@ -738,7 +755,11 @@ export function SettingsScreen() {
       `Delete ${item.name}? This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => handleDeleteSubject(item.id) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => handleDeleteSubject(item.id),
+        },
       ],
     );
   }
@@ -749,7 +770,11 @@ export function SettingsScreen() {
       `Delete Section ${item.name} from ${item.academic_class.name}?`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => handleDeleteSection(item.id) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => handleDeleteSection(item.id),
+        },
       ],
     );
   }
@@ -762,16 +787,10 @@ export function SettingsScreen() {
   }
 
   const filteredManagedSections = selectedSectionFilterClassId
-    ? sections.filter((item) => item.academic_class.id === selectedSectionFilterClassId)
+    ? sections.filter(
+        (item) => item.academic_class.id === selectedSectionFilterClassId,
+      )
     : sections;
-  const selectedManageClassName =
-    classes.find((item) => item.id === selectedManageClassId)?.name ?? "";
-  const filteredTeachersForManageClass = teachers.filter((teacher) =>
-    teacher.assigned_sections.some((section) => {
-      const matchingSection = sections.find((item) => item.id === section.id);
-      return matchingSection?.academic_class.id === selectedManageClassId;
-    }),
-  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -891,7 +910,11 @@ export function SettingsScreen() {
               />
               <Text style={styles.rowLabel}>Manage Classes</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textMuted}
+            />
           </Pressable>
           <Pressable
             style={[styles.row, styles.rowBorder]}
@@ -906,12 +929,13 @@ export function SettingsScreen() {
               />
               <Text style={styles.rowLabel}>Manage Subjects</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textMuted}
+            />
           </Pressable>
-          <Pressable
-            style={styles.row}
-            onPress={openCreateSectionSheet}
-          >
+          <Pressable style={styles.row} onPress={openCreateSectionSheet}>
             <View style={styles.rowIconLabel}>
               <Ionicons
                 name="git-branch-outline"
@@ -921,7 +945,11 @@ export function SettingsScreen() {
               />
               <Text style={styles.rowLabel}>Manage Sections</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textMuted}
+            />
           </Pressable>
         </SettingsSection>
 
@@ -1089,10 +1117,7 @@ export function SettingsScreen() {
       </BottomSheet>
 
       {/* Teacher Onboarding BottomSheet */}
-      <BottomSheet
-        visible={showTeacherSheet}
-        onClose={closeTeacherSheet}
-      >
+      <BottomSheet visible={showTeacherSheet} onClose={closeTeacherSheet}>
         <Text style={styles.sheetTitle}>Add Teacher</Text>
         <Text style={styles.sheetSubtext}>
           Bulk upload CSV columns: name, phone_number, username, password,
@@ -1183,7 +1208,10 @@ export function SettingsScreen() {
               return (
                 <Pressable
                   key={subject.id}
-                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  style={[
+                    styles.subjectChip,
+                    active && styles.subjectChipActive,
+                  ]}
                   onPress={() => setSelectedSubject(subject)}
                 >
                   <Text
@@ -1200,9 +1228,12 @@ export function SettingsScreen() {
           </ScrollView>
         )}
 
-        <Text style={styles.sheetFieldLabel}>Assigned Sections</Text>
+        <Text style={styles.sheetFieldLabel}>Sections</Text>
         {loadingSections ? (
-          <ActivityIndicator color={colors.principal} style={{ marginBottom: spacing.md }} />
+          <ActivityIndicator
+            color={colors.principal}
+            style={{ marginBottom: spacing.md }}
+          />
         ) : sections.length === 0 ? (
           <Text style={[styles.sheetFieldLabel, { marginBottom: spacing.md }]}>
             No sections available
@@ -1214,14 +1245,24 @@ export function SettingsScreen() {
               return (
                 <Pressable
                   key={sec.id}
-                  style={[styles.sectionChip, active && styles.sectionChipActive]}
+                  style={[
+                    styles.sectionChip,
+                    active && styles.sectionChipActive,
+                  ]}
                   onPress={() =>
                     setSelectedSectionIds((prev) =>
-                      active ? prev.filter((id) => id !== sec.id) : [...prev, sec.id]
+                      active
+                        ? prev.filter((id) => id !== sec.id)
+                        : [...prev, sec.id],
                     )
                   }
                 >
-                  <Text style={[styles.sectionChipText, active && styles.sectionChipTextActive]}>
+                  <Text
+                    style={[
+                      styles.sectionChipText,
+                      active && styles.sectionChipTextActive,
+                    ]}
+                  >
                     {sec.academic_class.name} – {sec.name}
                   </Text>
                 </Pressable>
@@ -1271,7 +1312,8 @@ export function SettingsScreen() {
             {classMode === "create" ? "Manage Classes" : "Edit Class"}
           </Text>
           <Text style={styles.sheetSubtext}>
-            Create classes, adjust display order, and remove classes that have no sections or students.
+            Create classes, adjust display order, and remove classes that have
+            no sections or students.
           </Text>
 
           <Text style={styles.sheetFieldLabel}>Class Name</Text>
@@ -1309,28 +1351,42 @@ export function SettingsScreen() {
 
           <View style={styles.managementHeaderRow}>
             <Text style={styles.sheetSubheading}>Existing Classes</Text>
-            {loadingManageData ? <ActivityIndicator color={colors.principal} size="small" /> : null}
+            {loadingManageData ? (
+              <ActivityIndicator color={colors.principal} size="small" />
+            ) : null}
           </View>
 
           {classes.length === 0 ? (
-            <Text style={styles.emptyManagementText}>No classes available yet.</Text>
+            <Text style={styles.emptyManagementText}>
+              No classes available yet.
+            </Text>
           ) : (
             classes.map((item) => (
               <View key={item.id} style={styles.managementCard}>
                 <View style={styles.managementCardHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.managementTitle}>{item.name}</Text>
-                    <Text style={styles.managementMeta}>Display order: {item.display_order}</Text>
+                    <Text style={styles.managementMeta}>
+                      Display order: {item.display_order}
+                    </Text>
                   </View>
                   <View style={styles.managementActions}>
                     <Pressable onPress={() => openEditClassSheet(item)}>
-                      <Ionicons name="create-outline" size={18} color={colors.principal} />
+                      <Ionicons
+                        name="create-outline"
+                        size={18}
+                        color={colors.principal}
+                      />
                     </Pressable>
                     <Pressable onPress={() => confirmDeleteClass(item)}>
                       {deletingClassId === item.id ? (
                         <ActivityIndicator size="small" color={colors.danger} />
                       ) : (
-                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color={colors.danger}
+                        />
                       )}
                     </Pressable>
                   </View>
@@ -1355,7 +1411,8 @@ export function SettingsScreen() {
             {subjectMode === "create" ? "Manage Subjects" : "Edit Subject"}
           </Text>
           <Text style={styles.sheetSubtext}>
-            Create, update, and retire subjects. Inactive subjects remain visible for history but should not be assigned further.
+            Create, update, and retire subjects. Inactive subjects remain
+            visible for history but should not be assigned further.
           </Text>
 
           <Text style={styles.sheetFieldLabel}>Subject Name</Text>
@@ -1378,7 +1435,9 @@ export function SettingsScreen() {
           />
 
           <View style={styles.inlineToggleRow}>
-            <Text style={styles.sheetFieldLabel}>Active for new assignments</Text>
+            <Text style={styles.sheetFieldLabel}>
+              Active for new assignments
+            </Text>
             <ToggleSwitch
               value={subjectActiveInput}
               onChange={() => setSubjectActiveInput((prev) => !prev)}
@@ -1402,11 +1461,15 @@ export function SettingsScreen() {
 
           <View style={styles.managementHeaderRow}>
             <Text style={styles.sheetSubheading}>Existing Subjects</Text>
-            {loadingManageData ? <ActivityIndicator color={colors.principal} size="small" /> : null}
+            {loadingManageData ? (
+              <ActivityIndicator color={colors.principal} size="small" />
+            ) : null}
           </View>
 
           {subjects.length === 0 ? (
-            <Text style={styles.emptyManagementText}>No subjects available yet.</Text>
+            <Text style={styles.emptyManagementText}>
+              No subjects available yet.
+            </Text>
           ) : (
             subjects.map((item) => (
               <View key={item.id} style={styles.managementCard}>
@@ -1419,13 +1482,21 @@ export function SettingsScreen() {
                   </View>
                   <View style={styles.managementActions}>
                     <Pressable onPress={() => openEditSubjectSheet(item)}>
-                      <Ionicons name="create-outline" size={18} color={colors.principal} />
+                      <Ionicons
+                        name="create-outline"
+                        size={18}
+                        color={colors.principal}
+                      />
                     </Pressable>
                     <Pressable onPress={() => confirmDeleteSubject(item)}>
                       {deletingSubjectId === item.id ? (
                         <ActivityIndicator size="small" color={colors.danger} />
                       ) : (
-                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color={colors.danger}
+                        />
                       )}
                     </Pressable>
                   </View>
@@ -1450,7 +1521,8 @@ export function SettingsScreen() {
             {sectionMode === "create" ? "Manage Sections" : "Edit Section"}
           </Text>
           <Text style={styles.sheetSubtext}>
-            Parent queries are allowed only when both the school-level toggle and the section-level toggle are enabled.
+            Parent queries are allowed only when both the school-level toggle
+            and the section-level toggle are enabled.
           </Text>
 
           <Text style={styles.sheetFieldLabel}>Class</Text>
@@ -1465,11 +1537,17 @@ export function SettingsScreen() {
               return (
                 <Pressable
                   key={item.id}
-                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  style={[
+                    styles.subjectChip,
+                    active && styles.subjectChipActive,
+                  ]}
                   onPress={() => setSelectedManageClassId(item.id)}
                 >
                   <Text
-                    style={[styles.subjectChipText, active && styles.subjectChipTextActive]}
+                    style={[
+                      styles.subjectChipText,
+                      active && styles.subjectChipTextActive,
+                    ]}
                   >
                     {item.name}
                   </Text>
@@ -1504,22 +1582,29 @@ export function SettingsScreen() {
               <Text
                 style={[
                   styles.subjectChipText,
-                  selectedClassTeacherId === null && styles.subjectChipTextActive,
+                  selectedClassTeacherId === null &&
+                    styles.subjectChipTextActive,
                 ]}
               >
                 No Class Teacher
               </Text>
             </Pressable>
-            {filteredTeachersForManageClass.map((item) => {
+            {teachers.map((item) => {
               const active = selectedClassTeacherId === item.id;
               return (
                 <Pressable
                   key={item.id}
-                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  style={[
+                    styles.subjectChip,
+                    active && styles.subjectChipActive,
+                  ]}
                   onPress={() => setSelectedClassTeacherId(item.id)}
                 >
                   <Text
-                    style={[styles.subjectChipText, active && styles.subjectChipTextActive]}
+                    style={[
+                      styles.subjectChipText,
+                      active && styles.subjectChipTextActive,
+                    ]}
                   >
                     {item.name}
                   </Text>
@@ -1527,14 +1612,11 @@ export function SettingsScreen() {
               );
             })}
           </ScrollView>
-          {selectedManageClassName ? (
-            <Text style={styles.managementHintText}>
-              Showing teachers linked to {selectedManageClassName}.
-            </Text>
-          ) : null}
 
           <View style={styles.inlineToggleRow}>
-            <Text style={styles.sheetFieldLabel}>Enable parent queries in this section</Text>
+            <Text style={styles.sheetFieldLabel}>
+              Enable parent queries in this section
+            </Text>
             <ToggleSwitch
               value={sectionParentQueryInput}
               onChange={() => setSectionParentQueryInput((prev) => !prev)}
@@ -1558,7 +1640,9 @@ export function SettingsScreen() {
 
           <View style={styles.managementHeaderRow}>
             <Text style={styles.sheetSubheading}>Existing Sections</Text>
-            {loadingManageData ? <ActivityIndicator color={colors.principal} size="small" /> : null}
+            {loadingManageData ? (
+              <ActivityIndicator color={colors.principal} size="small" />
+            ) : null}
           </View>
 
           <ScrollView
@@ -1588,11 +1672,17 @@ export function SettingsScreen() {
               return (
                 <Pressable
                   key={item.id}
-                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  style={[
+                    styles.subjectChip,
+                    active && styles.subjectChipActive,
+                  ]}
                   onPress={() => setSelectedSectionFilterClassId(item.id)}
                 >
                   <Text
-                    style={[styles.subjectChipText, active && styles.subjectChipTextActive]}
+                    style={[
+                      styles.subjectChipText,
+                      active && styles.subjectChipTextActive,
+                    ]}
                   >
                     {item.name}
                   </Text>
@@ -1602,7 +1692,9 @@ export function SettingsScreen() {
           </ScrollView>
 
           {filteredManagedSections.length === 0 ? (
-            <Text style={styles.emptyManagementText}>No sections found for the selected filter.</Text>
+            <Text style={styles.emptyManagementText}>
+              No sections found for the selected filter.
+            </Text>
           ) : (
             filteredManagedSections.map((item) => (
               <View key={item.id} style={styles.managementCard}>
@@ -1612,18 +1704,27 @@ export function SettingsScreen() {
                       {item.academic_class.name} · Section {item.name}
                     </Text>
                     <Text style={styles.managementMeta}>
-                      {item.class_teacher?.name ?? "No class teacher"} · Parent queries {item.parent_query_enabled ? "on" : "off"}
+                      {item.class_teacher?.name ?? "No class teacher"} · Parent
+                      queries {item.parent_query_enabled ? "on" : "off"}
                     </Text>
                   </View>
                   <View style={styles.managementActions}>
                     <Pressable onPress={() => openEditSectionSheet(item)}>
-                      <Ionicons name="create-outline" size={18} color={colors.principal} />
+                      <Ionicons
+                        name="create-outline"
+                        size={18}
+                        color={colors.principal}
+                      />
                     </Pressable>
                     <Pressable onPress={() => confirmDeleteSection(item)}>
                       {deletingSectionId === item.id ? (
                         <ActivityIndicator size="small" color={colors.danger} />
                       ) : (
-                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color={colors.danger}
+                        />
                       )}
                     </Pressable>
                   </View>

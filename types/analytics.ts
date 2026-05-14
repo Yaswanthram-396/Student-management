@@ -19,6 +19,8 @@ export interface AnalyticsExam {
   exam_date: string;
   analytics_status: AnalyticsStatus;
   type?: 'CLASS' | 'SECTION';
+  academic_class: { id: string; name: string } | null;
+  section: { id: string; name: string } | null;
 }
 
 export interface ListExamsResponse {
@@ -79,6 +81,7 @@ export interface ExamOverviewBase {
     exam_date: string;
     analytics_status: AnalyticsStatus;
     type: 'CLASS' | 'SECTION';
+    section: { id: string; name: string } | null;
   };
   role_view: 'STAFF';
   top_students: TopStudent[];
@@ -90,7 +93,6 @@ export interface ExamOverviewStaffClass extends ExamOverviewBase {
 }
 
 export interface ExamOverviewStaffSection extends ExamOverviewBase {
-  section: { id: string; name: string };
   subject_avgs: SubjectAvg[];
 }
 
@@ -354,7 +356,7 @@ export interface StudentSummaryResponse {
     section_name: string;
   };
   exam: { id: string; exam_name: string; exam_date: string };
-  exams: AnalyticsExam[];
+  exams?: AnalyticsExam[];
   subjects: StudentSubjectSummary[];
   overall_risk: RiskLabel;
 }

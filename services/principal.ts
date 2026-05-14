@@ -6,6 +6,7 @@ import type {
   SubjectResponse,
   SubjectsListResponse,
   TeacherResponse,
+  TeachersListResponse,
   BulkUploadBatch,
   AnnouncementResponse,
   AnnouncementsListResponse,
@@ -68,7 +69,7 @@ export const principalApi = {
   // ── Teachers ─────────────────────────────────────────────────────────────────
   createTeacher: (body: {
     name: string;
-    mobile_number: string;
+    phone_number: string;
     username: string;
     password: string;
     primary_subject_id: string;
@@ -83,12 +84,12 @@ export const principalApi = {
             .map(([k, v]) => [k, String(v)])
         ).toString()
       : '';
-    return apiRequest<TeacherResponse[]>('GET', `/principal/teachers/${qs}`);
+    return apiRequest<TeachersListResponse>('GET', `/principal/teachers/${qs}`);
   },
 
   updateTeacher: (id: string, body: {
     name?: string;
-    mobile_number?: string;
+    phone_number?: string;
     primary_subject_id?: string;
     assigned_section_ids?: string[];
   }) => apiRequest<TeacherResponse>('PATCH', `/principal/teachers/${id}/`, body),

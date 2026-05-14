@@ -243,7 +243,7 @@ export function StudentSummaryScreen() {
 
               {/* Exam picker */}
               <ExamPicker
-                exams={data.exams}
+                exams={data.exams ?? []}
                 currentExamId={exam_id!}
                 studentId={student_id!}
               />

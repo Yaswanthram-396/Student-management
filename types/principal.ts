@@ -20,9 +20,14 @@ export interface TeacherResponse {
   id: string;
   user: { id: string; username: string; role: string };
   name: string;
-  mobile_number: string;
+  phone_number: string;
   primary_subject?: { id: string; name: string } | null;
   assigned_sections: TeacherSection[];
+}
+
+export interface TeachersListResponse {
+  count: number;
+  results: TeacherResponse[];
 }
 
 // Student bulk upload
