@@ -9,14 +9,13 @@ import { useTeacherStore } from "../../../store/teacher-store";
 const ACCENT = "#185FA5";
 
 const TAB_ICONS: Record<string, { name: string; label: string }> = {
-  index:      { name: "home-outline",           label: "Home"      },
-  results:    { name: "bar-chart-outline",      label: "Results"   },
-  attendance: { name: "checkmark-circle-outline",label: "Attendance"},
-  homework:   { name: "book-outline",            label: "Homework"  },
-  results:    { name: "bar-chart-outline",       label: "Results"   },
-  content:    { name: "document-outline",        label: "Materials" },
-  announce:   { name: "megaphone-outline",        label: "Announce"  },
-  queries:    { name: "chatbubbles-outline",      label: "Queries"   },
+  index:      { name: "home-outline",            label: "Home"       },
+  attendance: { name: "checkmark-circle-outline", label: "Attendance" },
+  homework:   { name: "book-outline",             label: "Homework"   },
+  results:    { name: "bar-chart-outline",        label: "Results"    },
+  content:    { name: "document-outline",         label: "Materials"  },
+  announce:   { name: "megaphone-outline",         label: "Announce"   },
+  queries:    { name: "chatbubbles-outline",       label: "Queries"    },
 };
 
 function TeacherTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -75,7 +74,6 @@ export default function TeacherLayout() {
         screenOptions={{ headerShown: false }}
       >
         <Tabs.Screen name="index" />
-        <Tabs.Screen name="results" />
         <Tabs.Screen name="attendance" />
         <Tabs.Screen name="homework" />
         <Tabs.Screen name="results" />
