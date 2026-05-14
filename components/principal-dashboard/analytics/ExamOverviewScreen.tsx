@@ -15,13 +15,21 @@ import { spacing } from '../../../constants/spacing';
 import { typography } from '../../../constants/typography';
 import { analyticsApi } from '../../../services/analyticsApi';
 import type {
-  ExamOverviewClass,
   ExamOverviewResponse,
-  ExamOverviewSection,
+  ExamOverviewStaffClass,
+  ExamOverviewStaffSection,
+  ExamOverviewStudent,
+  RiskLabel,
   SubjectAvg,
   TopStudent,
 } from '../../../types/analytics';
 import { HeaderBar } from '../../shared';
+
+const RISK_CFG: Record<RiskLabel, { bg: string; color: string }> = {
+  SAFE:  { bg: colors.successBg, color: colors.success },
+  WATCH: { bg: colors.warningBg, color: colors.warning },
+  ALERT: { bg: colors.dangerBg, color: colors.danger },
+};
 
 // ── Subject average row ───────────────────────────────────────────────────────
 
@@ -115,7 +123,7 @@ function TopStudentRow({ student, examId }: { student: TopStudent; examId: strin
 
 // ── CLASS exam layout ─────────────────────────────────────────────────────────
 
-function ClassExamView({ data, examId }: { data: ExamOverviewClass; examId: string }) {
+function ClassExamView({ data, examId }: { data: ExamOverviewStaffClass; examId: string }) {
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {/* Class averages */}
@@ -167,7 +175,7 @@ function ClassExamView({ data, examId }: { data: ExamOverviewClass; examId: stri
 
 // ── SECTION exam layout ───────────────────────────────────────────────────────
 
-function SectionExamView({ data, examId }: { data: ExamOverviewSection; examId: string }) {
+function SectionExamView({ data, examId }: { data: ExamOverviewStaffSection; examId: string }) {
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.sectionBadgeContainer}>
@@ -214,6 +222,53 @@ function SectionExamView({ data, examId }: { data: ExamOverviewSection; examId: 
         <Ionicons name="people-outline" size={16} color={colors.principal} />
         <Text style={styles.viewStudentsBtnText}>View All Students</Text>
       </Pressable>
+    </ScrollView>
+  );
+}
+
+function StudentExamView({ data }: { data: ExamOverviewStudent }) {
+  const riskCfg = RISK_CFG[data.student_results.overall_risk];
+
+  return (
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.studentInfoCard}>
+        <View style={styles.studentInfoTop}>
+          <Text style={styles.studentInfoTitle}>Student Overview</Text>
+          <View style={[styles.riskBadge, { backgroundColor: riskCfg.bg }]}>
+            <Text style={[styles.riskText, { color: riskCfg.color }]}>
+              {data.student_results.overall_risk}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.studentInfoBody}>
+          This exam overview was returned in student mode. The principal flow can display it safely, but staff drill-down navigation is not available from this response.
+        </Text>
+        <Text style={styles.studentInfoScore}>
+          Total Marks: {data.student_results.total_marks}
+        </Text>
+      </View>
+
+      <Text style={styles.sectionLabel}>Subject Results</Text>
+      <View style={styles.card}>
+        {data.student_results.subjects.map((subject) => (
+          <View key={subject.subject_id} style={styles.studentSubjectCard}>
+            <View style={styles.subjectAvgRow}>
+              <Text style={styles.subjectName}>{subject.subject_name}</Text>
+              <Text style={styles.subjectAvgValue}>
+                {subject.total_marks}/{subject.max_marks}
+              </Text>
+            </View>
+            <View style={styles.studentSubjectMetaRow}>
+              <Text style={styles.studentSubjectMeta}>
+                {subject.correct} correct · {subject.wrong} wrong · {subject.unattempted} skipped
+              </Text>
+              <Text style={[styles.studentSubjectMeta, { color: RISK_CFG[subject.risk_label].color }]}>
+                {subject.risk_label}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -269,9 +324,11 @@ export function ExamOverviewScreen() {
       )}
 
       {data && !loading && (
-        data.exam.type === 'CLASS'
-          ? <ClassExamView data={data as ExamOverviewClass} examId={exam_id!} />
-          : <SectionExamView data={data as ExamOverviewSection} examId={exam_id!} />
+        data.role_view === 'STUDENT'
+          ? <StudentExamView data={data} />
+          : 'section' in data && 'subject_avgs' in data
+            ? <SectionExamView data={data} examId={exam_id!} />
+            : <ClassExamView data={data} examId={exam_id!} />
       )}
     </SafeAreaView>
   );
@@ -332,6 +389,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.principal + '18', borderRadius: 999,
   },
   sectionBadgeText: { ...(typography.label as object), fontWeight: '600', color: colors.principal },
+  studentInfoCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  studentInfoTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  studentInfoTitle: { ...(typography.body as object), fontWeight: '600', color: colors.textPrimary },
+  studentInfoBody: { ...(typography.caption as object), color: colors.textMuted, lineHeight: 18 },
+  studentInfoScore: { ...(typography.body as object), color: colors.textSecondary, fontWeight: '500' },
+  riskBadge: { paddingVertical: 4, paddingHorizontal: spacing.sm, borderRadius: 999 },
+  riskText: { ...(typography.caption as object), fontWeight: '700' },
+  studentSubjectCard: { padding: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border, gap: spacing.xs },
+  studentSubjectMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  studentSubjectMeta: { ...(typography.caption as object), color: colors.textMuted },
   // View students btn
   viewStudentsBtn: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,

@@ -1,4 +1,6 @@
 import { apiRequest } from './api';
+import type { UploadAsset } from './upload';
+import { appendAssetToFormData } from './upload';
 
 export interface StudyMaterial {
   id: string;
@@ -22,9 +24,7 @@ export interface CreateMaterialPayload {
   title: string;
   description: string;
   material_date: string;
-  fileUri: string;
-  fileName: string;
-  fileMime: string;
+  file: UploadAsset;
 }
 
 export const teacherMaterialsApi = {
@@ -39,18 +39,14 @@ export const teacherMaterialsApi = {
     );
   },
 
-  create: (payload: CreateMaterialPayload) => {
+  create: async (payload: CreateMaterialPayload) => {
     const formData = new FormData();
     formData.append('section_id', payload.section_id);
     formData.append('subject_id', payload.subject_id);
     formData.append('title', payload.title);
     formData.append('description', payload.description);
     formData.append('material_date', payload.material_date);
-    formData.append('file', {
-      uri: payload.fileUri,
-      name: payload.fileName,
-      type: payload.fileMime,
-    } as any);
+    await appendAssetToFormData(formData, 'file', payload.file, 'material');
     return apiRequest<StudyMaterial>('POST', '/teacher/study-materials/', formData, true);
   },
 };

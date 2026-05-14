@@ -46,6 +46,13 @@ function heatColor(val: number) {
 }
 
 type Announcement = { id: string; title: string; date: string };
+
+function audienceLabel(audience: "SCHOOL" | "CLASS" | "SECTION") {
+  if (audience === "CLASS") return "Sent to Class";
+  if (audience === "SECTION") return "Sent to Section";
+  return "Sent to School";
+}
+
 const FALLBACK_ANNOUNCEMENTS: Announcement[] = [
   { id: "1", title: "School Closed on 10 May for Elections", date: "3 May 2026" },
   { id: "2", title: "Mid-Term Exam Timetable Released", date: "3 May 2026" },
@@ -76,11 +83,11 @@ export function HomeScreen() {
           annResult.value.results.slice(0, 2).map((a) => ({
             id: String(a.id),
             title: a.title,
-            date: new Date(a.published_at).toLocaleDateString("en-IN", {
+            date: `${audienceLabel(a.audience)} · ${new Date(a.published_at).toLocaleDateString("en-IN", {
               day: "numeric",
               month: "short",
               year: "numeric",
-            }),
+            })}`,
           })),
         );
       }
@@ -140,11 +147,30 @@ export function HomeScreen() {
         renderItem={({ item }) => (
           <View style={styles.annCard}>
             <Text style={styles.annTitle}>{item.title}</Text>
-            <Text style={styles.annMeta}>Sent to All · {item.date}</Text>
+            <Text style={styles.annMeta}>{item.date}</Text>
           </View>
         )}
         ListHeaderComponent={
           <View style={styles.listHeader}>
+            <View style={styles.quickActionsRow}>
+              <Pressable
+                style={styles.quickActionCard}
+                onPress={() => router.push('/(tabs)/principal/results' as any)}
+              >
+                <Ionicons name="bar-chart-outline" size={18} color={colors.principal} />
+                <Text style={styles.quickActionTitle}>Exam Analytics</Text>
+                <Text style={styles.quickActionMeta}>Create exams, upload results, and open analytics</Text>
+              </Pressable>
+              <Pressable
+                style={styles.quickActionCard}
+                onPress={() => router.push('/(tabs)/principal/results' as any)}
+              >
+                <Ionicons name="grid-outline" size={18} color={colors.principal} />
+                <Text style={styles.quickActionTitle}>Analytics Dashboard</Text>
+                <Text style={styles.quickActionMeta}>Open the same exam flow for class, section, and student drill-downs</Text>
+              </Pressable>
+            </View>
+
             <View style={styles.heatmapSection}>
               <Text style={styles.sectionLabel}>Class Attendance This Week</Text>
               <View style={styles.heatmapCard}>
@@ -213,6 +239,25 @@ const styles = StyleSheet.create({
   logoText: { ...(typography.label as object), color: colors.surface, fontWeight: "700" },
   listContent: { padding: spacing.lg, gap: spacing.lg },
   listHeader: { gap: spacing.lg },
+  quickActionsRow: { flexDirection: 'row', gap: spacing.sm },
+  quickActionCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  quickActionTitle: {
+    ...(typography.body as object),
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  quickActionMeta: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+  },
   heatmapSection: { gap: spacing.sm },
   sectionLabel: { ...(typography.label as object), color: colors.textMuted },
   heatmapCard: {

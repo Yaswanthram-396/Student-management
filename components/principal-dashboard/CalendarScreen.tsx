@@ -31,6 +31,8 @@ interface CalEvent {
   visibleTo: ('TEACHER' | 'STUDENT' | 'PARENT')[];
 }
 
+type VisibleRole = 'TEACHER' | 'STUDENT' | 'PARENT';
+
 const PRINCIPAL_ACCENT = colors.principal;
 
 const NOW = new Date();
@@ -56,45 +58,30 @@ const COLOR_OPTIONS = [
   { label: 'Red', value: colors.danger },
 ];
 
-const AUDIENCE_CFG: Record<string, { bg: string; text: string }> = {
-  All: { bg: '#EDEDFA', text: PRINCIPAL_ACCENT },
-  Students: { bg: colors.warningBg, text: '#92400E' },
-  Teachers: { bg: '#DBEAFE', text: colors.teacher },
+const AUDIENCE_CFG: Record<'ALL' | 'PARTIAL' | 'EMPTY', { bg: string; text: string }> = {
+  ALL: { bg: '#EDEDFA', text: PRINCIPAL_ACCENT },
+  PARTIAL: { bg: '#DBEAFE', text: colors.teacher },
+  EMPTY: { bg: colors.dangerBg, text: colors.danger },
 };
 
-const AUDIENCE_OPTIONS = ['All', 'Students', 'Teachers'];
 const EVENT_TYPE_OPTIONS: ('HOLIDAY' | 'EXAM' | 'EVENT')[] = ['HOLIDAY', 'EXAM', 'EVENT'];
+const VISIBLE_TO_OPTIONS: VisibleRole[] = ['TEACHER', 'STUDENT', 'PARENT'];
 
-const VISIBLE_TO_MAP: Record<string, string[]> = {
-  All:      ['TEACHER', 'STUDENT', 'PARENT'],
-  Students: ['STUDENT', 'PARENT'],
-  Teachers: ['TEACHER'],
-};
-
-function getAudienceFromVisibleTo(visibleTo: ('TEACHER' | 'STUDENT' | 'PARENT')[]) {
-  if (
-    visibleTo.includes('TEACHER') &&
-    visibleTo.includes('STUDENT') &&
-    visibleTo.includes('PARENT')
-  ) {
-    return 'All';
-  }
-  if (
-    visibleTo.includes('STUDENT') &&
-    visibleTo.includes('PARENT') &&
-    !visibleTo.includes('TEACHER')
-  ) {
-    return 'Students';
-  }
-  if (visibleTo.length === 1 && visibleTo[0] === 'TEACHER') {
-    return 'Teachers';
-  }
-  return 'All';
+function getAudienceFromVisibleTo(visibleTo: VisibleRole[]) {
+  if (visibleTo.length === 3) return 'All';
+  if (visibleTo.length === 0) return 'No audience';
+  return visibleTo
+    .map((role) => role.charAt(0) + role.slice(1).toLowerCase())
+    .join(' + ');
 }
 
 function mapApiEvent(e: CalendarEventResponse): CalEvent {
   const audience = getAudienceFromVisibleTo(e.visible_to);
-  const ac = AUDIENCE_CFG[audience] ?? AUDIENCE_CFG['All'];
+  const ac = e.visible_to.length === 3
+    ? AUDIENCE_CFG.ALL
+    : e.visible_to.length === 0
+      ? AUDIENCE_CFG.EMPTY
+      : AUDIENCE_CFG.PARTIAL;
   const d = new Date(e.start_date);
   return {
     id: String(e.id),
@@ -134,7 +121,7 @@ export function CalendarScreen() {
   const [evtType, setEvtType] = useState<'HOLIDAY' | 'EXAM' | 'EVENT'>('EVENT');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [audience, setAudience] = useState('All');
+  const [visibleTo, setVisibleTo] = useState<VisibleRole[]>(['TEACHER', 'STUDENT', 'PARENT']);
   const [barColor, setBarColor] = useState<string>(PRINCIPAL_ACCENT);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -165,7 +152,7 @@ export function CalendarScreen() {
     setEvtType('EVENT');
     setStartDate(today);
     setEndDate(today);
-    setAudience('All');
+    setVisibleTo(['TEACHER', 'STUDENT', 'PARENT']);
     setBarColor(PRINCIPAL_ACCENT);
   }
 
@@ -181,9 +168,17 @@ export function CalendarScreen() {
     setEvtType(event.eventType);
     setStartDate(event.startDate);
     setEndDate(event.endDate);
-    setAudience(event.audience);
+    setVisibleTo(event.visibleTo);
     setBarColor(event.bar);
     setShowSheet(true);
+  }
+
+  function toggleVisibleRole(role: VisibleRole) {
+    setVisibleTo((current) => (
+      current.includes(role)
+        ? current.filter((item) => item !== role)
+        : [...current, role]
+    ));
   }
 
   // ── Load events for the selected date ─────────────────────────────────────
@@ -242,15 +237,32 @@ export function CalendarScreen() {
   }
 
   async function handleSaveEvent() {
+    if (!evtName.trim()) {
+      Alert.alert('Missing title', 'Event name is required.');
+      return;
+    }
+    if (!startDate || !endDate) {
+      Alert.alert('Missing dates', 'Start date and end date are required.');
+      return;
+    }
+    if (new Date(`${endDate}T00:00:00`).getTime() < new Date(`${startDate}T00:00:00`).getTime()) {
+      Alert.alert('Invalid dates', 'End date must be on or after the start date.');
+      return;
+    }
+    if (visibleTo.length === 0) {
+      Alert.alert('Missing audience', 'Choose at least one role who can see this event.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
-        title: evtName || 'New Event',
+        title: evtName.trim(),
         event_type: evtType,
         start_date: startDate,
         end_date: endDate,
         description: evtDescription.trim() || undefined,
-        visible_to: VISIBLE_TO_MAP[audience] ?? ['TEACHER', 'STUDENT', 'PARENT'],
+        visible_to: visibleTo,
       };
       if (selectedEvent) {
         await principalApi.updateCalendarEvent(selectedEvent.id, payload);
@@ -503,20 +515,23 @@ export function CalendarScreen() {
           textAlignVertical="top"
         />
 
-        <Text style={styles.fieldLabel}>Audience</Text>
+        <Text style={styles.fieldLabel}>Visible To</Text>
         <View style={styles.optionRow}>
-          {AUDIENCE_OPTIONS.map(opt => (
+          {VISIBLE_TO_OPTIONS.map(opt => (
             <Pressable
               key={opt}
-              style={[styles.optionPill, audience === opt && styles.optionPillActive]}
-              onPress={() => setAudience(opt)}
+              style={[styles.optionPill, visibleTo.includes(opt) && styles.optionPillActive]}
+              onPress={() => toggleVisibleRole(opt)}
             >
-              <Text style={[styles.optionText, audience === opt && styles.optionTextActive]}>
-                {opt}
+              <Text style={[styles.optionText, visibleTo.includes(opt) && styles.optionTextActive]}>
+                {opt.charAt(0) + opt.slice(1).toLowerCase()}
               </Text>
             </Pressable>
           ))}
         </View>
+        <Text style={styles.helperText}>
+          Select one or more roles. The backend accepts Teacher, Student, and Parent in any combination.
+        </Text>
 
         <Text style={styles.fieldLabel}>Color</Text>
         <View style={styles.colorRow}>
@@ -705,6 +720,7 @@ const styles = StyleSheet.create({
   },
   colorDot: { width: 10, height: 10, borderRadius: 5 },
   colorLabel: { ...(typography.caption as object) },
+  helperText: { ...(typography.caption as object), color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
   sheetBtns: { flexDirection: 'row', gap: spacing.sm },
   cancelBtn: {
     flex: 1, height: 48, borderRadius: 10,

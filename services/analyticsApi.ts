@@ -19,6 +19,12 @@ import type {
   UploadExamResponse,
 } from '../types/analytics';
 
+function buildQuery(params: Record<string, string | undefined>) {
+  const entries = Object.entries(params).filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return '';
+  return `?${new URLSearchParams(entries as [string, string][]).toString()}`;
+}
+
 export const analyticsApi = {
   // ── Exam management ─────────────────────────────────────────────────────────
 
@@ -52,7 +58,7 @@ export const analyticsApi = {
   getDashboard: (examId?: string) =>
     apiRequest<AnalyticsDashboardResponse>(
       'GET',
-      `/analytics/dashboard/${examId ? `?exam_id=${examId}` : ''}`,
+      `/analytics/dashboard/${buildQuery({ exam_id: examId })}`,
     ),
 
   getClassDetail: (classId: string, examId: string) =>

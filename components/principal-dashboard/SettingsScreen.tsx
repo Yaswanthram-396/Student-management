@@ -20,9 +20,14 @@ import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { authApi } from "../../services/auth";
 import { principalApi } from "../../services/principal";
-import { subjectsApi, type Subject } from "../../services/subjects";
+import { appendAssetToFormData } from "../../services/upload";
 import { useAuthStore } from "../../store/auth-store";
-import type { SectionResponse } from "../../types/principal";
+import type {
+  AcademicClassResponse,
+  SectionResponse,
+  SubjectResponse,
+  TeacherResponse,
+} from "../../types/principal";
 import {
     BottomSheet,
     HeaderBar,
@@ -67,6 +72,8 @@ function SettingsRow({
   );
 }
 
+type ManageMode = "create" | "edit";
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export function SettingsScreen() {
@@ -99,15 +106,51 @@ export function SettingsScreen() {
   const [teacherMobile, setTeacherMobile] = useState("");
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherSuccess, setTeacherSuccess] = useState(false);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
-  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<SubjectResponse | null>(null);
   const [sections, setSections] = useState<SectionResponse[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [uploadingTeachersCsv, setUploadingTeachersCsv] = useState(false);
   const [teacherUploadStatusText, setTeacherUploadStatusText] = useState("");
   const [teacherErrorReportUrl, setTeacherErrorReportUrl] = useState<string | null>(null);
+
+  // Management data
+  const [classes, setClasses] = useState<AcademicClassResponse[]>([]);
+  const [teachers, setTeachers] = useState<TeacherResponse[]>([]);
+  const [loadingManageData, setLoadingManageData] = useState(false);
+
+  // Class management
+  const [showClassSheet, setShowClassSheet] = useState(false);
+  const [classMode, setClassMode] = useState<ManageMode>("create");
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [classNameInput, setClassNameInput] = useState("");
+  const [classOrderInput, setClassOrderInput] = useState("");
+  const [savingClass, setSavingClass] = useState(false);
+  const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
+
+  // Subject management
+  const [showSubjectSheet, setShowSubjectSheet] = useState(false);
+  const [subjectMode, setSubjectMode] = useState<ManageMode>("create");
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [subjectNameInput, setSubjectNameInput] = useState("");
+  const [subjectCodeInput, setSubjectCodeInput] = useState("");
+  const [subjectActiveInput, setSubjectActiveInput] = useState(true);
+  const [savingSubject, setSavingSubject] = useState(false);
+  const [deletingSubjectId, setDeletingSubjectId] = useState<string | null>(null);
+
+  // Section management
+  const [showSectionSheet, setShowSectionSheet] = useState(false);
+  const [sectionMode, setSectionMode] = useState<ManageMode>("create");
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [selectedManageClassId, setSelectedManageClassId] = useState("");
+  const [selectedSectionFilterClassId, setSelectedSectionFilterClassId] = useState("");
+  const [sectionNameInput, setSectionNameInput] = useState("");
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
+  const [sectionParentQueryInput, setSectionParentQueryInput] = useState(true);
+  const [savingSection, setSavingSection] = useState(false);
+  const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
 
   // ── Load config on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -127,6 +170,76 @@ export function SettingsScreen() {
     setSchoolName(authSchoolName);
   }, [authSchoolName]);
 
+  async function loadManagementData() {
+    setLoadingManageData(true);
+    try {
+      const [classesResult, subjectsResult, sectionsResult, teachersResult] =
+        await Promise.allSettled([
+          principalApi.getClasses(),
+          principalApi.getSubjects(),
+          principalApi.getSections(),
+          principalApi.getTeachers(),
+        ]);
+
+      const sectionResults = sectionsResult.status === "fulfilled"
+        ? sectionsResult.value.results
+        : [];
+      const classResults = classesResult.status === "fulfilled"
+        ? classesResult.value.results
+        : Array.from(
+          new Map(
+            sectionResults.map((section) => [
+              section.academic_class.id,
+              {
+                id: section.academic_class.id,
+                name: section.academic_class.name,
+                display_order: 0,
+              },
+            ]),
+          ).values(),
+        );
+      const subjectResults = subjectsResult.status === "fulfilled"
+        ? subjectsResult.value.results
+        : [];
+      const teacherResults = teachersResult.status === "fulfilled"
+        ? teachersResult.value
+        : [];
+
+      setClasses(
+        classResults
+          .slice()
+          .sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)),
+      );
+      setSubjects(
+        subjectResults
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSections(
+        sectionResults
+          .slice()
+          .sort((a, b) => {
+            const classCompare = a.academic_class.name.localeCompare(b.academic_class.name);
+            return classCompare !== 0 ? classCompare : a.name.localeCompare(b.name);
+          }),
+      );
+      setTeachers(
+        teacherResults
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSelectedManageClassId((prev) => prev || classResults[0]?.id || "");
+      setSelectedSectionFilterClassId((prev) => prev);
+    } finally {
+      setLoadingManageData(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!showClassSheet && !showSubjectSheet && !showSectionSheet) return;
+    loadManagementData().catch(() => {});
+  }, [showClassSheet, showSectionSheet, showSubjectSheet]);
+
   // ── Load sections when teacher sheet opens ────────────────────────────────
   useEffect(() => {
     if (!showTeacherSheet) return;
@@ -134,16 +247,24 @@ export function SettingsScreen() {
     setLoadingSubjects(true);
     setTeacherUploadStatusText("");
     setTeacherErrorReportUrl(null);
-    principalApi
-      .getSections()
-      .then((data) => setSections(data.results))
-      .catch(() => {})
-      .finally(() => setLoadingSections(false));
-    subjectsApi
-      .getAll()
-      .then((data) => setSubjects(data.results))
-      .catch(() => {})
-      .finally(() => setLoadingSubjects(false));
+    Promise.allSettled([
+      principalApi.getSections(),
+      principalApi.getSubjects(),
+    ]).then(([sectionsResult, subjectsResult]) => {
+      if (sectionsResult.status === "fulfilled") {
+        setSections(sectionsResult.value.results);
+      }
+      if (subjectsResult.status === "fulfilled") {
+        setSubjects(
+          subjectsResult.value.results
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
+      }
+    }).finally(() => {
+      setLoadingSections(false);
+      setLoadingSubjects(false);
+    });
   }, [showTeacherSheet]);
 
   if (loadingConfig) {
@@ -164,6 +285,72 @@ export function SettingsScreen() {
     if (addingTeacher || uploadingTeachersCsv) return;
     resetTeacherForm();
     setShowTeacherSheet(false);
+  }
+
+  function resetClassForm() {
+    setClassMode("create");
+    setEditingClassId(null);
+    setClassNameInput("");
+    setClassOrderInput("");
+  }
+
+  function openCreateClassSheet() {
+    resetClassForm();
+    setShowClassSheet(true);
+  }
+
+  function openEditClassSheet(item: AcademicClassResponse) {
+    setClassMode("edit");
+    setEditingClassId(item.id);
+    setClassNameInput(item.name);
+    setClassOrderInput(String(item.display_order));
+    setShowClassSheet(true);
+  }
+
+  function resetSubjectForm() {
+    setSubjectMode("create");
+    setEditingSubjectId(null);
+    setSubjectNameInput("");
+    setSubjectCodeInput("");
+    setSubjectActiveInput(true);
+  }
+
+  function openCreateSubjectSheet() {
+    resetSubjectForm();
+    setShowSubjectSheet(true);
+  }
+
+  function openEditSubjectSheet(item: SubjectResponse) {
+    setSubjectMode("edit");
+    setEditingSubjectId(item.id);
+    setSubjectNameInput(item.name);
+    setSubjectCodeInput(item.code);
+    setSubjectActiveInput(item.is_active);
+    setShowSubjectSheet(true);
+  }
+
+  function resetSectionForm() {
+    setSectionMode("create");
+    setEditingSectionId(null);
+    setSectionNameInput("");
+    setSelectedClassTeacherId(null);
+    setSectionParentQueryInput(true);
+    setSelectedManageClassId((prev) => prev || classes[0]?.id || "");
+  }
+
+  function openCreateSectionSheet() {
+    resetSectionForm();
+    setShowSectionSheet(true);
+  }
+
+  function openEditSectionSheet(item: SectionResponse) {
+    setSectionMode("edit");
+    setEditingSectionId(item.id);
+    setSelectedManageClassId(item.academic_class.id);
+    setSectionNameInput(item.name);
+    setSelectedClassTeacherId(item.class_teacher?.id ?? null);
+    setSectionParentQueryInput(item.parent_query_enabled);
+    setShowSectionSheet(true);
   }
 
   // ── Toggle handlers (fire PATCH immediately) ──────────────────────────────
@@ -238,11 +425,7 @@ export function SettingsScreen() {
 
       const asset = result.assets[0];
       const formData = new FormData();
-      formData.append("csv_file", {
-        uri: asset.uri,
-        name: asset.name || "teachers.csv",
-        type: asset.mimeType || "text/csv",
-      } as unknown as Blob);
+      await appendAssetToFormData(formData, "csv_file", asset, "teachers.csv");
 
       setUploadingTeachersCsv(true);
       setTeacherSuccess(false);
@@ -300,11 +483,7 @@ export function SettingsScreen() {
 
       const asset = result.assets[0];
       const formData = new FormData();
-      formData.append("csv_file", {
-        uri: asset.uri,
-        name: asset.name || "students.csv",
-        type: asset.mimeType || "text/csv",
-      } as unknown as Blob);
+      await appendAssetToFormData(formData, "csv_file", asset, "students.csv");
 
       setUploadingStudentsCsv(true);
       setUploadStatusText("Uploading CSV...");
@@ -413,12 +592,186 @@ export function SettingsScreen() {
     }, 2000);
   }
 
+  async function handleSaveClass() {
+    const parsedOrder = Number(classOrderInput);
+    if (!classNameInput.trim() || !Number.isFinite(parsedOrder)) {
+      Alert.alert("Missing fields", "Class name and display order are required.");
+      return;
+    }
+
+    setSavingClass(true);
+    try {
+      if (classMode === "create") {
+        await principalApi.createClass({
+          name: classNameInput.trim(),
+          display_order: parsedOrder,
+        });
+      } else if (editingClassId) {
+        await principalApi.updateClass(editingClassId, {
+          name: classNameInput.trim(),
+          display_order: parsedOrder,
+        });
+      }
+      await loadManagementData();
+      resetClassForm();
+      setShowClassSheet(false);
+    } catch (err: any) {
+      Alert.alert("Error", err.details ?? "Failed to save class.");
+    } finally {
+      setSavingClass(false);
+    }
+  }
+
+  async function handleDeleteClass(classId: string) {
+    setDeletingClassId(classId);
+    try {
+      await principalApi.deleteClass(classId);
+      await loadManagementData();
+    } catch (err: any) {
+      Alert.alert("Delete blocked", err.details ?? "Failed to delete class.");
+    } finally {
+      setDeletingClassId(null);
+    }
+  }
+
+  async function handleSaveSubject() {
+    if (!subjectNameInput.trim() || !subjectCodeInput.trim()) {
+      Alert.alert("Missing fields", "Subject name and code are required.");
+      return;
+    }
+
+    setSavingSubject(true);
+    try {
+      if (subjectMode === "create") {
+        await principalApi.createSubject({
+          name: subjectNameInput.trim(),
+          code: subjectCodeInput.trim().toUpperCase(),
+          is_active: subjectActiveInput,
+        });
+      } else if (editingSubjectId) {
+        await principalApi.updateSubject(editingSubjectId, {
+          name: subjectNameInput.trim(),
+          code: subjectCodeInput.trim().toUpperCase(),
+          is_active: subjectActiveInput,
+        });
+      }
+      await loadManagementData();
+      resetSubjectForm();
+      setShowSubjectSheet(false);
+    } catch (err: any) {
+      Alert.alert("Error", err.details ?? "Failed to save subject.");
+    } finally {
+      setSavingSubject(false);
+    }
+  }
+
+  async function handleDeleteSubject(subjectId: string) {
+    setDeletingSubjectId(subjectId);
+    try {
+      await principalApi.deleteSubject(subjectId);
+      await loadManagementData();
+    } catch (err: any) {
+      Alert.alert("Delete blocked", err.details ?? "Failed to delete subject.");
+    } finally {
+      setDeletingSubjectId(null);
+    }
+  }
+
+  async function handleSaveSection() {
+    if (!selectedManageClassId || !sectionNameInput.trim()) {
+      Alert.alert("Missing fields", "Class and section name are required.");
+      return;
+    }
+
+    setSavingSection(true);
+    try {
+      if (sectionMode === "create") {
+        await principalApi.createSection({
+          class_id: selectedManageClassId,
+          name: sectionNameInput.trim(),
+          class_teacher_id: selectedClassTeacherId,
+          parent_query_enabled: sectionParentQueryInput,
+        });
+      } else if (editingSectionId) {
+        await principalApi.updateSection(editingSectionId, {
+          name: sectionNameInput.trim(),
+          class_teacher_id: selectedClassTeacherId,
+          parent_query_enabled: sectionParentQueryInput,
+        });
+      }
+      await loadManagementData();
+      resetSectionForm();
+      setShowSectionSheet(false);
+    } catch (err: any) {
+      Alert.alert("Error", err.details ?? "Failed to save section.");
+    } finally {
+      setSavingSection(false);
+    }
+  }
+
+  async function handleDeleteSection(sectionId: string) {
+    setDeletingSectionId(sectionId);
+    try {
+      await principalApi.deleteSection(sectionId);
+      await loadManagementData();
+    } catch (err: any) {
+      Alert.alert("Delete blocked", err.details ?? "Failed to delete section.");
+    } finally {
+      setDeletingSectionId(null);
+    }
+  }
+
+  function confirmDeleteClass(item: AcademicClassResponse) {
+    Alert.alert(
+      "Delete class",
+      `Delete ${item.name}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => handleDeleteClass(item.id) },
+      ],
+    );
+  }
+
+  function confirmDeleteSubject(item: SubjectResponse) {
+    Alert.alert(
+      "Delete subject",
+      `Delete ${item.name}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => handleDeleteSubject(item.id) },
+      ],
+    );
+  }
+
+  function confirmDeleteSection(item: SectionResponse) {
+    Alert.alert(
+      "Delete section",
+      `Delete Section ${item.name} from ${item.academic_class.name}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => handleDeleteSection(item.id) },
+      ],
+    );
+  }
+
   // ── Logout ────────────────────────────────────────────────────────────────
   async function handleLogout() {
     await authApi.logout();
     setShowLogout(false);
     router.replace("/");
   }
+
+  const filteredManagedSections = selectedSectionFilterClassId
+    ? sections.filter((item) => item.academic_class.id === selectedSectionFilterClassId)
+    : sections;
+  const selectedManageClassName =
+    classes.find((item) => item.id === selectedManageClassId)?.name ?? "";
+  const filteredTeachersForManageClass = teachers.filter((teacher) =>
+    teacher.assigned_sections.some((section) => {
+      const matchingSection = sections.find((item) => item.id === section.id);
+      return matchingSection?.academic_class.id === selectedManageClassId;
+    }),
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -507,7 +860,7 @@ export function SettingsScreen() {
             />
           </Pressable>
           <Pressable
-            style={styles.row}
+            style={[styles.row, styles.rowBorder]}
             onPress={() => setShowTeacherSheet(true)}
           >
             <View style={styles.rowIconLabel}>
@@ -524,6 +877,51 @@ export function SettingsScreen() {
               size={16}
               color={colors.textMuted}
             />
+          </Pressable>
+          <Pressable
+            style={[styles.row, styles.rowBorder]}
+            onPress={openCreateClassSheet}
+          >
+            <View style={styles.rowIconLabel}>
+              <Ionicons
+                name="albums-outline"
+                size={16}
+                color={colors.principal}
+                style={{ marginRight: spacing.sm }}
+              />
+              <Text style={styles.rowLabel}>Manage Classes</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </Pressable>
+          <Pressable
+            style={[styles.row, styles.rowBorder]}
+            onPress={openCreateSubjectSheet}
+          >
+            <View style={styles.rowIconLabel}>
+              <Ionicons
+                name="flask-outline"
+                size={16}
+                color={colors.principal}
+                style={{ marginRight: spacing.sm }}
+              />
+              <Text style={styles.rowLabel}>Manage Subjects</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </Pressable>
+          <Pressable
+            style={styles.row}
+            onPress={openCreateSectionSheet}
+          >
+            <View style={styles.rowIconLabel}>
+              <Ionicons
+                name="git-branch-outline"
+                size={16}
+                color={colors.principal}
+                style={{ marginRight: spacing.sm }}
+              />
+              <Text style={styles.rowLabel}>Manage Sections</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </Pressable>
         </SettingsSection>
 
@@ -859,6 +1257,383 @@ export function SettingsScreen() {
         )}
       </BottomSheet>
 
+      <BottomSheet
+        visible={showClassSheet}
+        onClose={() => {
+          if (savingClass || deletingClassId) return;
+          resetClassForm();
+          setShowClassSheet(false);
+        }}
+        height="88%"
+      >
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={styles.sheetTitle}>
+            {classMode === "create" ? "Manage Classes" : "Edit Class"}
+          </Text>
+          <Text style={styles.sheetSubtext}>
+            Create classes, adjust display order, and remove classes that have no sections or students.
+          </Text>
+
+          <Text style={styles.sheetFieldLabel}>Class Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={classNameInput}
+            onChangeText={setClassNameInput}
+            placeholder="e.g. Class 10"
+            placeholderTextColor={colors.textMuted}
+          />
+
+          <Text style={styles.sheetFieldLabel}>Display Order</Text>
+          <TextInput
+            style={styles.textInput}
+            value={classOrderInput}
+            onChangeText={setClassOrderInput}
+            placeholder="e.g. 10"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="number-pad"
+          />
+
+          <Pressable
+            style={[styles.saveBtn, savingClass && styles.saveBtnDisabled]}
+            onPress={handleSaveClass}
+            disabled={savingClass}
+          >
+            <Text style={styles.saveBtnText}>
+              {savingClass
+                ? "Saving..."
+                : classMode === "create"
+                  ? "Create Class"
+                  : "Update Class"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.managementHeaderRow}>
+            <Text style={styles.sheetSubheading}>Existing Classes</Text>
+            {loadingManageData ? <ActivityIndicator color={colors.principal} size="small" /> : null}
+          </View>
+
+          {classes.length === 0 ? (
+            <Text style={styles.emptyManagementText}>No classes available yet.</Text>
+          ) : (
+            classes.map((item) => (
+              <View key={item.id} style={styles.managementCard}>
+                <View style={styles.managementCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.managementTitle}>{item.name}</Text>
+                    <Text style={styles.managementMeta}>Display order: {item.display_order}</Text>
+                  </View>
+                  <View style={styles.managementActions}>
+                    <Pressable onPress={() => openEditClassSheet(item)}>
+                      <Ionicons name="create-outline" size={18} color={colors.principal} />
+                    </Pressable>
+                    <Pressable onPress={() => confirmDeleteClass(item)}>
+                      {deletingClassId === item.id ? (
+                        <ActivityIndicator size="small" color={colors.danger} />
+                      ) : (
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={showSubjectSheet}
+        onClose={() => {
+          if (savingSubject || deletingSubjectId) return;
+          resetSubjectForm();
+          setShowSubjectSheet(false);
+        }}
+        height="90%"
+      >
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={styles.sheetTitle}>
+            {subjectMode === "create" ? "Manage Subjects" : "Edit Subject"}
+          </Text>
+          <Text style={styles.sheetSubtext}>
+            Create, update, and retire subjects. Inactive subjects remain visible for history but should not be assigned further.
+          </Text>
+
+          <Text style={styles.sheetFieldLabel}>Subject Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={subjectNameInput}
+            onChangeText={setSubjectNameInput}
+            placeholder="e.g. Physics"
+            placeholderTextColor={colors.textMuted}
+          />
+
+          <Text style={styles.sheetFieldLabel}>Subject Code</Text>
+          <TextInput
+            style={styles.textInput}
+            value={subjectCodeInput}
+            onChangeText={setSubjectCodeInput}
+            placeholder="e.g. PHY"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="characters"
+          />
+
+          <View style={styles.inlineToggleRow}>
+            <Text style={styles.sheetFieldLabel}>Active for new assignments</Text>
+            <ToggleSwitch
+              value={subjectActiveInput}
+              onChange={() => setSubjectActiveInput((prev) => !prev)}
+              accentColor={colors.principal}
+            />
+          </View>
+
+          <Pressable
+            style={[styles.saveBtn, savingSubject && styles.saveBtnDisabled]}
+            onPress={handleSaveSubject}
+            disabled={savingSubject}
+          >
+            <Text style={styles.saveBtnText}>
+              {savingSubject
+                ? "Saving..."
+                : subjectMode === "create"
+                  ? "Create Subject"
+                  : "Update Subject"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.managementHeaderRow}>
+            <Text style={styles.sheetSubheading}>Existing Subjects</Text>
+            {loadingManageData ? <ActivityIndicator color={colors.principal} size="small" /> : null}
+          </View>
+
+          {subjects.length === 0 ? (
+            <Text style={styles.emptyManagementText}>No subjects available yet.</Text>
+          ) : (
+            subjects.map((item) => (
+              <View key={item.id} style={styles.managementCard}>
+                <View style={styles.managementCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.managementTitle}>{item.name}</Text>
+                    <Text style={styles.managementMeta}>
+                      {item.code} · {item.is_active ? "Active" : "Inactive"}
+                    </Text>
+                  </View>
+                  <View style={styles.managementActions}>
+                    <Pressable onPress={() => openEditSubjectSheet(item)}>
+                      <Ionicons name="create-outline" size={18} color={colors.principal} />
+                    </Pressable>
+                    <Pressable onPress={() => confirmDeleteSubject(item)}>
+                      {deletingSubjectId === item.id ? (
+                        <ActivityIndicator size="small" color={colors.danger} />
+                      ) : (
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={showSectionSheet}
+        onClose={() => {
+          if (savingSection || deletingSectionId) return;
+          resetSectionForm();
+          setShowSectionSheet(false);
+        }}
+        height="92%"
+      >
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={styles.sheetTitle}>
+            {sectionMode === "create" ? "Manage Sections" : "Edit Section"}
+          </Text>
+          <Text style={styles.sheetSubtext}>
+            Parent queries are allowed only when both the school-level toggle and the section-level toggle are enabled.
+          </Text>
+
+          <Text style={styles.sheetFieldLabel}>Class</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subjectChips}
+            style={{ marginBottom: spacing.md }}
+          >
+            {classes.map((item) => {
+              const active = selectedManageClassId === item.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  onPress={() => setSelectedManageClassId(item.id)}
+                >
+                  <Text
+                    style={[styles.subjectChipText, active && styles.subjectChipTextActive]}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <Text style={styles.sheetFieldLabel}>Section Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={sectionNameInput}
+            onChangeText={setSectionNameInput}
+            placeholder="e.g. A"
+            placeholderTextColor={colors.textMuted}
+          />
+
+          <Text style={styles.sheetFieldLabel}>Class Teacher</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subjectChips}
+            style={{ marginBottom: spacing.md }}
+          >
+            <Pressable
+              style={[
+                styles.subjectChip,
+                selectedClassTeacherId === null && styles.subjectChipActive,
+              ]}
+              onPress={() => setSelectedClassTeacherId(null)}
+            >
+              <Text
+                style={[
+                  styles.subjectChipText,
+                  selectedClassTeacherId === null && styles.subjectChipTextActive,
+                ]}
+              >
+                No Class Teacher
+              </Text>
+            </Pressable>
+            {filteredTeachersForManageClass.map((item) => {
+              const active = selectedClassTeacherId === item.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  onPress={() => setSelectedClassTeacherId(item.id)}
+                >
+                  <Text
+                    style={[styles.subjectChipText, active && styles.subjectChipTextActive]}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {selectedManageClassName ? (
+            <Text style={styles.managementHintText}>
+              Showing teachers linked to {selectedManageClassName}.
+            </Text>
+          ) : null}
+
+          <View style={styles.inlineToggleRow}>
+            <Text style={styles.sheetFieldLabel}>Enable parent queries in this section</Text>
+            <ToggleSwitch
+              value={sectionParentQueryInput}
+              onChange={() => setSectionParentQueryInput((prev) => !prev)}
+              accentColor={colors.principal}
+            />
+          </View>
+
+          <Pressable
+            style={[styles.saveBtn, savingSection && styles.saveBtnDisabled]}
+            onPress={handleSaveSection}
+            disabled={savingSection}
+          >
+            <Text style={styles.saveBtnText}>
+              {savingSection
+                ? "Saving..."
+                : sectionMode === "create"
+                  ? "Create Section"
+                  : "Update Section"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.managementHeaderRow}>
+            <Text style={styles.sheetSubheading}>Existing Sections</Text>
+            {loadingManageData ? <ActivityIndicator color={colors.principal} size="small" /> : null}
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subjectChips}
+            style={{ marginBottom: spacing.md }}
+          >
+            <Pressable
+              style={[
+                styles.subjectChip,
+                !selectedSectionFilterClassId && styles.subjectChipActive,
+              ]}
+              onPress={() => setSelectedSectionFilterClassId("")}
+            >
+              <Text
+                style={[
+                  styles.subjectChipText,
+                  !selectedSectionFilterClassId && styles.subjectChipTextActive,
+                ]}
+              >
+                All Classes
+              </Text>
+            </Pressable>
+            {classes.map((item) => {
+              const active = selectedSectionFilterClassId === item.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[styles.subjectChip, active && styles.subjectChipActive]}
+                  onPress={() => setSelectedSectionFilterClassId(item.id)}
+                >
+                  <Text
+                    style={[styles.subjectChipText, active && styles.subjectChipTextActive]}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {filteredManagedSections.length === 0 ? (
+            <Text style={styles.emptyManagementText}>No sections found for the selected filter.</Text>
+          ) : (
+            filteredManagedSections.map((item) => (
+              <View key={item.id} style={styles.managementCard}>
+                <View style={styles.managementCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.managementTitle}>
+                      {item.academic_class.name} · Section {item.name}
+                    </Text>
+                    <Text style={styles.managementMeta}>
+                      {item.class_teacher?.name ?? "No class teacher"} · Parent queries {item.parent_query_enabled ? "on" : "off"}
+                    </Text>
+                  </View>
+                  <View style={styles.managementActions}>
+                    <Pressable onPress={() => openEditSectionSheet(item)}>
+                      <Ionicons name="create-outline" size={18} color={colors.principal} />
+                    </Pressable>
+                    <Pressable onPress={() => confirmDeleteSection(item)}>
+                      {deletingSectionId === item.id ? (
+                        <ActivityIndicator size="small" color={colors.danger} />
+                      ) : (
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </BottomSheet>
+
       {/* Logout confirm dialog */}
       <Modal
         visible={showLogout}
@@ -1153,6 +1928,9 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: colors.surface,
   },
+  saveBtnDisabled: {
+    opacity: 0.7,
+  },
   successRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1188,4 +1966,57 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   sectionChipTextActive: { color: colors.surface },
+  inlineToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+    gap: spacing.md,
+  },
+  managementHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  managementCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  managementCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  managementActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  managementTitle: {
+    ...(typography.body as object),
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  managementMeta: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  managementHintText: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  emptyManagementText: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+  },
 });

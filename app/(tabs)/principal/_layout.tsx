@@ -48,10 +48,7 @@ export default function PrincipalLayout() {
       <Tabs.Screen
         name="analytics"
         options={{
-          title: 'Analytics',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -73,6 +70,7 @@ export default function PrincipalLayout() {
         name="class-attendance"
         options={{ href: null }}
       />
+      <Tabs.Screen name="class-detail" options={{ href: null }} />
       <Tabs.Screen name="exam-overview"    options={{ href: null }} />
       <Tabs.Screen name="section-detail"   options={{ href: null }} />
       <Tabs.Screen name="section-students" options={{ href: null }} />

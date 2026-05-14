@@ -80,6 +80,31 @@ export interface DeleteSuccessResponse {
   message: string;
 }
 
+// Classes
+export interface AcademicClassResponse {
+  id: string;
+  name: string;
+  display_order: number;
+}
+
+export interface AcademicClassesListResponse {
+  count: number;
+  results: AcademicClassResponse[];
+}
+
+// Subjects
+export interface SubjectResponse {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+}
+
+export interface SubjectsListResponse {
+  count: number;
+  results: SubjectResponse[];
+}
+
 // Exams
 export interface ExamSubject {
   subject_id: string;
@@ -135,6 +160,12 @@ export interface AnalyticsResponse {
   subject_wise_analysis: any[];
   teacher_effectiveness: any[];
   student_growth_tracking: any[];
+}
+
+export interface PrincipalFeatureUnavailableResponse {
+  success?: boolean;
+  code: string;
+  details: string;
 }
 
 // Sections

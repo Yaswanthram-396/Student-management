@@ -18,6 +18,7 @@ export interface AnalyticsExam {
   exam_name: string;
   exam_date: string;
   analytics_status: AnalyticsStatus;
+  type?: 'CLASS' | 'SECTION';
 }
 
 export interface ListExamsResponse {
@@ -79,22 +80,51 @@ export interface ExamOverviewBase {
     analytics_status: AnalyticsStatus;
     type: 'CLASS' | 'SECTION';
   };
+  role_view: 'STAFF';
   top_students: TopStudent[];
 }
 
-export interface ExamOverviewClass extends ExamOverviewBase {
-  exam: ExamOverviewBase['exam'] & { type: 'CLASS' };
+export interface ExamOverviewStaffClass extends ExamOverviewBase {
   class_avgs: SubjectAvg[];
   sections: { section_id: string; section_name: string; avg: number }[];
 }
 
-export interface ExamOverviewSection extends ExamOverviewBase {
-  exam: ExamOverviewBase['exam'] & { type: 'SECTION' };
+export interface ExamOverviewStaffSection extends ExamOverviewBase {
   section: { id: string; name: string };
   subject_avgs: SubjectAvg[];
 }
 
-export type ExamOverviewResponse = ExamOverviewClass | ExamOverviewSection;
+export interface StudentOverviewSubjectResult {
+  subject_id: string;
+  subject_name: string;
+  total_marks: number;
+  max_marks: number;
+  correct: number;
+  wrong: number;
+  unattempted: number;
+  risk_label: RiskLabel;
+}
+
+export interface ExamOverviewStudent {
+  exam: {
+    id: string;
+    exam_name: string;
+    exam_date: string;
+    analytics_status: AnalyticsStatus;
+    type: 'CLASS' | 'SECTION';
+  };
+  role_view: 'STUDENT';
+  student_results: {
+    total_marks: number;
+    overall_risk: RiskLabel;
+    subjects: StudentOverviewSubjectResult[];
+  };
+}
+
+export type ExamOverviewResponse =
+  | ExamOverviewStaffClass
+  | ExamOverviewStaffSection
+  | ExamOverviewStudent;
 
 // ── Question stats ────────────────────────────────────────────────────────────
 
@@ -255,6 +285,46 @@ export interface SectionStudentsResponse {
   section_id: string;
   exam: { id: string; exam_name: string; exam_date: string };
   students: SectionStudent[];
+}
+
+export interface SubjectSummaryItem {
+  subject_name: string;
+  total_questions: number;
+  school_avg: number;
+  top_scorer: {
+    name: string;
+    student_ref_id: string;
+    marks: number;
+    class_name: string;
+    section_name: string;
+  } | null;
+}
+
+export interface StudentExamTimelineItem {
+  id: string;
+  exam_name: string;
+  exam_date: string;
+  total_marks: number;
+  overall_risk: RiskLabel;
+  subjects: {
+    subject_id: string;
+    subject_name: string;
+    marks: number;
+    max_marks: number;
+    risk_label: RiskLabel;
+  }[];
+}
+
+export interface StudentExamsResponse {
+  success: boolean;
+  student: {
+    student_id: string;
+    student_ref_id: string;
+    name: string;
+    class_name: string;
+    section_name: string;
+  };
+  exams: StudentExamTimelineItem[];
 }
 
 // ── Student summary ───────────────────────────────────────────────────────────
