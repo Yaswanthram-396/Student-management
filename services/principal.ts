@@ -1,4 +1,6 @@
 import { apiRequest } from './api';
+import { appendAssetToFormData } from './upload';
+import type { UploadAsset } from './upload';
 import type {
   AcademicClassResponse,
   AcademicClassesListResponse,
@@ -109,15 +111,70 @@ export const principalApi = {
   getBulkUploadStatus: (batchId: string) =>
     apiRequest<BulkUploadBatch>('GET', `/principal/students/bulk-upload/${batchId}/`),
 
+  // ── Profile ───────────────────────────────────────────────────────────────────
+  uploadProfilePic: async (asset: UploadAsset) => {
+    const formData = new FormData();
+    await appendAssetToFormData(formData, 'profile_pic', asset, 'profile_pic.jpg');
+    return apiRequest<{ profile_pic_url: string }>(
+      'PATCH', '/principal/profile/pic/', formData, true,
+    );
+  },
+
   // ── Announcements ─────────────────────────────────────────────────────────────
-  createAnnouncement: (body: {
+  createAnnouncement: async (params: {
     title: string;
     body: string;
     audience: 'SCHOOL' | 'CLASS' | 'SECTION';
     class_ids?: string[];
     section_ids?: string[];
     publish_now: boolean;
-  }) => apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', body),
+    attachments?: UploadAsset[];
+  }) => {
+    if (!params.attachments?.length) {
+      const { attachments: _a, ...jsonBody } = params;
+      return apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', jsonBody);
+    }
+    const formData = new FormData();
+    formData.append('title', params.title);
+    formData.append('body', params.body);
+    formData.append('audience', params.audience);
+    formData.append('publish_now', String(params.publish_now));
+    params.class_ids?.forEach((id) => formData.append('class_ids', id));
+    params.section_ids?.forEach((id) => formData.append('section_ids', id));
+    for (const asset of params.attachments) {
+      await appendAssetToFormData(formData, 'attachments', asset);
+    }
+    return apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', formData, true);
+  },
+
+  updateAnnouncement: async (announcementId: string, params: {
+    title?: string;
+    body?: string;
+    audience?: 'SCHOOL' | 'CLASS' | 'SECTION';
+    class_ids?: string[];
+    section_ids?: string[];
+    publish_now?: boolean;
+    attachments?: UploadAsset[];
+  }) => {
+    if (!params.attachments?.length) {
+      const { attachments: _a, ...jsonBody } = params;
+      return apiRequest<AnnouncementResponse>('PATCH', `/principal/announcements/${announcementId}/`, jsonBody);
+    }
+    const formData = new FormData();
+    if (params.title !== undefined) formData.append('title', params.title);
+    if (params.body !== undefined) formData.append('body', params.body);
+    if (params.audience !== undefined) formData.append('audience', params.audience);
+    if (params.publish_now !== undefined) formData.append('publish_now', String(params.publish_now));
+    params.class_ids?.forEach((id) => formData.append('class_ids', id));
+    params.section_ids?.forEach((id) => formData.append('section_ids', id));
+    for (const asset of params.attachments) {
+      await appendAssetToFormData(formData, 'attachments', asset);
+    }
+    return apiRequest<AnnouncementResponse>('PATCH', `/principal/announcements/${announcementId}/`, formData, true);
+  },
+
+  deleteAnnouncement: (announcementId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/announcements/${announcementId}/`),
 
   getAnnouncements: (params?: { audience?: 'SCHOOL' | 'CLASS' | 'SECTION'; published_after?: string }) => {
     const qs = params

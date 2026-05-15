@@ -292,12 +292,12 @@ export function ExamListScreen() {
         center={<Text style={styles.headerTitle}>Exam Analytics</Text>}
         right={
           <View style={styles.headerActions}>
-            <Pressable
+            {/* <Pressable
               onPress={() => router.push('/(tabs)/principal/analytics' as any)}
               style={styles.headerIconBtn}
             >
               <Ionicons name="grid-outline" size={22} color={colors.principal} />
-            </Pressable>
+            </Pressable> */}
             <Pressable
               onPress={handleDownloadTemplate}
               disabled={downloadingTemplate}

@@ -67,7 +67,7 @@ export function ClassesDirectoryScreen() {
       <HeaderBar
         center={<Text style={styles.headerTitle}>Classes</Text>}
         right={
-          <Pressable onPress={() => router.push('/(tabs)/principal/settings' as any)}>
+          <Pressable onPress={() => router.push('/(tabs)/principal/(tabs)/settings' as any)}>
             <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
           </Pressable>
         }
