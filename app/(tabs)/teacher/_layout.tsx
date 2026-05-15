@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SectionPickerBar } from "../../../components/teacher-dashboard/SectionPickerBar";
 import { useTeacherStore } from "../../../store/teacher-store";
+import { useSchoolStore, DEFAULT_SCHOOL_CONFIG } from "../../../store/school-store";
 
 const ACCENT = "#185FA5";
 
@@ -20,13 +21,15 @@ const TAB_ICONS: Record<string, { name: string; label: string }> = {
 
 function TeacherTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { selectedSection } = useTeacherStore();
+  const { configuration } = useSchoolStore();
+  const config = configuration ?? DEFAULT_SCHOOL_CONFIG;
   const isClassTeacher = selectedSection?.is_class_teacher ?? false;
   const insets = useSafeAreaInsets();
 
-  // Filter out attendance and results for non-class-teachers; no slot reserved
   const visibleRoutes = state.routes.filter(route => {
     if (route.name === "attendance") return isClassTeacher;
-    if (route.name === "results") return isClassTeacher;
+    if (route.name === "results")    return isClassTeacher;
+    if (route.name === "queries")    return config.parent_query_enabled;
     return true;
   });
 

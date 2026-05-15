@@ -3,6 +3,7 @@ import { ApiError } from "../services/api";
 import { meApi } from "../services/me";
 import { storage } from "../services/storage";
 import { clearSelectedTeacherSection } from "./teacher-store";
+import { clearSchoolConfiguration, fetchAndStoreSchoolConfig } from "./school-store";
 import type { MeResponse } from "../types/auth";
 
 export interface AuthState {
@@ -47,6 +48,8 @@ async function loadCurrentUser() {
   try {
     const currentUser = await meApi.getCurrentUser();
     setState({ currentUser, loadingMe: false, bootstrapped: true });
+    // Fetch school config in parallel — non-blocking, uses safe defaults on failure
+    void fetchAndStoreSchoolConfig();
     return currentUser;
   } catch (error) {
     const details = getErrorMessage(error);
@@ -113,6 +116,7 @@ export async function refreshCurrentUser() {
 export async function signOut() {
   await storage.clearTokens();
   clearSelectedTeacherSection();
+  clearSchoolConfiguration();
   state = {
     token: null,
     currentUser: null,

@@ -24,6 +24,7 @@ import {
   type SectionStudent,
 } from '../../../services/teacher-sections';
 import { useTeacherStore } from '../../../store/teacher-store';
+import { useSchoolStore, DEFAULT_SCHOOL_CONFIG } from '../../../store/school-store';
 
 const ACCENT = '#185FA5';
 const GREEN  = '#1D9E75';
@@ -57,6 +58,9 @@ function shiftDate(d: Date, days: number) {
 
 export default function AttendanceScreen() {
   const { selectedSection } = useTeacherStore();
+  const { configuration } = useSchoolStore();
+  const config = configuration ?? DEFAULT_SCHOOL_CONFIG;
+  const isTwiceDaily = config.attendance_frequency === 'TWICE';
 
   const [date, setDate]                   = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -72,6 +76,11 @@ export default function AttendanceScreen() {
   const [search, setSearch]               = useState('');
 
   const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+
+  // If school switches to ONCE, reset slot to MORNING
+  useEffect(() => {
+    if (!isTwiceDaily) setSlot('MORNING');
+  }, [isTwiceDaily]);
 
   const isToday     = toDateString(date) === toDateString(new Date());
   const isConfirmed = !!confirmedAt;
@@ -198,18 +207,20 @@ export default function AttendanceScreen() {
             onChange={(_, selected) => { setShowDatePicker(false); if (selected) setDate(selected); }} />
         )}
 
-        {/* ── Slot tabs ── */}
-        <View style={styles.slotRow}>
-          {SLOTS.map(s => (
-            <Pressable key={s} style={[styles.slotTab, slot === s && styles.slotTabActive]} onPress={() => setSlot(s)}>
-              <Ionicons name={s === 'MORNING' ? 'sunny-outline' : 'moon-outline'} size={15}
-                color={slot === s ? ACCENT : '#AAAAAA'} />
-              <Text style={[styles.slotTabText, slot === s && styles.slotTabTextActive]}>
-                {s === 'MORNING' ? 'Morning' : 'Afternoon'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        {/* ── Slot tabs (only shown when school uses TWICE daily attendance) ── */}
+        {isTwiceDaily && (
+          <View style={styles.slotRow}>
+            {SLOTS.map(s => (
+              <Pressable key={s} style={[styles.slotTab, slot === s && styles.slotTabActive]} onPress={() => setSlot(s)}>
+                <Ionicons name={s === 'MORNING' ? 'sunny-outline' : 'moon-outline'} size={15}
+                  color={slot === s ? ACCENT : '#AAAAAA'} />
+                <Text style={[styles.slotTabText, slot === s && styles.slotTabTextActive]}>
+                  {s === 'MORNING' ? 'Morning' : 'Afternoon'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {/* ── Confirmed banner ── */}
         {isConfirmed && (
