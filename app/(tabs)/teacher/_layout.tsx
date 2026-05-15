@@ -1,11 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Tabs } from "expo-router";
+import { router, Tabs, useSegments } from "expo-router";
+import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SectionPickerBar } from "../../../components/teacher-dashboard/SectionPickerBar";
 import { useTeacherStore } from "../../../store/teacher-store";
 import { useSchoolStore, DEFAULT_SCHOOL_CONFIG } from "../../../store/school-store";
+
+// Routes that require the teacher to be a class teacher of the selected section
+const CLASS_TEACHER_ROUTES = ["attendance", "results"];
 
 const ACCENT = "#185FA5";
 
@@ -70,6 +74,21 @@ function TeacherTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TeacherLayout() {
+  const { selectedSection } = useTeacherStore();
+  const isClassTeacher = selectedSection?.is_class_teacher ?? false;
+  const segments = useSegments();
+
+  // When the teacher switches to a section where they are NOT a class teacher,
+  // redirect away from any gated tab (attendance / results) to the home tab.
+  useEffect(() => {
+    if (!isClassTeacher) {
+      const currentTab = segments[segments.length - 1] as string;
+      if (CLASS_TEACHER_ROUTES.includes(currentTab)) {
+        router.replace("/(tabs)/teacher" as any);
+      }
+    }
+  }, [isClassTeacher, segments]);
+
   return (
     <View style={{ flex: 1, backgroundColor: "#F4F4F8" }}>
       <SectionPickerBar />
