@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationsApi } from '../../services/notifications';
+import { useAuthStore } from '../../store/auth-store';
 import { setSelectedSection, useTeacherStore } from '../../store/teacher-store';
 import { NotificationsSheet } from './NotificationsSheet';
 
@@ -20,6 +22,7 @@ const BAR_HEIGHT = 52;
 
 export function SectionPickerBar() {
   const { selectedSection, sections } = useTeacherStore();
+  const { currentUser } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [notifSheetVisible, setNotifSheetVisible] = useState(false);
@@ -66,6 +69,7 @@ export function SectionPickerBar() {
   }
 
   const dropdownTop = insets.top + BAR_HEIGHT;
+  const headerImageUrl = currentUser?.profile_pic_url ?? currentUser?.school.school_logo_url ?? null;
 
   return (
     <>
@@ -81,10 +85,13 @@ export function SectionPickerBar() {
             <Ionicons name="arrow-back" size={20} color="#444444" />
           </Pressable>
 
-          {/* Class label */}
-          <View style={styles.barLabel}>
-            <Ionicons name="school-outline" size={14} color={ACCENT} />
-            <Text style={styles.barLabelText}>Class</Text>
+          {/* School logo */}
+          <View style={styles.schoolLogoWrap}>
+            {headerImageUrl ? (
+              <Image source={{ uri: headerImageUrl }} style={styles.schoolLogo} />
+            ) : (
+              <Ionicons name="school-outline" size={18} color={ACCENT} />
+            )}
           </View>
 
           {/* Section selector pill */}
@@ -224,13 +231,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   backBtnPressed: { backgroundColor: '#F0F0F0' },
-  barLabel: {
-    flexDirection: 'row',
+  schoolLogoWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F8FC',
+    borderWidth: 1,
+    borderColor: '#E4EAF2',
     alignItems: 'center',
-    gap: 5,
-    flex: 1,
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  barLabelText: { fontSize: 13, fontWeight: '600', color: '#444444' },
+  schoolLogo: { width: '100%', height: '100%', borderRadius: 17 },
   selector: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -239,6 +251,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
+    marginLeft: 'auto',
     maxWidth: 180,
   },
   selectorPressed: { opacity: 0.7 },

@@ -4,6 +4,7 @@ export interface SchoolSummary {
   id: string;
   name: string;
   subdomain: string;
+  school_logo_url?: string | null;
 }
 
 export interface SectionSummary {

@@ -1,4 +1,4 @@
-import type { MeResponse, SchoolSummary, UserRole } from "../types/auth";
+import type { MeResponse, UserRole } from "../types/auth";
 import { apiRequest } from "./api";
 
 type UnknownRecord = Record<string, unknown>;
@@ -10,18 +10,6 @@ function isRole(value: unknown): value is UserRole {
     value === "STUDENT" ||
     value === "PARENT"
   );
-}
-
-function toSchoolSummary(
-  input: unknown,
-  fallbackSchoolId?: string,
-): SchoolSummary {
-  const school = (input ?? {}) as UnknownRecord;
-  return {
-    id: (typeof school.id === "string" && school.id) || fallbackSchoolId || "",
-    name: typeof school.name === "string" ? school.name : "",
-    subdomain: typeof school.subdomain === "string" ? school.subdomain : "",
-  };
 }
 
 function normalizeMeResponse(raw: unknown): MeResponse {
@@ -65,6 +53,10 @@ function normalizeMeResponse(raw: unknown): MeResponse {
       id: typeof user.school_id === "string" ? user.school_id : "",
       name: typeof user.school_name === "string" ? user.school_name : "",
       subdomain: "",
+      school_logo_url:
+        typeof user.school_logo_url === "string" || user.school_logo_url === null
+          ? (user.school_logo_url as string | null)
+          : null,
     },
   } as MeResponse;
 }
