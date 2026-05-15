@@ -222,10 +222,10 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* ── Stats + Mark All (single compact row) ── */}
+        {/* ── Stats row + Mark All row ── */}
         {hasStudents && (
-          <View style={styles.controlRow}>
-            {/* counts */}
+          <View style={styles.controlBlock}>
+            {/* Row 1: counts */}
             <View style={styles.countsGroup}>
               <View style={styles.countChip}>
                 <View style={[styles.countDot, { backgroundColor: GREEN }]} />
@@ -246,17 +246,17 @@ export default function AttendanceScreen() {
               )}
             </View>
 
-            {/* mark-all buttons */}
+            {/* Row 2: mark-all buttons — full width, never overflow */}
             {!isConfirmed && (
               <View style={styles.markAllGroup}>
                 <Pressable style={({ pressed }) => [styles.markAllBtn, styles.markAllPresent, pressed && { opacity: 0.8 }]}
                   onPress={() => markAll('PRESENT')}>
-                  <Ionicons name="checkmark-circle" size={13} color="#FFF" />
+                  <Ionicons name="checkmark-circle" size={14} color="#FFF" />
                   <Text style={styles.markAllText}>All Present</Text>
                 </Pressable>
                 <Pressable style={({ pressed }) => [styles.markAllBtn, styles.markAllAbsent, pressed && { opacity: 0.8 }]}
                   onPress={() => markAll('ABSENT')}>
-                  <Ionicons name="close-circle" size={13} color="#FFF" />
+                  <Ionicons name="close-circle" size={14} color="#FFF" />
                   <Text style={styles.markAllText}>All Absent</Text>
                 </Pressable>
               </View>
@@ -479,13 +479,13 @@ const styles = StyleSheet.create({
   },
   confirmedText: { fontSize: 12, color: '#065F46', fontWeight: '600', flex: 1 },
 
-  // ── Stats + mark-all (one row)
-  controlRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  // ── Stats + mark-all (two stacked rows, never overflow)
+  controlBlock: {
+    flexDirection: 'column',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14, paddingVertical: 10,
+    paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: LINE,
-    gap: 10,
+    gap: 8,
   },
   countsGroup: { flexDirection: 'row', gap: 6 },
   countChip: {
@@ -495,14 +495,15 @@ const styles = StyleSheet.create({
   countDot: { width: 7, height: 7, borderRadius: 4 },
   countNum: { fontSize: 13, fontWeight: '700', color: INK },
   countLabel: { fontSize: 12, color: MUTED },
-  markAllGroup: { flexDirection: 'row', gap: 6 },
+  markAllGroup: { flexDirection: 'row', gap: 8 },
   markAllBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10,
+    flex: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 9, borderRadius: 11,
   },
   markAllPresent: { backgroundColor: GREEN },
   markAllAbsent:  { backgroundColor: RED  },
-  markAllText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+  markAllText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
 
   // ── Search
   searchWrap: {
