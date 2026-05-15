@@ -30,6 +30,27 @@ export interface TeachersListResponse {
   results: TeacherResponse[];
 }
 
+export interface TeacherAssignmentSectionSummary {
+  id: string;
+  class: string;
+  name: string;
+}
+
+export interface AssignTeacherSectionsRequest {
+  subject_id: string;
+  section_ids: string[];
+}
+
+export interface AssignTeacherSectionsResponse {
+  message: string;
+  teacher_id: string;
+  primary_subject: {
+    id: string;
+    name: string;
+  };
+  assigned_sections: TeacherAssignmentSectionSummary[];
+}
+
 // Student bulk upload
 export interface BulkUploadBatch {
   batch_id: string;

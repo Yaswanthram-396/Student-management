@@ -9,6 +9,8 @@ import type {
   SubjectsListResponse,
   TeacherResponse,
   TeachersListResponse,
+  AssignTeacherSectionsRequest,
+  AssignTeacherSectionsResponse,
   BulkUploadBatch,
   AnnouncementResponse,
   AnnouncementsListResponse,
@@ -90,6 +92,13 @@ export const principalApi = {
       : '';
     return apiRequest<TeachersListResponse>('GET', `/principal/teachers/${qs}`);
   },
+
+  assignTeacherSections: (teacherId: string, body: AssignTeacherSectionsRequest) =>
+    apiRequest<AssignTeacherSectionsResponse>(
+      'POST',
+      `/principal/teachers/${teacherId}/assign-sections/`,
+      body,
+    ),
 
   updateTeacher: (id: string, body: {
     name?: string;

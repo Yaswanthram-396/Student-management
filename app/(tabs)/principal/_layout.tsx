@@ -6,6 +6,7 @@ export default function PrincipalLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="analytics" />
       <Stack.Screen name="calendar" />
+      <Stack.Screen name="assign-subject" />
       <Stack.Screen name="class-attendance" />
       <Stack.Screen name="class-people" />
       <Stack.Screen name="class-teachers" />
