@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,10 +9,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  fetchStudentSubjectDrilldown,
-  type StudentSubjectDrilldown,
-} from "../services/teacher-results";
+import type { StudentSubjectDrilldown } from "../services/teacher-results";
 import type { PerformanceLabel, QuestionStatus, RiskLabel } from "../types/analytics";
 
 // ── Design tokens (shared with other teacher screens) ─────────────────────────
@@ -63,37 +59,6 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric", month: "short", year: "numeric",
   });
-}
-
-// ── Loading state ─────────────────────────────────────────────────────────────
-function LoadingState() {
-  return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={ACCENT} />
-        <Text style={styles.centeredText}>Loading subject analysis…</Text>
-      </View>
-    </SafeAreaView>
-  );
-}
-
-// ── Error state ───────────────────────────────────────────────────────────────
-function FailureState({ onRetry }: { onRetry: () => void }) {
-  return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <View style={styles.centered}>
-        <View style={styles.failureIconWrap}>
-          <Ionicons name="cloud-offline-outline" size={34} color={RED} />
-        </View>
-        <Text style={styles.failureTitle}>Could not load subject data</Text>
-        <Text style={styles.failureBody}>Check your connection and try again.</Text>
-        <Pressable style={styles.retryBtn} onPress={onRetry}>
-          <Ionicons name="refresh-outline" size={16} color="#FFF" />
-          <Text style={styles.retryBtnText}>Try Again</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
 }
 
 // ── Back header ───────────────────────────────────────────────────────────────
@@ -290,42 +255,74 @@ function QuestionGrid({ questions }: { questions: StudentSubjectDrilldown["quest
   );
 }
 
+// ── Dummy data (same shape as API response) ────────────────────────────────────
+const DUMMY_DATA: StudentSubjectDrilldown = {
+  student: {
+    student_id:    "eeaa5388-cd26-48ac-a4de-2ef1dde429b6",
+    student_ref_id:"2251863",
+    name:          "MAHIMA REDDY.G",
+    class_name:    "Class 11",
+    section_name:  "A",
+  },
+  exam: {
+    id:        "exam-001",
+    exam_name: "Mid Term 2024",
+    exam_date: "2024-09-15",
+  },
+  subject_name: "MATHS",
+  result: {
+    total_marks:       42,
+    max_marks:         80,
+    percentage:        52.5,
+    exam_rank:         11,
+    correct:           14,
+    wrong:             4,
+    unattempted:       2,
+    risk_label:        "WATCH",
+    performance_label: "AVERAGE",
+    z_score:           -0.12,
+  },
+  questions: [
+    { q_no: 1,  status: "C" }, { q_no: 2,  status: "W" }, { q_no: 3,  status: "U" },
+    { q_no: 4,  status: "C" }, { q_no: 5,  status: "C" }, { q_no: 6,  status: "W" },
+    { q_no: 7,  status: "C" }, { q_no: 8,  status: "C" }, { q_no: 9,  status: "U" },
+    { q_no: 10, status: "C" }, { q_no: 11, status: "W" }, { q_no: 12, status: "C" },
+    { q_no: 13, status: "C" }, { q_no: 14, status: "U" }, { q_no: 15, status: "C" },
+    { q_no: 16, status: "W" }, { q_no: 17, status: "C" }, { q_no: 18, status: "C" },
+    { q_no: 19, status: "C" }, { q_no: 20, status: "U" }, { q_no: 21, status: "C" },
+    { q_no: 22, status: "C" }, { q_no: 23, status: "W" }, { q_no: 24, status: "C" },
+    { q_no: 25, status: "C" }, { q_no: 26, status: "C" }, { q_no: 27, status: "U" },
+    { q_no: 28, status: "W" }, { q_no: 29, status: "C" }, { q_no: 30, status: "C" },
+    { q_no: 31, status: "C" }, { q_no: 32, status: "U" }, { q_no: 33, status: "C" },
+    { q_no: 34, status: "W" }, { q_no: 35, status: "C" }, { q_no: 36, status: "C" },
+    { q_no: 37, status: "C" }, { q_no: 38, status: "U" }, { q_no: 39, status: "C" },
+    { q_no: 40, status: "C" }, { q_no: 41, status: "W" }, { q_no: 42, status: "C" },
+    { q_no: 43, status: "C" }, { q_no: 44, status: "C" }, { q_no: 45, status: "U" },
+    { q_no: 46, status: "C" }, { q_no: 47, status: "C" }, { q_no: 48, status: "W" },
+    { q_no: 49, status: "C" }, { q_no: 50, status: "C" }, { q_no: 51, status: "C" },
+    { q_no: 52, status: "U" }, { q_no: 53, status: "C" }, { q_no: 54, status: "C" },
+    { q_no: 55, status: "W" }, { q_no: 56, status: "C" }, { q_no: 57, status: "C" },
+    { q_no: 58, status: "C" }, { q_no: 59, status: "U" }, { q_no: 60, status: "C" },
+    { q_no: 61, status: "C" }, { q_no: 62, status: "W" }, { q_no: 63, status: "C" },
+    { q_no: 64, status: "C" }, { q_no: 65, status: "C" }, { q_no: 66, status: "U" },
+    { q_no: 67, status: "C" }, { q_no: 68, status: "C" }, { q_no: 69, status: "W" },
+    { q_no: 70, status: "C" }, { q_no: 71, status: "C" }, { q_no: 72, status: "C" },
+    { q_no: 73, status: "U" }, { q_no: 74, status: "C" }, { q_no: 75, status: "C" },
+    { q_no: 76, status: "W" }, { q_no: 77, status: "C" }, { q_no: 78, status: "C" },
+    { q_no: 79, status: "C" }, { q_no: 80, status: "U" },
+  ],
+};
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function TeacherStudentSubjectScreen() {
   const params      = useLocalSearchParams();
-  const studentId   = getParam(params.studentId);
   const studentName = getParam(params.studentName);
-  const subjectId   = getParam(params.subjectId);
-  const examId      = getParam(params.examId);
   const examName    = getParam(params.examName);
 
-  const [loading, setLoading] = useState(true);
-  const [error,   setError  ] = useState(false);
-  const [data,    setData   ] = useState<StudentSubjectDrilldown | null>(null);
+  // TODO: replace dummy data with real API call once backend is ready
+  const data = DUMMY_DATA;
 
-  const load = useCallback(async () => {
-    if (!studentId || !subjectId || !examId) {
-      setError(true);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(false);
-    try {
-      const result = await fetchStudentSubjectDrilldown(studentId, subjectId, examId);
-      setData(result);
-    } catch (err) {
-      console.error("TeacherStudentSubject:", err);
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [studentId, subjectId, examId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  if (loading)         return <LoadingState />;
-  if (error || !data)  return <FailureState onRetry={load} />;
+  if (!data) return null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
