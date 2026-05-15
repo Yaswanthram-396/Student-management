@@ -246,11 +246,11 @@ function StudentPerformanceRow({
           <Text style={styles.studentAvatarText}>{initials}</Text>
         </View>
         <View style={styles.studentMain}>
-          <View style={styles.studentTopLine}>
-            <Text style={styles.studentName} numberOfLines={1}>{student.name}</Text>
+          <Text style={styles.studentName}>{student.name}</Text>
+          <View style={styles.studentMetaRow}>
+            <Text style={styles.studentRef}>{student.student_ref_id}</Text>
             <RiskBadge risk={student.overall_risk} />
           </View>
-          <Text style={styles.studentRef}>{student.student_ref_id}</Text>
         </View>
         <View style={styles.studentScoreWrap}>
           <Text style={styles.studentTotal}>{student.total_pct.toFixed(1)}%</Text>
@@ -260,6 +260,7 @@ function StudentPerformanceRow({
 
       {expanded && (
         <View style={styles.studentDropdown}>
+          <Text style={styles.dropdownHeader}>Subject Breakdown</Text>
           {student.subject_details.length === 0 ? (
             <Text style={styles.emptyInlineText}>No subject scores available for this student.</Text>
           ) : (
@@ -683,31 +684,32 @@ const styles = StyleSheet.create({
   riskSummaryChip: { flex: 1, borderRadius: 13, paddingVertical: 12, alignItems: "center", gap: 2 },
   riskSummaryCount: { fontSize: 18, fontWeight: "900" },
   riskSummaryLabel: { fontSize: 11, fontWeight: "900" },
-  studentList: { gap: 10 },
+  studentList: { gap: 12 },
   studentCard: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 14,
+    backgroundColor: SURFACE,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: LINE,
     overflow: "hidden",
   },
   studentCardExpanded: { borderColor: ACCENT, backgroundColor: "#F3F8FE" },
-  studentPress: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12 },
+  studentPress: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 14, paddingVertical: 14 },
   studentAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: 48,
+    height: 48,
+    borderRadius: 15,
     backgroundColor: "#EAF2FB",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
-  studentAvatarText: { color: ACCENT, fontSize: 13, fontWeight: "900" },
-  studentMain: { flex: 1, minWidth: 0 },
-  studentTopLine: { flexDirection: "row", alignItems: "center", gap: 8 },
-  studentName: { flex: 1, color: INK, fontSize: 14, fontWeight: "900" },
-  studentRef: { color: MUTED, fontSize: 12, marginTop: 3, fontWeight: "700" },
-  studentScoreWrap: { alignItems: "flex-end", gap: 4 },
-  studentTotal: { color: ACCENT, fontSize: 17, fontWeight: "900" },
+  studentAvatarText: { color: ACCENT, fontSize: 15, fontWeight: "900" },
+  studentMain: { flex: 1, minWidth: 0, gap: 4 },
+  studentMetaRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  studentName: { color: INK, fontSize: 15, fontWeight: "900", lineHeight: 20 },
+  studentRef: { color: MUTED, fontSize: 12, fontWeight: "700" },
+  studentScoreWrap: { alignItems: "flex-end", gap: 5, flexShrink: 0 },
+  studentTotal: { color: ACCENT, fontSize: 18, fontWeight: "900" },
   riskBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -717,21 +719,29 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   riskText: { fontSize: 10, fontWeight: "900" },
+  dropdownHeader: {
+    color: MUTED,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
   studentDropdown: {
     borderTopWidth: 1,
     borderTopColor: LINE,
-    backgroundColor: SURFACE,
-    padding: 12,
-    gap: 10,
+    backgroundColor: "#F8FAFC",
+    padding: 16,
+    gap: 12,
   },
-  subjectScoreRow: { gap: 8 },
+  subjectScoreRow: { gap: 10, backgroundColor: SURFACE, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: LINE },
   subjectScoreTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   subjectScoreTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  subjectScoreName: { color: INK, fontSize: 13, fontWeight: "900", flex: 1 },
-  subjectScoreMetric: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  subjectScoreValue: { color: INK, fontSize: 16, fontWeight: "900" },
+  subjectScoreName: { color: INK, fontSize: 14, fontWeight: "900", flex: 1 },
+  subjectScoreMetric: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  subjectScoreValue: { color: INK, fontSize: 18, fontWeight: "900" },
   subjectScoreClass: { color: MUTED, fontSize: 12, fontWeight: "700" },
-  subjectScoreDelta: { fontSize: 12, fontWeight: "900" },
+  subjectScoreDelta: { fontSize: 13, fontWeight: "900" },
   bottomState: {
     minHeight: 118,
     borderRadius: 14,

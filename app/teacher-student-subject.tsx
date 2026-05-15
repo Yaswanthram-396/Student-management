@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,33 +10,36 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import type { StudentSubjectDrilldown } from "../services/teacher-results";
+import {
+  fetchStudentSubjectDrilldown,
+  type StudentSubjectDrilldown,
+} from "../services/teacher-results";
 import type { PerformanceLabel, QuestionStatus, RiskLabel } from "../types/analytics";
 
-// ── Design tokens (shared with other teacher screens) ─────────────────────────
-const ACCENT = "#185FA5";
-const GREEN  = "#16825D";
-const AMBER  = "#C76A00";
-const RED    = "#D92D20";
-const INK    = "#101828";
-const MUTED  = "#667085";
-const LINE   = "#EAECF0";
-const BG     = "#F6F8FB";
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const ACCENT  = "#185FA5";
+const GREEN   = "#16825D";
+const AMBER   = "#C76A00";
+const RED     = "#D92D20";
+const INK     = "#101828";
+const MUTED   = "#667085";
+const LINE    = "#EAECF0";
+const BG      = "#F6F8FB";
 const SURFACE = "#FFFFFF";
 
 // ── Lookup tables ─────────────────────────────────────────────────────────────
 const RISK_META: Record<RiskLabel, { color: string; bg: string; icon: string }> = {
   SAFE:  { color: GREEN, bg: "#EAF7F1", icon: "checkmark-circle-outline" },
-  WATCH: { color: AMBER, bg: "#FFF5E6", icon: "eye-outline" },
-  ALERT: { color: RED,   bg: "#FEEDEB", icon: "alert-circle-outline" },
+  WATCH: { color: AMBER, bg: "#FFF5E6", icon: "eye-outline"              },
+  ALERT: { color: RED,   bg: "#FEEDEB", icon: "alert-circle-outline"     },
 };
 
 const PERF_META: Record<PerformanceLabel, { label: string; color: string }> = {
-  EXCEPTIONAL:    { label: "Exceptional",    color: "#6941C6" },
-  ABOVE_AVERAGE:  { label: "Above Average",  color: GREEN    },
-  AVERAGE:        { label: "Average",        color: AMBER    },
-  BELOW_AVERAGE:  { label: "Below Average",  color: "#C05621" },
-  NEEDS_ATTENTION:{ label: "Needs Attention",color: RED      },
+  EXCEPTIONAL:     { label: "Exceptional",     color: "#6941C6" },
+  ABOVE_AVERAGE:   { label: "Above Average",   color: GREEN     },
+  AVERAGE:         { label: "Average",         color: AMBER     },
+  BELOW_AVERAGE:   { label: "Below Average",   color: "#C05621" },
+  NEEDS_ATTENTION: { label: "Needs Attention", color: RED       },
 };
 
 const Q_COLORS: Record<QuestionStatus, { bg: string; text: string }> = {
@@ -48,12 +52,10 @@ const Q_COLORS: Record<QuestionStatus, { bg: string; text: string }> = {
 function getParam(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v[0] : v ?? "";
 }
-
 function goBack() {
   if (router.canGoBack()) router.back();
   else router.replace("/(tabs)/teacher/results" as any);
 }
-
 function formatDate(iso: string) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -61,7 +63,38 @@ function formatDate(iso: string) {
   });
 }
 
-// ── Back header ───────────────────────────────────────────────────────────────
+// ── Loading ───────────────────────────────────────────────────────────────────
+function LoadingState() {
+  return (
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={ACCENT} />
+        <Text style={styles.centeredText}>Loading subject analysis…</Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── Error ─────────────────────────────────────────────────────────────────────
+function FailureState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <View style={styles.centered}>
+        <View style={styles.failureIconWrap}>
+          <Ionicons name="cloud-offline-outline" size={34} color={RED} />
+        </View>
+        <Text style={styles.failureTitle}>Could not load subject data</Text>
+        <Text style={styles.failureBody}>Check your connection and try again.</Text>
+        <Pressable style={styles.retryBtn} onPress={onRetry}>
+          <Ionicons name="refresh-outline" size={16} color="#FFF" />
+          <Text style={styles.retryBtnText}>Try Again</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
 function Header({ name, exam }: { name: string; exam: string }) {
   return (
     <View style={styles.headerRow}>
@@ -76,7 +109,7 @@ function Header({ name, exam }: { name: string; exam: string }) {
   );
 }
 
-// ── Hero card (blue) ──────────────────────────────────────────────────────────
+// ── Hero card ─────────────────────────────────────────────────────────────────
 function HeroCard({ data }: { data: StudentSubjectDrilldown }) {
   const { result, student, subject_name, exam } = data;
   const risk = RISK_META[result.risk_label] ?? RISK_META.WATCH;
@@ -84,7 +117,6 @@ function HeroCard({ data }: { data: StudentSubjectDrilldown }) {
 
   return (
     <View style={styles.heroCard}>
-      {/* top row */}
       <View style={styles.heroTop}>
         <View style={styles.heroIconWrap}>
           <Ionicons name="book-outline" size={24} color="#FFF" />
@@ -96,21 +128,16 @@ function HeroCard({ data }: { data: StudentSubjectDrilldown }) {
             {student.class_name} · Section {student.section_name} · {formatDate(exam.exam_date)}
           </Text>
         </View>
-        {/* risk badge */}
         <View style={[styles.heroRiskChip, { backgroundColor: risk.bg }]}>
           <Ionicons name={risk.icon as any} size={13} color={risk.color} />
-          <Text style={[styles.heroRiskText, { color: risk.color }]}>
-            {result.risk_label}
-          </Text>
+          <Text style={[styles.heroRiskText, { color: risk.color }]}>{result.risk_label}</Text>
         </View>
       </View>
 
-      {/* stats row */}
       <View style={styles.heroStats}>
         <View style={styles.heroStat}>
           <Text style={styles.heroStatVal}>
-            {result.total_marks}
-            <Text style={styles.heroStatMax}>/{result.max_marks}</Text>
+            {result.total_marks}<Text style={styles.heroStatMax}>/{result.max_marks}</Text>
           </Text>
           <Text style={styles.heroStatLabel}>Marks</Text>
         </View>
@@ -126,7 +153,6 @@ function HeroCard({ data }: { data: StudentSubjectDrilldown }) {
         </View>
       </View>
 
-      {/* progress bar */}
       <View style={styles.heroProgressTrack}>
         <View style={[styles.heroProgressFill, { width: `${Math.min(pct, 100)}%` }]} />
       </View>
@@ -134,14 +160,13 @@ function HeroCard({ data }: { data: StudentSubjectDrilldown }) {
   );
 }
 
-// ── Score breakdown card ───────────────────────────────────────────────────────
+// ── Score breakdown ───────────────────────────────────────────────────────────
 function ScoreBreakdown({ result }: { result: StudentSubjectDrilldown["result"] }) {
   const total = result.correct + result.wrong + result.unattempted;
-
   const CHIPS = [
-    { count: result.correct,     label: "Correct",  icon: "checkmark-circle",      bg: "#EAF7F1", color: GREEN },
-    { count: result.wrong,       label: "Wrong",    icon: "close-circle",           bg: "#FEEDEB", color: RED   },
-    { count: result.unattempted, label: "Skipped",  icon: "remove-circle-outline",  bg: "#F2F4F7", color: MUTED },
+    { count: result.correct,     label: "Correct", icon: "checkmark-circle",     bg: "#EAF7F1", color: GREEN },
+    { count: result.wrong,       label: "Wrong",   icon: "close-circle",          bg: "#FEEDEB", color: RED   },
+    { count: result.unattempted, label: "Skipped", icon: "remove-circle-outline", bg: "#F2F4F7", color: MUTED },
   ] as const;
 
   return (
@@ -155,7 +180,6 @@ function ScoreBreakdown({ result }: { result: StudentSubjectDrilldown["result"] 
           <Text style={styles.cardSub}>{total} questions answered</Text>
         </View>
       </View>
-
       <View style={styles.chipRow}>
         {CHIPS.map(({ count, label, icon, bg, color }) => (
           <View key={label} style={[styles.statChip, { backgroundColor: bg }]}>
@@ -169,11 +193,11 @@ function ScoreBreakdown({ result }: { result: StudentSubjectDrilldown["result"] 
   );
 }
 
-// ── Performance card ──────────────────────────────────────────────────────────
+// ── Performance ───────────────────────────────────────────────────────────────
 function PerformanceCard({ result }: { result: StudentSubjectDrilldown["result"] }) {
-  const perf   = PERF_META[result.performance_label] ?? { label: result.performance_label, color: MUTED };
-  const z      = result.z_score;
-  const zPlus  = z >= 0;
+  const perf  = PERF_META[result.performance_label] ?? { label: result.performance_label, color: MUTED };
+  const z     = result.z_score;
+  const zPlus = z >= 0;
 
   return (
     <View style={styles.card}>
@@ -186,7 +210,6 @@ function PerformanceCard({ result }: { result: StudentSubjectDrilldown["result"]
           <Text style={styles.cardSub}>Relative to class average</Text>
         </View>
       </View>
-
       <View style={styles.perfRow}>
         <View style={[styles.perfLabelChip, { backgroundColor: perf.color + "20" }]}>
           <Text style={[styles.perfLabelText, { color: perf.color }]}>{perf.label}</Text>
@@ -202,19 +225,18 @@ function PerformanceCard({ result }: { result: StudentSubjectDrilldown["result"]
   );
 }
 
-// ── Question response grid ────────────────────────────────────────────────────
+// ── Question grid ─────────────────────────────────────────────────────────────
 function QuestionGrid({ questions }: { questions: StudentSubjectDrilldown["questions"] }) {
   if (!questions.length) return null;
-
-  const correctCount    = questions.filter(q => q.status === "C").length;
-  const wrongCount      = questions.filter(q => q.status === "W").length;
-  const skippedCount    = questions.filter(q => q.status === "U").length;
+  const cCount = questions.filter(q => q.status === "C").length;
+  const wCount = questions.filter(q => q.status === "W").length;
+  const uCount = questions.filter(q => q.status === "U").length;
 
   const LEGEND = [
-    { status: "C", label: "Correct", color: GREEN },
-    { status: "W", label: "Wrong",   color: RED   },
-    { status: "U", label: "Skipped", color: MUTED },
-  ] as const;
+    { status: "C" as QuestionStatus, label: "Correct", color: GREEN },
+    { status: "W" as QuestionStatus, label: "Wrong",   color: RED   },
+    { status: "U" as QuestionStatus, label: "Skipped", color: MUTED },
+  ];
 
   return (
     <View style={styles.card}>
@@ -225,12 +247,10 @@ function QuestionGrid({ questions }: { questions: StudentSubjectDrilldown["quest
         <View style={styles.cardTitleText}>
           <Text style={styles.cardTitle}>Question Responses</Text>
           <Text style={styles.cardSub}>
-            {questions.length} questions · {correctCount}✓  {wrongCount}✗  {skippedCount}–
+            {questions.length} questions · {cCount}✓  {wCount}✗  {uCount}–
           </Text>
         </View>
       </View>
-
-      {/* legend */}
       <View style={styles.legendRow}>
         {LEGEND.map(({ status, label, color }) => (
           <View key={status} style={styles.legendItem}>
@@ -239,8 +259,6 @@ function QuestionGrid({ questions }: { questions: StudentSubjectDrilldown["quest
           </View>
         ))}
       </View>
-
-      {/* grid */}
       <View style={styles.qGrid}>
         {questions.map(q => {
           const { bg, text } = Q_COLORS[q.status];
@@ -255,86 +273,51 @@ function QuestionGrid({ questions }: { questions: StudentSubjectDrilldown["quest
   );
 }
 
-// ── Dummy data (same shape as API response) ────────────────────────────────────
-const DUMMY_DATA: StudentSubjectDrilldown = {
-  student: {
-    student_id:    "eeaa5388-cd26-48ac-a4de-2ef1dde429b6",
-    student_ref_id:"2251863",
-    name:          "MAHIMA REDDY.G",
-    class_name:    "Class 11",
-    section_name:  "A",
-  },
-  exam: {
-    id:        "exam-001",
-    exam_name: "Mid Term 2024",
-    exam_date: "2024-09-15",
-  },
-  subject_name: "MATHS",
-  result: {
-    total_marks:       42,
-    max_marks:         80,
-    percentage:        52.5,
-    exam_rank:         11,
-    correct:           14,
-    wrong:             4,
-    unattempted:       2,
-    risk_label:        "WATCH",
-    performance_label: "AVERAGE",
-    z_score:           -0.12,
-  },
-  questions: [
-    { q_no: 1,  status: "C" }, { q_no: 2,  status: "W" }, { q_no: 3,  status: "U" },
-    { q_no: 4,  status: "C" }, { q_no: 5,  status: "C" }, { q_no: 6,  status: "W" },
-    { q_no: 7,  status: "C" }, { q_no: 8,  status: "C" }, { q_no: 9,  status: "U" },
-    { q_no: 10, status: "C" }, { q_no: 11, status: "W" }, { q_no: 12, status: "C" },
-    { q_no: 13, status: "C" }, { q_no: 14, status: "U" }, { q_no: 15, status: "C" },
-    { q_no: 16, status: "W" }, { q_no: 17, status: "C" }, { q_no: 18, status: "C" },
-    { q_no: 19, status: "C" }, { q_no: 20, status: "U" }, { q_no: 21, status: "C" },
-    { q_no: 22, status: "C" }, { q_no: 23, status: "W" }, { q_no: 24, status: "C" },
-    { q_no: 25, status: "C" }, { q_no: 26, status: "C" }, { q_no: 27, status: "U" },
-    { q_no: 28, status: "W" }, { q_no: 29, status: "C" }, { q_no: 30, status: "C" },
-    { q_no: 31, status: "C" }, { q_no: 32, status: "U" }, { q_no: 33, status: "C" },
-    { q_no: 34, status: "W" }, { q_no: 35, status: "C" }, { q_no: 36, status: "C" },
-    { q_no: 37, status: "C" }, { q_no: 38, status: "U" }, { q_no: 39, status: "C" },
-    { q_no: 40, status: "C" }, { q_no: 41, status: "W" }, { q_no: 42, status: "C" },
-    { q_no: 43, status: "C" }, { q_no: 44, status: "C" }, { q_no: 45, status: "U" },
-    { q_no: 46, status: "C" }, { q_no: 47, status: "C" }, { q_no: 48, status: "W" },
-    { q_no: 49, status: "C" }, { q_no: 50, status: "C" }, { q_no: 51, status: "C" },
-    { q_no: 52, status: "U" }, { q_no: 53, status: "C" }, { q_no: 54, status: "C" },
-    { q_no: 55, status: "W" }, { q_no: 56, status: "C" }, { q_no: 57, status: "C" },
-    { q_no: 58, status: "C" }, { q_no: 59, status: "U" }, { q_no: 60, status: "C" },
-    { q_no: 61, status: "C" }, { q_no: 62, status: "W" }, { q_no: 63, status: "C" },
-    { q_no: 64, status: "C" }, { q_no: 65, status: "C" }, { q_no: 66, status: "U" },
-    { q_no: 67, status: "C" }, { q_no: 68, status: "C" }, { q_no: 69, status: "W" },
-    { q_no: 70, status: "C" }, { q_no: 71, status: "C" }, { q_no: 72, status: "C" },
-    { q_no: 73, status: "U" }, { q_no: 74, status: "C" }, { q_no: 75, status: "C" },
-    { q_no: 76, status: "W" }, { q_no: 77, status: "C" }, { q_no: 78, status: "C" },
-    { q_no: 79, status: "C" }, { q_no: 80, status: "U" },
-  ],
-};
-
-// ── Main screen ───────────────────────────────────────────────────────────────
+// ── Screen ────────────────────────────────────────────────────────────────────
 export default function TeacherStudentSubjectScreen() {
   const params      = useLocalSearchParams();
+  const studentId   = getParam(params.studentId);
   const studentName = getParam(params.studentName);
+  const subjectId   = getParam(params.subjectId);
+  const examId      = getParam(params.examId);
   const examName    = getParam(params.examName);
 
-  // TODO: replace dummy data with real API call once backend is ready
-  const data = DUMMY_DATA;
+  const [loading, setLoading] = useState(true);
+  const [error,   setError  ] = useState(false);
+  const [data,    setData   ] = useState<StudentSubjectDrilldown | null>(null);
 
-  if (!data) return null;
+  const load = useCallback(async () => {
+    if (!studentId || !subjectId || !examId) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(false);
+    try {
+      const result = await fetchStudentSubjectDrilldown(studentId, subjectId, examId);
+      setData(result);
+    } catch (err) {
+      console.error("TeacherStudentSubject:", err);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [studentId, subjectId, examId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading)        return <LoadingState />;
+  if (error || !data) return <FailureState onRetry={load} />;
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <Header name={studentName || data.student.name} exam={examName || data.exam.exam_name} />
-        <HeroCard       data={data} />
-        <ScoreBreakdown result={data.result} />
+        <HeroCard        data={data} />
+        <ScoreBreakdown  result={data.result} />
         <PerformanceCard result={data.result} />
-        <QuestionGrid   questions={data.questions} />
+        <QuestionGrid    questions={data.questions} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -345,7 +328,6 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: BG },
   scroll: { paddingHorizontal: 16, paddingTop: 34, paddingBottom: 32, gap: 18 },
 
-  // ── states
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 14 },
   centeredText: { color: MUTED, fontSize: 13, fontWeight: "700" },
   failureIconWrap: {
@@ -360,23 +342,17 @@ const styles = StyleSheet.create({
   },
   retryBtnText: { color: "#FFF", fontSize: 14, fontWeight: "900" },
 
-  // ── header
   headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 4 },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: "center", justifyContent: "center",
-  },
+  backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   headerText:  { flex: 1 },
   headerTitle: { fontSize: 22, fontWeight: "900", color: INK },
   headerSub:   { fontSize: 13, color: MUTED, marginTop: 2 },
 
-  // ── hero card
   heroCard: { backgroundColor: ACCENT, borderRadius: 18, padding: 18, gap: 16 },
   heroTop:  { flexDirection: "row", alignItems: "flex-start", gap: 13 },
   heroIconWrap: {
     width: 48, height: 48, borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center",
   },
   heroTitleWrap: { flex: 1 },
   heroEyebrow: { color: "#D5E7F8", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
@@ -387,26 +363,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999,
   },
   heroRiskText: { fontSize: 11, fontWeight: "900" },
-
   heroStats: {
     flexDirection: "row", alignItems: "stretch",
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 14, paddingVertical: 14,
+    backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 14, paddingVertical: 14,
   },
   heroStat:      { flex: 1, alignItems: "center", paddingHorizontal: 8 },
   heroStatVal:   { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },
   heroStatMax:   { color: "#D5E7F8", fontSize: 13, fontWeight: "700" },
   heroStatLabel: { color: "#D5E7F8", fontSize: 11, marginTop: 4, fontWeight: "700" },
   heroDivider:   { width: 1, backgroundColor: "rgba(255,255,255,0.18)" },
-
   heroProgressTrack: { height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.22)", overflow: "hidden" },
   heroProgressFill:  { height: "100%", borderRadius: 999, backgroundColor: "#FFFFFF" },
 
-  // ── shared card
-  card: {
-    backgroundColor: SURFACE, borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: LINE, gap: 14,
-  },
+  card: { backgroundColor: SURFACE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: LINE, gap: 14 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardTitleText: { flex: 1 },
   cardIcon: {
@@ -416,16 +385,11 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: "900", color: INK },
   cardSub:   { fontSize: 12, color: MUTED, marginTop: 2 },
 
-  // ── score breakdown
   chipRow: { flexDirection: "row", gap: 10 },
-  statChip: {
-    flex: 1, borderRadius: 14, paddingVertical: 14,
-    alignItems: "center", gap: 5,
-  },
+  statChip: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center", gap: 5 },
   statChipCount: { fontSize: 22, fontWeight: "900" },
   statChipLabel: { fontSize: 11, fontWeight: "900" },
 
-  // ── performance
   perfRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   perfLabelChip: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, flex: 1, alignItems: "center" },
   perfLabelText: { fontSize: 14, fontWeight: "900" },
@@ -433,16 +397,11 @@ const styles = StyleSheet.create({
   zLabel: { color: MUTED, fontSize: 11, fontWeight: "700" },
   zValue: { fontSize: 22, fontWeight: "900" },
 
-  // ── question grid
   legendRow: { flexDirection: "row", gap: 16 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   legendDot:  { width: 10, height: 10, borderRadius: 5 },
   legendText: { fontSize: 12, fontWeight: "700" },
-
   qGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  qBubble: {
-    width: 36, height: 36, borderRadius: 10,
-    alignItems: "center", justifyContent: "center",
-  },
+  qBubble: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   qBubbleNum: { fontSize: 10, fontWeight: "900" },
 });
