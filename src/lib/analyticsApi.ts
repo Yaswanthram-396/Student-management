@@ -1,7 +1,7 @@
 import { apiRequest } from "../../services/api";
 import { storage } from "../../services/storage";
 
-const USE_DUMMY_DATA = true; // Toggle this to false to use the real API
+const USE_DUMMY_DATA = false; // Toggle this to false to use the real API
 
 export async function getStudentSummary(student_id: string, exam_id: string) {
   if (USE_DUMMY_DATA) {

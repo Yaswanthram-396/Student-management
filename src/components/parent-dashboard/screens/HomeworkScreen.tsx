@@ -50,7 +50,6 @@ type HWItem = {
   subjectText: string;
   desc: string;
   due: string;
-  status: "Pending" | "Overdue";
   studentName: string;
 };
 
@@ -69,7 +68,6 @@ function subjectStyle(name: string) {
 
 function mapHomework(hw: TaggedHW): HWItem {
   const deadline = new Date(hw.deadline);
-  const isPast = deadline < new Date();
   const style = subjectStyle(hw.subject.name);
   return {
     id: hw.id,
@@ -82,7 +80,6 @@ function mapHomework(hw: TaggedHW): HWItem {
       month: "short",
       year: "numeric",
     }),
-    status: isPast ? "Overdue" : "Pending",
     studentName: hw.studentName,
   };
 }
@@ -117,10 +114,6 @@ function HWCard({ item, showStudent }: { item: HWItem; showStudent: boolean }) {
     <View style={styles.hwCard}>
       <View style={styles.hwCardTop}>
         <SubjectPill label={item.subject} bg={item.subjectBg} text={item.subjectText} />
-        <StatusPill
-          variant={item.status === "Overdue" ? "danger" : "warning"}
-          label={item.status}
-        />
       </View>
       <Text style={styles.hwDesc}>{item.desc}</Text>
       <View style={styles.hwCardFooter}>

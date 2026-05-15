@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -15,54 +17,65 @@ import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { parentApi } from "../../services/parent";
 import type { HomeworkItem } from "../../types/parent";
-import { LoadingScreen, StatusPill } from "../shared";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { LoadingScreen } from "../shared";
 
 type FilterKey = "All" | "Today" | "This Week" | "Overdue";
 const FILTERS: FilterKey[] = ["All", "Today", "This Week", "Overdue"];
 
 type TaggedHW = HomeworkItem & { studentId: string; studentName: string };
 
-type HWItem = {
-  id: string;
-  subject: string;
-  subjectBg: string;
-  subjectText: string;
-  desc: string;
-  due: string;
-  status: "Pending" | "Overdue";
-  studentName: string;
+type SubjectTheme = {
+  accent: string;
+  bg: string;
+  icon: keyof typeof Ionicons.glyphMap;
 };
 
-// ─── Subject colours ──────────────────────────────────────────────────────────
-
-const SUBJECT_COLORS: Record<string, { bg: string; text: string }> = {
-  Mathematics: { bg: "#DBEAFE", text: colors.teacher },
-  Math: { bg: "#DBEAFE", text: colors.teacher },
-  Science: { bg: colors.successBg, text: colors.success },
-  English: { bg: "#F3E8FF", text: "#7C3AED" },
-  Hindi: { bg: "#FEF9C3", text: "#A16207" },
+const SUBJECT_THEMES: Record<string, SubjectTheme> = {
+  Science: { accent: "#10B981", bg: "#E7F8F1", icon: "flask-outline" },
+  Mathematics: { accent: "#2563EB", bg: "#EAF1FF", icon: "calculator-outline" },
+  Math: { accent: "#2563EB", bg: "#EAF1FF", icon: "calculator-outline" },
+  English: { accent: "#7C3AED", bg: "#F1EAFE", icon: "book-outline" },
+  History: { accent: "#F97316", bg: "#FFF1E8", icon: "library-outline" },
+  Hindi: { accent: "#D97706", bg: "#FEF3C7", icon: "document-text-outline" },
 };
-const DEFAULT_SUBJECT_COLOR = { bg: "#F3F4F6", text: colors.textSecondary };
 
-function subjectStyle(name: string) {
-  return SUBJECT_COLORS[name] ?? DEFAULT_SUBJECT_COLOR;
+const DEFAULT_THEME: SubjectTheme = {
+  accent: colors.parent,
+  bg: colors.primaryLight,
+  icon: "school-outline",
+};
+
+function getSubjectTheme(subject: string): SubjectTheme {
+  return SUBJECT_THEMES[subject] ?? DEFAULT_THEME;
 }
 
-function mapHomework(hw: TaggedHW): HWItem {
-  const deadline = new Date(hw.deadline);
-  const style = subjectStyle(hw.subject.name);
-  return {
-    id: hw.id,
-    subject: hw.subject.name,
-    subjectBg: style.bg,
-    subjectText: style.text,
-    desc: hw.description,
-    due: deadline.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-    status: deadline < new Date() ? "Overdue" : "Pending",
-    studentName: hw.studentName,
-  };
+function getInitials(name: string): string {
+  return name
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}
+
+function formatDate(date: string): string {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getTitle(description: string): string {
+  const firstSentence = description.split(/[.!?]/)[0]?.trim();
+  if (!firstSentence) return "Homework Assignment";
+  return firstSentence.length > 58
+    ? `${firstSentence.slice(0, 58).trim()}...`
+    : firstSentence;
 }
 
 function applyFilter(items: TaggedHW[], filter: FilterKey): TaggedHW[] {
@@ -80,51 +93,87 @@ function applyFilter(items: TaggedHW[], filter: FilterKey): TaggedHW[] {
   });
 }
 
-// ─── Student dropdown ─────────────────────────────────────────────────────────
-
-function StudentDropdown({
+function StudentMenu({
   students,
   selectedId,
   onChange,
-  showAllOption,
 }: {
   students: { id: string; name: string }[];
   selectedId: string;
   onChange: (id: string) => void;
-  showAllOption: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const options = showAllOption
-    ? [{ id: "ALL", name: "All Students" }, ...students]
-    : students;
-  const selected = options.find((s) => s.id === selectedId);
-  const displayName = selected ? selected.name.split(" ")[0] : "All";
+  const options =
+    students.length > 1
+      ? [{ id: "ALL", name: "All Students" }, ...students]
+      : students;
+  const selected = options.find((student) => student.id === selectedId);
 
   return (
     <>
-      <Pressable style={styles.dropdownBtn} onPress={() => setOpen(true)}>
-        <Ionicons name="person-outline" size={13} color={colors.parent} />
-        <Text style={styles.dropdownBtnText} numberOfLines={1}>{displayName}</Text>
-        <Ionicons name="chevron-down" size={13} color={colors.parent} />
+      <Pressable style={styles.studentButton} onPress={() => setOpen(true)}>
+        <View style={styles.studentAvatar}>
+          <Text style={styles.studentAvatarText}>
+            {getInitials(selected?.name ?? "All")}
+          </Text>
+        </View>
+        <Text style={styles.studentButtonText} numberOfLines={1}>
+          {selected?.name.split(" ")[0] ?? "Student"}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={colors.parent} />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setOpen(false)}>
-          <View style={styles.dropdownMenu}>
-            {options.map((s) => (
-              <Pressable
-                key={s.id}
-                style={[styles.dropdownItem, selectedId === s.id && styles.dropdownItemActive]}
-                onPress={() => { onChange(s.id); setOpen(false); }}
-              >
-                <Text style={[styles.dropdownItemText, selectedId === s.id && styles.dropdownItemTextActive]}>
-                  {s.name}
-                </Text>
-                {selectedId === s.id && (
-                  <Ionicons name="checkmark" size={14} color={colors.parent} />
-                )}
-              </Pressable>
-            ))}
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.menuLayer} onPress={() => setOpen(false)}>
+          <View style={styles.menuCard}>
+            {options.map((student) => {
+              const active = student.id === selectedId;
+              return (
+                <Pressable
+                  key={student.id}
+                  style={[styles.menuItem, active && styles.menuItemActive]}
+                  onPress={() => {
+                    onChange(student.id);
+                    setOpen(false);
+                  }}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <View
+                      style={[
+                        styles.menuAvatar,
+                        active && styles.menuAvatarActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.menuAvatarText,
+                          active && styles.menuAvatarTextActive,
+                        ]}
+                      >
+                        {getInitials(student.name)}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[styles.menuText, active && styles.menuTextActive]}
+                    >
+                      {student.name}
+                    </Text>
+                  </View>
+                  {active && (
+                    <Ionicons
+                      name="checkmark"
+                      size={16}
+                      color={colors.parent}
+                    />
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         </Pressable>
       </Modal>
@@ -132,37 +181,165 @@ function StudentDropdown({
   );
 }
 
-// ─── Homework card ────────────────────────────────────────────────────────────
+function HomeworkCard({
+  item,
+  index,
+  onPress,
+}: {
+  item: TaggedHW;
+  index: number;
+  onPress: (item: TaggedHW) => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const theme = getSubjectTheme(item.subject.name);
+  const pressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.985,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 6,
+    }).start();
+  };
 
-function SubjectPill({ label, bg, text }: { label: string; bg: string; text: string }) {
+  const pressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 6,
+    }).start();
+  };
+
   return (
-    <View style={[styles.subjectPill, { backgroundColor: bg }]}>
-      <Text style={[styles.subjectLabel, { color: text }]}>{label}</Text>
-    </View>
+    <Animated.View
+      style={[
+        styles.cardShell,
+        {
+          transform: [{ scale }],
+          borderRadius: 24,
+          opacity: Math.max(0.88, 1 - index * 0.015),
+        },
+      ]}
+    >
+      <Pressable
+        onPress={() => onPress(item)}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        style={styles.homeworkCard}
+      >
+        <View style={[styles.cardAccent, { backgroundColor: theme.accent }]} />
+
+        <View style={styles.cardTopRow}>
+          <View style={[styles.subjectChip, { backgroundColor: theme.bg }]}>
+            <Ionicons name={theme.icon} size={15} color={theme.accent} />
+            <Text style={[styles.subjectText, { color: theme.accent }]}>
+              {item.subject.name}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {getTitle(item.description)}
+        </Text>
+        <Text style={styles.cardPreview} numberOfLines={2}>
+          {item.description}
+        </Text>
+
+        <View style={styles.cardMetaRow}>
+          <View style={styles.metaItem}>
+            <Ionicons
+              name="calendar-outline"
+              size={14}
+              color={colors.textMuted}
+            />
+            <Text style={styles.metaText}>Due {formatDate(item.deadline)}</Text>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
-function HWCard({ item }: { item: HWItem }) {
+function HomeworkDetailModal({
+  item,
+  visible,
+  onClose,
+}: {
+  item: TaggedHW | null;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  const theme = getSubjectTheme(item.subject.name);
+
   return (
-    <View style={styles.hwCard}>
-      <View style={styles.hwCardTop}>
-        <SubjectPill label={item.subject} bg={item.subjectBg} text={item.subjectText} />
-        <StatusPill variant={item.status === "Overdue" ? "danger" : "warning"} label={item.status} />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.detailLayer}>
+        <Pressable style={styles.detailBackdrop} onPress={onClose} />
+        <View style={styles.detailSheet}>
+          <View style={styles.dragHandle} />
+          <View style={styles.detailHeader}>
+            <View style={[styles.subjectChip, { backgroundColor: theme.bg }]}>
+              <Ionicons name={theme.icon} size={15} color={theme.accent} />
+              <Text style={[styles.subjectText, { color: theme.accent }]}>
+                {item.subject.name}
+              </Text>
+            </View>
+            <Pressable style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.detailScroll}
+          >
+            <Text style={styles.detailTitle}>{getTitle(item.description)}</Text>
+            <Text style={styles.detailDescription}>{item.description}</Text>
+
+            <View style={styles.detailInfoGrid}>
+              <View style={styles.detailInfoCard}>
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={theme.accent}
+                />
+                <Text style={styles.detailInfoLabel}>Teacher</Text>
+                <Text style={styles.detailInfoValue}>
+                  {item.assigned_by?.name ?? "Teacher"}
+                </Text>
+              </View>
+              <View style={styles.detailInfoCard}>
+                <Ionicons
+                  name="calendar-outline"
+                  size={18}
+                  color={theme.accent}
+                />
+                <Text style={styles.detailInfoLabel}>Due Date</Text>
+                <Text style={styles.detailInfoValue}>
+                  {formatDate(item.deadline)}
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
       </View>
-      <Text style={styles.hwDesc}>{item.desc}</Text>
-      <View style={styles.hwDueRow}>
-        <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
-        <Text style={styles.hwDue}>Due: {item.due}</Text>
-      </View>
-    </View>
+    </Modal>
   );
 }
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function HomeworkScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("All");
   const [selectedStudentId, setSelectedStudentId] = useState<string>("ALL");
+  const [selectedHomework, setSelectedHomework] = useState<TaggedHW | null>(
+    null,
+  );
   const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
   const [homework, setHomework] = useState<TaggedHW[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -172,14 +349,32 @@ export function HomeworkScreen() {
     parentApi
       .getProfile()
       .then(async (profile) => {
-        if (profile.students.length === 0) return;
-        const studentList = profile.students.map((s) => ({ id: s.id, name: s.name }));
+        if (profile.students.length === 0) {
+          setStudents([]);
+          setHomework([]);
+          return;
+        }
+        const studentList = profile.students.map((s) => ({
+          id: s.id,
+          name: s.name,
+        }));
         setStudents(studentList);
+        setSelectedStudentId((prev) =>
+          prev === "ALL" || studentList.some((student) => student.id === prev)
+            ? prev
+            : "ALL",
+        );
         const results = await Promise.all(
           studentList.map((s) =>
             parentApi
               .getHomework(s.id)
-              .then((data) => data.results.map((hw) => ({ ...hw, studentId: s.id, studentName: s.name })))
+              .then((data) =>
+                data.results.map((hw) => ({
+                  ...hw,
+                  studentId: s.id,
+                  studentName: s.name,
+                })),
+              )
               .catch(() => [] as TaggedHW[]),
           ),
         );
@@ -189,14 +384,21 @@ export function HomeworkScreen() {
       .finally(() => setLoadingProfile(false));
   }, []);
 
-  useFocusEffect(useCallback(() => { loadHomework(); }, [loadHomework]));
+  useFocusEffect(
+    useCallback(() => {
+      loadHomework();
+    }, [loadHomework]),
+  );
 
-  const studentFiltered =
-    selectedStudentId === "ALL"
-      ? homework.filter((hw, idx, arr) => arr.findIndex((h) => h.id === hw.id) === idx)
-      : homework.filter((hw) => hw.studentId === selectedStudentId);
-
-  const filtered = applyFilter(studentFiltered, activeFilter).map(mapHomework);
+  const filtered = useMemo(() => {
+    const studentFiltered =
+      selectedStudentId === "ALL"
+        ? homework.filter(
+            (hw, idx, arr) => arr.findIndex((h) => h.id === hw.id) === idx,
+          )
+        : homework.filter((hw) => hw.studentId === selectedStudentId);
+    return applyFilter(studentFiltered, activeFilter);
+  }, [activeFilter, homework, selectedStudentId]);
 
   if (loadingProfile) {
     return <LoadingScreen label="Loading homework..." />;
@@ -204,167 +406,576 @@ export function HomeworkScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Homework</Text>
-        {students.length > 0 && (
-          <StudentDropdown
-            students={students}
-            selectedId={selectedStudentId}
-            onChange={setSelectedStudentId}
-            showAllOption={students.length > 1}
-          />
-        )}
+        <View>
+          <Text style={styles.headerTitle}>Homework</Text>
+          <Text style={styles.headerSubtitle}>
+            {filtered.length} assignment{filtered.length === 1 ? "" : "s"} ready
+          </Text>
+        </View>
+        <View style={styles.headerActions}>
+          {/* <Pressable style={styles.notificationButton}>
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={colors.textPrimary}
+            />
+          </Pressable> */}
+          {students.length > 0 && (
+            <StudentMenu
+              students={students}
+              selectedId={selectedStudentId}
+              onChange={setSelectedStudentId}
+            />
+          )}
+        </View>
       </View>
 
-      {/* Time filter pills */}
-      <View style={styles.filterBar}>
-        <FlatList
-          data={FILTERS}
-          keyExtractor={(item) => item}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.filterPill, activeFilter === item && styles.filterPillActive]}
-              onPress={() => setActiveFilter(item)}
-            >
-              <Text style={[styles.filterLabel, activeFilter === item && styles.filterLabelActive]}>
-                {item}
-              </Text>
-            </Pressable>
-          )}
+      {/* <View style={styles.filterBar}>
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterList}
-          ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
-        />
-      </View>
+        >
+          {FILTERS.map((filter) => {
+            const active = activeFilter === filter;
+            return (
+              <Pressable
+                key={filter}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+                onPress={() => setActiveFilter(filter)}
+              >
+                <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>
+                  {filter}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View> */}
 
-      {/* Homework list */}
       <FlatList
         data={filtered}
         keyExtractor={(item) => `${item.id}-${item.studentName}`}
-        renderItem={({ item }) => <HWCard item={item} />}
+        renderItem={({ item, index }) => (
+          <HomeworkCard
+            item={item}
+            index={index}
+            onPress={setSelectedHomework}
+          />
+        )}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+        ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>No homework found</Text>
+            <View style={styles.emptyIcon}>
+              <Ionicons
+                name="checkmark-done-outline"
+                size={30}
+                color={colors.parent}
+              />
+            </View>
+            <Text style={styles.emptyTitle}>Nothing here</Text>
+            <Text style={styles.emptyText}>
+              No homework found for this filter.
+            </Text>
           </View>
         }
+      />
+
+      <HomeworkDetailModal
+        item={selectedHomework}
+        visible={!!selectedHomework}
+        onClose={() => setSelectedHomework(null)}
       />
     </SafeAreaView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-
   header: {
-    height: 56,
+    minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  headerTitle: { ...(typography.h3 as object), color: colors.textPrimary },
-
-  dropdownBtn: {
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  headerSubtitle: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  notificationButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  studentButton: {
+    height: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.parent,
+    paddingHorizontal: spacing.md,
+    shadowColor: colors.parent,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  studentAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  studentAvatarText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.parent,
+  },
+  studentButtonText: {
+    ...(typography.caption as object),
+    fontWeight: "700",
+    color: colors.parent,
+    maxWidth: 74,
+  },
+  menuLayer: {
+    flex: 1,
+    backgroundColor: "transparent",
+    alignItems: "flex-end",
+    paddingTop: 76,
+    paddingRight: spacing.lg,
+  },
+  menuCard: {
+    width: 230,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  menuItem: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+  },
+  menuItemActive: { backgroundColor: colors.primaryLight },
+  menuItemLeft: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  menuAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuAvatarActive: { backgroundColor: colors.parent },
+  menuAvatarText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textSecondary,
+  },
+  menuAvatarTextActive: { color: colors.surface },
+  menuText: { ...(typography.body as object), color: colors.textSecondary },
+  menuTextActive: { color: colors.parent, fontWeight: "700" },
+  filterBar: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  filterList: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  filterPill: {
+    minHeight: 36,
+    borderRadius: 999,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+  },
+  filterPillActive: {
+    backgroundColor: colors.parent,
+    shadowColor: colors.parent,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
+  },
+  filterLabel: {
+    ...(typography.caption as object),
+    fontWeight: "700",
+    color: colors.textSecondary,
+  },
+  filterLabelActive: { color: colors.surface },
+  listContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+  cardShell: {
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  homeworkCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  homeworkCardOverdue: {
+    backgroundColor: "#FFF8F8",
+    borderColor: "#FECACA",
+    shadowColor: colors.danger,
+  },
+  cardAccent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
+  cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.parent,
-    paddingVertical: 9,
-    paddingHorizontal: spacing.md,
-    minWidth: 132,
-    shadowColor: colors.parent,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 2,
   },
-  dropdownBtnText: {
-    ...(typography.caption as object),
-    fontWeight: "600",
-    color: colors.parent,
-    maxWidth: 90,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "transparent",
-    justifyContent: "flex-start",
+  subjectChip: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingTop: 86,
+    gap: spacing.xs,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
   },
-  dropdownMenu: {
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    paddingVertical: spacing.sm,
-    minWidth: 220,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    shadowColor: colors.textPrimary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+  subjectText: {
+    ...(typography.label as object),
+    fontWeight: "700",
+    letterSpacing: 1.2,
   },
-  dropdownItem: {
+  statusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  statusText: {
+    ...(typography.caption as object),
+    fontWeight: "700",
+  },
+  cardTitle: {
+    fontSize: 19,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    lineHeight: 25,
+    marginTop: spacing.lg,
+  },
+  cardPreview: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginTop: spacing.sm,
+  },
+  cardMetaRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: spacing.md,
+    marginTop: spacing.lg,
+  },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  metaText: { ...(typography.caption as object), color: colors.textMuted },
+  progressText: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    fontWeight: "700",
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surface2,
+    overflow: "hidden",
+    marginTop: spacing.sm,
+  },
+  progressTrackLarge: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surface2,
+    overflow: "hidden",
+    marginTop: spacing.md,
+  },
+  progressFill: { height: "100%", borderRadius: 999 },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  continueButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  continueButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.surface,
+  },
+  quickAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailLayer: { flex: 1, justifyContent: "flex-end" },
+  detailBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(13,17,23,0.22)",
+  },
+  detailSheet: {
+    maxHeight: "92%",
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: spacing.md,
+    shadowColor: colors.textPrimary,
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -10 },
+    elevation: 12,
+  },
+  dragHandle: {
+    width: 46,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    alignSelf: "center",
+    marginBottom: spacing.md,
+  },
+  detailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
   },
-  dropdownItemActive: { backgroundColor: colors.primaryLight },
-  dropdownItemText: { ...(typography.body as object), color: colors.textSecondary },
-  dropdownItemTextActive: { color: colors.parent, fontWeight: "600" },
-
-  filterBar: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 0.5,
-    borderBottomColor: colors.border,
-  },
-  filterList: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  filterPill: {
-    paddingVertical: 5,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: colors.background,
-  },
-  filterPillActive: { backgroundColor: colors.parent },
-  filterLabel: { ...(typography.caption as object), fontWeight: "500", color: colors.textSecondary },
-  filterLabelActive: { color: colors.surface },
-
-  listContent: { padding: spacing.lg },
-  hwCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.border,
+  closeButton: {
+    width: 38,
+    height: 38,
     borderRadius: 14,
-    padding: spacing.lg,
+    backgroundColor: colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  hwCardTop: {
+  detailScroll: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: 112,
+  },
+  detailTitle: {
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginTop: spacing.lg,
+  },
+  detailDescription: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+    lineHeight: 23,
+    marginTop: spacing.md,
+  },
+  detailInfoGrid: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.lg,
+  },
+  detailInfoCard: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: 18,
+    padding: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  detailInfoLabel: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  detailInfoValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  detailSection: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  detailSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
+  fileRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  fileIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fileTextBlock: { flex: 1 },
+  fileTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+  fileMeta: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  subjectPill: { borderRadius: 999, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  subjectLabel: { ...(typography.label as object) },
-  hwDesc: { ...(typography.body as object), color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.sm },
-  hwDueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  hwDue: { ...(typography.caption as object), color: colors.textMuted },
-
-  emptyWrap: { paddingTop: spacing.xxl, alignItems: "center" },
-  emptyText: { ...(typography.body as object), color: colors.textMuted },
+  checkDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  checkText: { ...(typography.body as object), color: colors.textSecondary },
+  notesBox: {
+    minHeight: 74,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+  },
+  notesText: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    lineHeight: 21,
+  },
+  stickyActions: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    gap: spacing.sm,
+    padding: spacing.lg,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  markDoneButton: {
+    flex: 0.9,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+  },
+  markDoneText: { fontSize: 13, fontWeight: "700" },
+  continueAssignmentButton: {
+    flex: 1.2,
+    height: 48,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  continueAssignmentText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.surface,
+  },
+  emptyWrap: {
+    alignItems: "center",
+    paddingTop: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 24,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  emptyText: {
+    ...(typography.body as object),
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.xs,
+  },
 });

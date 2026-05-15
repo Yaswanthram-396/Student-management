@@ -5,6 +5,7 @@ export default function ParentLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="calendar" />
+      <Stack.Screen name="attendance-history" />
     </Stack>
   );
 }

@@ -14,7 +14,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -70,9 +70,14 @@ interface ExamTimelineEntry {
 }
 
 interface SubjectResult {
+  subject_id: string;
   subject_name: string;
   total_marks: number;
   max_marks: number;
+  exam_max_marks: number;
+  exam_percentage: number;
+  class_rank: number;
+  section_rank: number;
   percentage: number;
   exam_rank: number;
   correct: number;
@@ -101,6 +106,14 @@ interface StudentSummaryResponse {
   exams: ExamOption[];
   subjects: SubjectResult[];
   overall_risk: "SAFE" | "WATCH" | "AT_RISK";
+  total_marks: number;
+  max_marks: number;
+  percentage: number;
+  exam_total_marks: number;
+  exam_max_marks: number;
+  exam_percentage: number;
+  class_rank: number;
+  section_rank: number;
 }
 
 interface StudentTimelineResponse {
@@ -128,6 +141,7 @@ interface SubjectDrilldownResponse {
     class_name: string;
     section_name: string;
   };
+  subject_id: string;
   exam: ExamOption;
   subject_name: string;
   result: SubjectResult;
@@ -157,8 +171,8 @@ function toTitleCase(name: string): string {
 
 function getPercentageColor(pct: number): string {
   if (pct >= 75) return colors.primary;
-  if (pct >= 50) return colors.amber;
-  return colors.red;
+  if (pct >= 40) return colors.amber;
+  return colors.danger;
 }
 
 function getZScoreLabel(z: number): string {
@@ -363,6 +377,7 @@ export function ResultsScreen() {
   const [drilldownError, setDrilldownError] = useState<string | null>(null);
   const [showExamPicker, setShowExamPicker] = useState(false);
   const [showStudentPicker, setShowStudentPicker] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [pulseOpacity, setPulseOpacity] = useState(1);
 
   useEffect(() => {
@@ -396,6 +411,7 @@ export function ResultsScreen() {
       setSummaryError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setSummaryLoading(false);
+      setIsTransitioning(false); // End of the loading chain
     }
   }, [selectedStudentId, selectedExamId]);
 
@@ -433,7 +449,7 @@ export function ResultsScreen() {
         selectedStudentId,
         // TODO: Screen 6 API should return subject_id per subject
         // Currently using subject_name as temporary identifier
-        selectedSubject.subject_name,
+        selectedSubject.subject_id,
         selectedExamId,
       )) as SubjectDrilldownResponse;
 
@@ -453,8 +469,8 @@ export function ResultsScreen() {
     if (students.length === 0) return; // still loading or no students linked
     setSelectedStudentId((prev) => {
       // Keep current selection if it's still valid, otherwise pick first
-      const stillValid = students.some((s) => s.user_id === prev);
-      return stillValid ? prev : (students[0]?.user_id ?? "");
+      const stillValid = students.some((s) => s.id === prev);
+      return stillValid ? prev : (students[0]?.id ?? "");
     });
   }, [students]);
 
@@ -490,7 +506,7 @@ export function ResultsScreen() {
     try {
       const response = (await getSubjectDrilldown(
         selectedStudentId,
-        subject.subject_name,
+        subject.subject_id,
         selectedExamId,
       )) as SubjectDrilldownResponse;
       setDrilldownData(response);
@@ -509,6 +525,7 @@ export function ResultsScreen() {
     setActiveScreen("summary");
     setSelectedSubject(null);
     setExpandedSubject(null);
+    setIsTransitioning(true);
   };
 
   const handleScrollToRisk = () => {
@@ -596,11 +613,9 @@ export function ResultsScreen() {
 
   const renderSummaryHeader = () => {
     const subjects = summaryData?.subjects ?? [];
-    const totalMarks = subjects.reduce((sum, item) => sum + item.total_marks, 0);
-    const maxMarks = subjects.reduce((sum, item) => sum + item.max_marks, 0);
-    const overallPct = maxMarks > 0 ? Math.round((totalMarks / maxMarks) * 100) : 0;
     const bestSubject = subjects.reduce<SubjectResult | null>(
-      (best, item) => (!best || item.percentage > best.percentage ? item : best),
+      (best, item) =>
+        !best || item.percentage > best.percentage ? item : best,
       null,
     );
     const focusSubject = subjects.reduce<SubjectResult | null>(
@@ -608,13 +623,6 @@ export function ResultsScreen() {
         !focus || item.percentage < focus.percentage ? item : focus,
       null,
     );
-    const avgRank =
-      subjects.length > 0
-        ? Math.round(
-            subjects.reduce((sum, item) => sum + item.exam_rank, 0) /
-              subjects.length,
-          )
-        : 0;
     const questionTotal = subjects.reduce(
       (sum, item) => sum + item.correct + item.wrong + item.unattempted,
       0,
@@ -623,7 +631,10 @@ export function ResultsScreen() {
     const trendPoints = (examTimeline.length > 0 ? examTimeline : [])
       .slice(0, 5)
       .reverse();
-    const maxTrend = Math.max(...trendPoints.map((exam) => exam.total_marks), 1);
+    const maxTrend = Math.max(
+      ...trendPoints.map((exam) => exam.total_marks),
+      1,
+    );
 
     return (
       <View style={styles.summaryHeader}>
@@ -631,10 +642,14 @@ export function ResultsScreen() {
           <View style={styles.pageIntroText}>
             <Text style={styles.pageEyebrow}>Exam Results</Text>
             <Text style={styles.pageTitle}>
-              {activeExam?.exam_name ?? summaryData?.exam.exam_name ?? "Results"}
+              {activeExam?.exam_name ??
+                summaryData?.exam.exam_name ??
+                "Results"}
             </Text>
             <Text style={styles.pageSubtitle}>
-              {formatExamDate(activeExam?.exam_date ?? summaryData?.exam.exam_date)}
+              {formatExamDate(
+                activeExam?.exam_date ?? summaryData?.exam.exam_date,
+              )}
               {summaryClass ? ` - ${summaryClass}` : ""}
               {summarySection ? ` - ${summarySection}` : ""}
             </Text>
@@ -654,7 +669,11 @@ export function ResultsScreen() {
               </Text>
             </View>
             <View style={styles.heroBadge}>
-              <Ionicons name="shield-checkmark" size={14} color={colors.surface} />
+              <Ionicons
+                name="shield-checkmark"
+                size={14}
+                color={colors.surface}
+              />
               <Text style={styles.heroBadgeText}>
                 {summaryData?.overall_risk?.replace("_", " ") ?? "READY"}
               </Text>
@@ -663,20 +682,24 @@ export function ResultsScreen() {
 
           <View style={styles.heroScoreRow}>
             <View style={styles.scoreRing}>
-              <Text style={styles.scoreRingValue}>{overallPct}%</Text>
+              <Text style={styles.scoreRingValue}>
+                {summaryData?.percentage ?? 0}%
+              </Text>
               <Text style={styles.scoreRingLabel}>Overall</Text>
             </View>
             <View style={styles.heroMetrics}>
               <View style={styles.heroMetric}>
                 <Text style={styles.heroMetricValue}>
-                  {totalMarks.toFixed(totalMarks % 1 === 0 ? 0 : 1)}
+                  {summaryData?.total_marks ?? 0}
                 </Text>
                 <Text style={styles.heroMetricLabel}>Marks</Text>
               </View>
               <View style={styles.heroMetricDivider} />
               <View style={styles.heroMetric}>
-                <Text style={styles.heroMetricValue}>#{avgRank || "-"}</Text>
-                <Text style={styles.heroMetricLabel}>Avg rank</Text>
+                <Text style={styles.heroMetricValue}>
+                  {summaryData?.class_rank ?? "-"}
+                </Text>
+                <Text style={styles.heroMetricLabel}>Class rank</Text>
               </View>
               <View style={styles.heroMetricDivider} />
               <View style={styles.heroMetric}>
@@ -690,7 +713,9 @@ export function ResultsScreen() {
             <View
               style={[
                 styles.heroProgressFill,
-                { width: `${Math.min(100, Math.max(0, overallPct))}%` },
+                {
+                  width: `${Math.min(100, Math.max(0, summaryData?.percentage ?? 0))}%`,
+                },
               ]}
             />
           </View>
@@ -698,7 +723,12 @@ export function ResultsScreen() {
 
         <View style={styles.insightGrid}>
           <View style={styles.insightCard}>
-            <View style={[styles.insightIcon, { backgroundColor: colors.primaryLight }]}>
+            <View
+              style={[
+                styles.insightIcon,
+                { backgroundColor: colors.primaryLight },
+              ]}
+            >
               <Ionicons name="trending-up" size={18} color={colors.primary} />
             </View>
             <Text style={styles.insightValue}>
@@ -707,7 +737,12 @@ export function ResultsScreen() {
             <Text style={styles.insightLabel}>Strongest subject</Text>
           </View>
           <View style={styles.insightCard}>
-            <View style={[styles.insightIcon, { backgroundColor: colors.warningBg }]}>
+            <View
+              style={[
+                styles.insightIcon,
+                { backgroundColor: colors.warningBg },
+              ]}
+            >
               <Ionicons name="flash-outline" size={18} color={colors.warning} />
             </View>
             <Text style={styles.insightValue}>
@@ -724,7 +759,9 @@ export function ResultsScreen() {
             </View>
             <View>
               <Text style={styles.sectionTitle}>Progress Trend</Text>
-              <Text style={styles.sectionSubtitle}>Recent exam total marks</Text>
+              <Text style={styles.sectionSubtitle}>
+                Recent exam total marks
+              </Text>
             </View>
           </View>
           <View style={styles.trendBars}>
@@ -749,7 +786,9 @@ export function ResultsScreen() {
               </View>
             ))}
             {trendPoints.length === 0 && (
-              <Text style={styles.emptyTrendText}>Trend appears after exams are published.</Text>
+              <Text style={styles.emptyTrendText}>
+                Trend appears after exams are published.
+              </Text>
             )}
           </View>
         </View>
@@ -774,7 +813,9 @@ export function ResultsScreen() {
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>Subject Averages</Text>
-            <Text style={styles.sectionSubtitle}>Tap a card for question-level analysis</Text>
+            <Text style={styles.sectionSubtitle}>
+              Tap a card for question-level analysis
+            </Text>
           </View>
           <Text style={styles.subjectCount}>{subjects.length} subjects</Text>
         </View>
@@ -895,11 +936,13 @@ export function ResultsScreen() {
   }) => {
     const isExpanded = expandedSubject === item.subject_name;
     const performance = mapPerformanceLabel(item.performance_label);
-    const pctColor = getSubjectColor(item.subject_name, index);
+    const pctColor = getPercentageColor(item.percentage);
     const totalQuestions = item.correct + item.wrong + item.unattempted;
     const zPosition = getZScorePosition(item.z_score) * CARD_INNER_WIDTH;
     const isBreakdownOpen = selectedSubject?.subject_name === item.subject_name;
-    const inlineQuestions = isBreakdownOpen ? (drilldownData?.questions ?? []) : [];
+    const inlineQuestions = isBreakdownOpen
+      ? (drilldownData?.questions ?? [])
+      : [];
     const questionColumns = inlineQuestions.reduce<QuestionResult[][]>(
       (columns, question, questionIndex) => {
         if (questionIndex % 2 === 0) columns.push([question]);
@@ -913,7 +956,10 @@ export function ResultsScreen() {
       <Pressable
         style={[
           styles.subjectCard,
-          isExpanded && { borderColor: pctColor, backgroundColor: colors.surface },
+          isExpanded && {
+            borderColor: pctColor,
+            backgroundColor: colors.surface,
+          },
         ]}
         onPress={() => handleSubjectPress(item)}
       >
@@ -1083,7 +1129,9 @@ export function ResultsScreen() {
             <Pressable
               style={[
                 styles.drilldownButton,
-                drilldownLoading && isBreakdownOpen && styles.drilldownButtonDisabled,
+                drilldownLoading &&
+                  isBreakdownOpen &&
+                  styles.drilldownButtonDisabled,
               ]}
               onPress={(event) => {
                 event.stopPropagation();
@@ -1127,9 +1175,13 @@ export function ResultsScreen() {
                       snapToInterval={INLINE_QUESTION_TILE + spacing.sm}
                       disableIntervalMomentum
                       contentContainerStyle={styles.inlineQuestionScroller}
+                      onTouchStart={(e) => e.stopPropagation()}
                     >
                       {questionColumns.map((column) => (
-                        <View key={column[0]?.q_no} style={styles.inlineQuestionColumn}>
+                        <View
+                          key={column[0]?.q_no}
+                          style={styles.inlineQuestionColumn}
+                        >
                           {column.map((question) => {
                             const bgColor =
                               question.status === "C"
@@ -1586,12 +1638,13 @@ export function ResultsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
             const isActive =
-              item.id === selectedStudentId || item.user_id === selectedStudentId;
+              item.id === selectedStudentId ||
+              item.user_id === selectedStudentId;
             return (
               <Pressable
                 style={styles.examRowItem}
                 onPress={() => {
-                  handleStudentPress(item.user_id);
+                  handleStudentPress(item.id);
                   setShowStudentPicker(false);
                 }}
               >
@@ -2102,7 +2155,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 22,
     padding: spacing.lg,
-    borderWidth: 1,
+    // borderWidth: 1,
     borderColor: colors.border,
     overflow: "hidden",
     shadowColor: colors.textPrimary,

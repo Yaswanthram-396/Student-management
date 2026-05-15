@@ -4,17 +4,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    FlatList,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-    ViewToken,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  ViewToken,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -25,11 +25,11 @@ import { notificationsApi } from "../../services/notifications";
 import { parentApi } from "../../services/parent";
 import { formatQueryDate } from "../../src/lib/formatDate";
 import {
-    getQueryById,
-    QueryDetail,
-    QueryReply,
-    QueryStatus,
-    replyToQuery,
+  getQueryById,
+  QueryDetail,
+  QueryReply,
+  QueryStatus,
+  replyToQuery,
 } from "../../src/lib/parentQueryApi";
 import type { ParentAnnouncement, ParentProfile } from "../../types/parent";
 import { BottomSheet, StatusPill } from "../shared";
@@ -106,7 +106,7 @@ function statusLabel(status: QueryStatus): string {
 
 // ─── Child Card Component ────────────────────────────────────────────────────
 
-function ChildCard({ item }: { item: Child }) {
+function ChildCard({ item, onAttendancePress }: { item: Child; onAttendancePress: () => void }) {
   return (
     <View style={[styles.childCard, { width: CARD_WIDTH }]}>
       <LinearGradient
@@ -121,7 +121,7 @@ function ChildCard({ item }: { item: Child }) {
           <Text style={styles.childCls}>{item.cls}</Text>
           <Text style={styles.childRoll}>Roll No. {item.rollNo}</Text>
         </View>
-        <View>
+        <Pressable onPress={onAttendancePress}>
           <StatusPill
             variant={
               item.attendance === "present"
@@ -138,16 +138,14 @@ function ChildCard({ item }: { item: Child }) {
                   : "Absent Today"
             }
           />
-        </View>
+        </Pressable>
       </View>
       <Pressable
         style={styles.childBottomRow}
-        onPress={() => {
-          /* tappable */
-        }}
+        onPress={onAttendancePress}
       >
         <Text style={styles.childBottomText}>
-          3 subjects today · 1 homework due
+          View attendance history
         </Text>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </Pressable>
@@ -175,7 +173,10 @@ function AnnouncementCard({ item, index }: { item: Update; index: number }) {
   if (featured) {
     return (
       <View
-        style={[styles.featuredCard, { backgroundColor: colors.primaryLight }]}
+        style={[
+          styles.featuredCard,
+          { backgroundColor: colors.primaryLight, borderRadius: 24 },
+        ]}
       >
         <View
           style={[styles.featuredAccent, { backgroundColor: item.color }]}
@@ -674,7 +675,17 @@ export function HomeScreen() {
                 <FlatList
                   data={childrenData}
                   keyExtractor={(c) => c.id}
-                  renderItem={({ item }) => <ChildCard item={item} />}
+                  renderItem={({ item }) => (
+                    <ChildCard
+                      item={item}
+                      onAttendancePress={() =>
+                        router.push({
+                          pathname: "/(tabs)/parent/attendance-history",
+                          params: { student_id: item.id, student_name: item.name },
+                        })
+                      }
+                    />
+                  )}
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}

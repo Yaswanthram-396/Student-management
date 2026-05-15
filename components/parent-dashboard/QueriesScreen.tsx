@@ -3,6 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Modal,
   Pressable,
@@ -28,7 +29,10 @@ import {
   QueryStatus,
   replyToQuery,
 } from "../../src/lib/parentQueryApi";
+import type { ParentProfile } from "../../types/parent";
 import { BottomSheet, StatusPill } from "../shared";
+import { QuerySheet } from "./QuerySheet";
+import { useParentQuery } from "./hooks/useParentQuery";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -336,12 +340,44 @@ function QueryDetailSheet({
   );
 }
 
+// ─── Date range helpers ───────────────────────────────────────────────────────
+
+function toIsoDate(d: Date) {
+  return d.toISOString().split("T")[0];
+}
+
+function getPresetRange(preset: string): { from: string; to: string } | null {
+  if (preset === "none") return null;
+  const today = new Date();
+  const to = toIsoDate(today);
+  if (preset === "week") {
+    const from = new Date(today);
+    from.setDate(from.getDate() - 6);
+    return { from: toIsoDate(from), to };
+  }
+  if (preset === "month") {
+    const from = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { from: toIsoDate(from), to };
+  }
+  return { from: to, to };
+}
+
+type DatePreset = "none" | "today" | "week" | "month";
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: "none", label: "All Time" },
+  { key: "today", label: "Today" },
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+];
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function QueriesScreen() {
+  const [profile, setProfile] = useState<ParentProfile | null>(null);
   const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string>("ALL");
   const [activeStatus, setActiveStatus] = useState<StatusFilter>("ALL");
+  const [datePreset, setDatePreset] = useState<DatePreset>("none");
   const [queries, setQueries] = useState<TaggedQuery[]>([]);
   const [loading, setLoading] = useState(true);
   const [queriesLoading, setQueriesLoading] = useState(false);
@@ -349,18 +385,35 @@ export function QueriesScreen() {
 
   const [skeletonOpacity, setSkeletonOpacity] = useState(1);
   const skeletonRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fabScale = useRef(new Animated.Value(0)).current;
 
   const [selectedQueryId, setSelectedQueryId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
 
-  // Load students from profile once
+  // Load profile once
   useEffect(() => {
     parentApi
       .getProfile()
-      .then((profile) => setStudents(profile.students.map((s) => ({ id: s.id, name: s.name }))))
+      .then((p) => {
+        setProfile(p);
+        setStudents(p.students.map((s) => ({ id: s.id, name: s.name })));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // FAB entry animation
+  useEffect(() => {
+    const t = setTimeout(() => {
+      Animated.spring(fabScale, { toValue: 1, useNativeDriver: true, friction: 6 }).start();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [fabScale]);
+
+  const memoProfile = React.useMemo(() => profile, [profile]);
+  const [queryState, queryActions] = useParentQuery(
+    memoProfile ?? { id: "", name: "", mobile_number: "", school: { id: "", name: "" }, students: [] },
+  );
 
   function startSkeleton() {
     let rising = false;
@@ -378,17 +431,27 @@ export function QueriesScreen() {
   }
 
   const loadQueries = useCallback(
-    async (status: StatusFilter, studentId: string, studentList: { id: string; name: string }[]) => {
+    async (
+      status: StatusFilter,
+      studentId: string,
+      studentList: { id: string; name: string }[],
+      preset: DatePreset,
+    ) => {
       if (studentList.length === 0) return;
       setQueriesLoading(true);
       setQueriesError(null);
       startSkeleton();
       try {
         const statusParam = status === "ALL" ? undefined : status;
+        const range = getPresetRange(preset);
+        const filters = range
+          ? { date_from: range.from, date_to: range.to }
+          : undefined;
+
         if (studentId === "ALL") {
           const results = await Promise.all(
             studentList.map((s) =>
-              getQueries(s.id, statusParam)
+              getQueries(s.id, statusParam, filters)
                 .then((res: QueryListResponse) =>
                   res.results.map((q) => ({ ...q, studentId: s.id, studentName: s.name })),
                 )
@@ -399,7 +462,7 @@ export function QueriesScreen() {
         } else {
           const student = studentList.find((s) => s.id === studentId);
           if (!student) return;
-          const res: QueryListResponse = await getQueries(studentId, statusParam);
+          const res: QueryListResponse = await getQueries(studentId, statusParam, filters);
           setQueries(res.results.map((q) => ({ ...q, studentId: student.id, studentName: student.name })));
         }
       } catch {
@@ -414,10 +477,17 @@ export function QueriesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (students.length > 0) loadQueries(activeStatus, selectedStudentId, students);
+      if (students.length > 0) loadQueries(activeStatus, selectedStudentId, students, datePreset);
       return () => stopSkeleton();
-    }, [students, activeStatus, selectedStudentId, loadQueries]),
+    }, [students, activeStatus, selectedStudentId, datePreset, loadQueries]),
   );
+
+  // Reload after successful query submission
+  useEffect(() => {
+    if (!queryState.showSuccessToast) return;
+    loadQueries(activeStatus, selectedStudentId, students, datePreset);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryState.showSuccessToast]);
 
   const showStudentName = selectedStudentId === "ALL" && students.length > 1;
 
@@ -444,13 +514,13 @@ export function QueriesScreen() {
             selectedId={selectedStudentId}
             onChange={(id) => {
               setSelectedStudentId(id);
-              loadQueries(activeStatus, id, students);
+              loadQueries(activeStatus, id, students, datePreset);
             }}
           />
         )}
       </View>
 
-      {/* Status filter pills */}
+      {/* Status + date filter pills */}
       <View style={styles.filterBar}>
         <ScrollView
           horizontal
@@ -465,6 +535,24 @@ export function QueriesScreen() {
             >
               <Text style={[styles.filterLabel, activeStatus === f.key && styles.filterLabelActive]}>
                 {f.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.filterContent, { paddingTop: 0, paddingBottom: spacing.md }]}
+        >
+          {DATE_PRESETS.map((p) => (
+            <Pressable
+              key={p.key}
+              style={[styles.filterPill, datePreset === p.key && styles.filterPillActive]}
+              onPress={() => setDatePreset(p.key)}
+            >
+              <Text style={[styles.filterLabel, datePreset === p.key && styles.filterLabelActive]}>
+                {p.label}
               </Text>
             </Pressable>
           ))}
@@ -488,7 +576,7 @@ export function QueriesScreen() {
           <Text style={styles.errorText}>{queriesError}</Text>
           <Pressable
             style={styles.retryBtn}
-            onPress={() => loadQueries(activeStatus, selectedStudentId, students)}
+            onPress={() => loadQueries(activeStatus, selectedStudentId, students, datePreset)}
           >
             <Text style={styles.retryBtnText}>Retry</Text>
           </Pressable>
@@ -507,7 +595,7 @@ export function QueriesScreen() {
               onPress={() => { setSelectedQueryId(item.id); setShowDetail(true); }}
             />
           )}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
           ItemSeparatorComponent={() => <View style={{ height: spacing.sm + spacing.xs }} />}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
@@ -515,11 +603,29 @@ export function QueriesScreen() {
               <View style={styles.emptyCircle} />
               <Text style={styles.emptyTitle}>No queries yet</Text>
               <Text style={styles.emptyBody}>
-                Tap 'Raise a Query' on the home screen to get started
+                Tap the button below to raise your first query
               </Text>
             </View>
           }
         />
+      )}
+
+      {/* FAB */}
+      <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
+        <Pressable
+          style={styles.fabBtn}
+          onPress={() => profile && queryActions.openQuerySheet()}
+        >
+          <Ionicons name="chatbubble-ellipses" size={20} color={colors.surface} />
+          <Text style={styles.fabLabel}>Raise a Query</Text>
+        </Pressable>
+      </Animated.View>
+
+      {/* Success toast */}
+      {queryState.showSuccessToast && (
+        <View style={styles.successToast} pointerEvents="none">
+          <Text style={styles.successToastText}>Query sent successfully!</Text>
+        </View>
       )}
 
       <QueryDetailSheet
@@ -527,6 +633,16 @@ export function QueriesScreen() {
         queryId={selectedQueryId}
         onClose={() => { setShowDetail(false); setSelectedQueryId(null); }}
       />
+
+      {profile && (
+        <QuerySheet
+          visible={queryState.showQuerySheet}
+          onClose={() => queryActions.setShowQuerySheet(false)}
+          profile={profile}
+          state={queryState}
+          actions={queryActions}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -764,4 +880,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closedBannerText: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    left: spacing.lg,
+    right: spacing.lg,
+  },
+  fabBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.parent,
+    borderRadius: 14,
+    paddingVertical: 14,
+    shadowColor: colors.parent,
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  fabLabel: { fontSize: 15, fontWeight: "600", color: colors.surface },
+
+  successToast: {
+    position: "absolute",
+    bottom: 88,
+    left: spacing.lg,
+    right: spacing.lg,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  successToastText: { fontSize: 14, color: colors.surface, fontWeight: "500" },
 });
