@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -65,9 +64,18 @@ function StudentRow({ student, index, last }: { student: SectionStudentDetail; i
   const color    = avatarColor(index);
   const initials = getInitials(student.name);
 
+  function onPress() {
+    router.push(
+      `/teacher-student-detail?studentId=${encodeURIComponent(student.id)}&studentName=${encodeURIComponent(student.name)}` as any,
+    );
+  }
+
   return (
     <>
-      <View style={styles.studentRow}>
+      <Pressable
+        style={({ pressed }) => [styles.studentRow, pressed && styles.studentRowPressed]}
+        onPress={onPress}
+      >
         {/* Avatar */}
         <View style={[styles.avatar, { backgroundColor: color }]}>
           <Text style={styles.avatarText}>{initials}</Text>
@@ -90,9 +98,9 @@ function StudentRow({ student, index, last }: { student: SectionStudentDetail; i
           </View>
         </View>
 
-        {/* Rank */}
-        <Text style={styles.rank}>{index + 1}</Text>
-      </View>
+        {/* chevron */}
+        <Ionicons name="chevron-forward" size={18} color="#C8CDD6" />
+      </Pressable>
       {!last && <View style={styles.divider} />}
     </>
   );
@@ -344,6 +352,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700', color: ACCENT },
   badgeTextGray: { color: MUTED },
 
+  studentRowPressed: { backgroundColor: '#F3F8FE' },
   rank: { fontSize: 13, color: '#C8CDD6', fontWeight: '700', flexShrink: 0 },
 
   // States
