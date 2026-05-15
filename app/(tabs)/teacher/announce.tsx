@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -20,6 +23,7 @@ import {
   type Announcement,
 } from "../../../services/teacher-announcements";
 import { useTeacherStore } from "../../../store/teacher-store";
+import type { UploadAsset } from "../../../services/upload";
 
 const ACCENT = "#185FA5";
 
@@ -38,6 +42,10 @@ function formatDate(iso: string) {
   });
 }
 
+function attachmentUrl(attachment: Announcement["attachments"][number]) {
+  return attachment.url ?? attachment.file_url ?? "";
+}
+
 export default function AnnounceScreen() {
   const { selectedSection } = useTeacherStore();
   const isClassTeacher = selectedSection?.is_class_teacher ?? false;
@@ -48,9 +56,13 @@ export default function AnnounceScreen() {
   const [fetchError, setFetchError] = useState("");
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<UploadAsset[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
   const [formError, setFormError] = useState("");
 
   async function fetchAnnouncements(isRefresh = false) {
@@ -74,9 +86,22 @@ export default function AnnounceScreen() {
   );
 
   function openModal() {
+    setEditingAnnouncement(null);
     setTitle("");
     setBody("");
+    setSelectedFiles([]);
     setFormError("");
+    setActionError("");
+    setModalVisible(true);
+  }
+
+  function openEditModal(item: Announcement) {
+    setEditingAnnouncement(item);
+    setTitle(item.title);
+    setBody(item.body);
+    setSelectedFiles([]);
+    setFormError("");
+    setActionError("");
     setModalVisible(true);
   }
 
@@ -85,7 +110,37 @@ export default function AnnounceScreen() {
     setModalVisible(false);
   }
 
-  async function handlePost() {
+  async function pickFiles() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+
+      setSelectedFiles((prev) => {
+        const existing = new Set(prev.map((file) => `${file.name}:${file.uri}`));
+        const next = result.assets
+          .map((asset) => ({
+            uri: asset.uri,
+            name: asset.name,
+            mimeType: asset.mimeType ?? null,
+            file: asset.file,
+          }))
+          .filter((file) => !existing.has(`${file.name}:${file.uri}`));
+        return [...prev, ...next];
+      });
+      setFormError("");
+    } catch {
+      setFormError("Could not open file picker. Please try again.");
+    }
+  }
+
+  function removeFile(uri: string) {
+    setSelectedFiles((prev) => prev.filter((file) => file.uri !== uri));
+  }
+
+  async function handleSubmit() {
     if (!selectedSection) return;
     const t = title.trim();
     const b = body.trim();
@@ -101,20 +156,63 @@ export default function AnnounceScreen() {
     setFormError("");
     setSubmitting(true);
     try {
-      const created = await teacherAnnouncementsApi.create({
-        section_id: selectedSection.id,
-        title: t,
-        body: b,
-        publish_now: true,
-      });
-      setAnnouncements((prev) => [created, ...prev]);
+      if (editingAnnouncement) {
+        const updated = await teacherAnnouncementsApi.update(editingAnnouncement.id, {
+          section_id: selectedSection.id,
+          title: t,
+          body: b,
+          publish_now: true,
+          attachments: selectedFiles,
+        });
+        const normalized = { ...updated, body: updated.body ?? b };
+        setAnnouncements((prev) =>
+          prev.map((item) => item.id === normalized.id ? normalized : item),
+        );
+      } else {
+        const created = await teacherAnnouncementsApi.create({
+          section_id: selectedSection.id,
+          title: t,
+          body: b,
+          publish_now: true,
+          attachments: selectedFiles,
+        });
+        setAnnouncements((prev) => [{ ...created, body: created.body ?? b }, ...prev]);
+      }
       setModalVisible(false);
     } catch (err: any) {
       setFormError(
-        err.details ?? "Failed to post announcement. Please try again.",
+        err.details ?? `Failed to ${editingAnnouncement ? "update" : "post"} announcement. Please try again.`,
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function confirmDelete(item: Announcement) {
+    Alert.alert(
+      "Delete Announcement",
+      "This announcement will be removed for this section.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteAnnouncement(item.id),
+        },
+      ],
+    );
+  }
+
+  async function deleteAnnouncement(id: string) {
+    setDeletingId(id);
+    setActionError("");
+    try {
+      await teacherAnnouncementsApi.delete(id);
+      setAnnouncements((prev) => prev.filter((item) => item.id !== id));
+    } catch (err: any) {
+      setActionError(err.details ?? "Failed to delete announcement. Please try again.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -211,6 +309,13 @@ export default function AnnounceScreen() {
           </View>
         )}
 
+        {!loading && !fetchError && !!actionError && (
+          <View style={styles.inlineError}>
+            <Ionicons name="alert-circle-outline" size={15} color="#DC2626" />
+            <Text style={styles.inlineErrorText}>{actionError}</Text>
+          </View>
+        )}
+
         {/* Cards */}
         {!loading &&
           !fetchError &&
@@ -235,21 +340,47 @@ export default function AnnounceScreen() {
                         {item.audience}
                       </Text>
                     </View>
-                    <View
-                      style={[
-                        styles.statusDot,
-                        {
-                          backgroundColor: item.published_at
-                            ? "#1D9E75"
-                            : "#D97706",
-                        },
-                      ]}
-                    />
+                    <View style={styles.cardTopRight}>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor: item.published_at
+                              ? "#1D9E75"
+                              : "#D97706",
+                          },
+                        ]}
+                      />
+                      {isClassTeacher && (
+                        <>
+                          <Pressable
+                            style={({ pressed }) => [styles.cardIconBtn, pressed && styles.cardIconBtnPressed]}
+                            onPress={() => openEditModal(item)}
+                            disabled={deletingId === item.id}
+                            hitSlop={6}
+                          >
+                            <Ionicons name="create-outline" size={16} color={ACCENT} />
+                          </Pressable>
+                          <Pressable
+                            style={({ pressed }) => [styles.cardIconBtn, pressed && styles.cardIconBtnPressed]}
+                            onPress={() => confirmDelete(item)}
+                            disabled={deletingId === item.id}
+                            hitSlop={6}
+                          >
+                            {deletingId === item.id ? (
+                              <ActivityIndicator size="small" color="#DC2626" />
+                            ) : (
+                              <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                            )}
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
                   </View>
 
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   <Text style={styles.cardBody} numberOfLines={3}>
-                    {item.body}
+                    {item.body ?? ""}
                   </Text>
 
                   <View style={styles.cardFooter}>
@@ -266,16 +397,23 @@ export default function AnnounceScreen() {
                   </View>
 
                   {item.attachments.length > 0 && (
-                    <View style={styles.attachRow}>
-                      <Ionicons
-                        name="attach-outline"
-                        size={13}
-                        color="#888888"
-                      />
-                      <Text style={styles.attachText}>
-                        {item.attachments.length} attachment
-                        {item.attachments.length > 1 ? "s" : ""}
-                      </Text>
+                    <View style={styles.attachList}>
+                      {item.attachments.map((attachment) => {
+                        const url = attachmentUrl(attachment);
+                        return (
+                          <Pressable
+                            key={`${item.id}-${attachment.id ?? attachment.filename}`}
+                            style={({ pressed }) => [styles.attachChip, pressed && styles.attachChipPressed]}
+                            disabled={!url}
+                            onPress={() => url && Linking.openURL(url)}
+                          >
+                            <Ionicons name="attach-outline" size={13} color={ACCENT} />
+                            <Text style={styles.attachText} numberOfLines={1}>
+                              {attachment.filename}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   )}
                 </View>
@@ -300,7 +438,9 @@ export default function AnnounceScreen() {
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>New Announcement</Text>
+              <Text style={styles.sheetTitle}>
+                {editingAnnouncement ? "Edit Announcement" : "New Announcement"}
+              </Text>
               <Pressable onPress={closeModal} hitSlop={8}>
                 <Ionicons name="close" size={22} color="#666666" />
               </Pressable>
@@ -342,6 +482,40 @@ export default function AnnounceScreen() {
                 textAlignVertical="top"
               />
 
+              <Text style={styles.fieldLabel}>Attachments</Text>
+              <Pressable
+                style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
+                onPress={pickFiles}
+              >
+                <Ionicons name="attach-outline" size={18} color={ACCENT} />
+                <Text style={styles.attachBtnText}>
+                  {selectedFiles.length ? "Add more files" : editingAnnouncement ? "Append attachments" : "Add attachments"}
+                </Text>
+              </Pressable>
+
+              {selectedFiles.length > 0 && (
+                <View style={styles.selectedFileList}>
+                  {selectedFiles.map((file) => (
+                    <View key={file.uri} style={styles.selectedFileRow}>
+                      <View style={styles.selectedFileIcon}>
+                        <Ionicons name="document-outline" size={16} color={ACCENT} />
+                      </View>
+                      <Text style={styles.selectedFileName} numberOfLines={1}>{file.name}</Text>
+                      <Pressable onPress={() => removeFile(file.uri)} hitSlop={8}>
+                        <Ionicons name="close-circle" size={18} color="#AAAAAA" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {editingAnnouncement && editingAnnouncement.attachments.length > 0 && (
+                <Text style={styles.existingAttachHint}>
+                  New files will be appended to the existing {editingAnnouncement.attachments.length} attachment
+                  {editingAnnouncement.attachments.length > 1 ? "s" : ""}.
+                </Text>
+              )}
+
               {!!formError && (
                 <View style={styles.errorRow}>
                   <Ionicons
@@ -359,7 +533,7 @@ export default function AnnounceScreen() {
                   pressed && styles.submitBtnPressed,
                   submitting && styles.submitBtnDisabled,
                 ]}
-                onPress={handlePost}
+                onPress={handleSubmit}
                 disabled={submitting}
               >
                 {submitting ? (
@@ -371,7 +545,9 @@ export default function AnnounceScreen() {
                       size={18}
                       color="#FFFFFF"
                     />
-                    <Text style={styles.submitBtnText}>Post Announcement</Text>
+                    <Text style={styles.submitBtnText}>
+                      {editingAnnouncement ? "Save Changes" : "Post Announcement"}
+                    </Text>
                   </>
                 )}
               </Pressable>
@@ -446,6 +622,19 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   retryBtnText: { color: "#FFFFFF", fontWeight: "600", fontSize: 14 },
+  inlineError: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "#FFCDD2",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  inlineErrorText: { flex: 1, fontSize: 13, color: "#DC2626", lineHeight: 18 },
 
   emptyTitle: { fontSize: 16, fontWeight: "600", color: "#444444" },
   emptyHint: {
@@ -478,6 +667,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
+  cardTopRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardIconBtnPressed: { opacity: 0.68 },
   audienceBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -499,13 +698,24 @@ const styles = StyleSheet.create({
   },
   cardFooter: { flexDirection: "row", alignItems: "center", gap: 4 },
   cardMeta: { fontSize: 11, color: "#AAAAAA" },
-  attachRow: {
+  attachList: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    flexWrap: "wrap",
+    gap: 8,
     marginTop: 6,
   },
-  attachText: { fontSize: 11, color: "#888888" },
+  attachChip: {
+    maxWidth: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#EBF2FB",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  attachChipPressed: { opacity: 0.72 },
+  attachText: { maxWidth: 210, fontSize: 11, color: ACCENT, fontWeight: "600" },
 
   // Modal
   modalWrap: { flex: 1, justifyContent: "flex-end" },
@@ -562,6 +772,49 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   inputMulti: { minHeight: 110, paddingTop: 12 },
+
+  attachBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#D5E7F8",
+    backgroundColor: "#F3F8FE",
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  attachBtnPressed: { opacity: 0.75 },
+  attachBtnText: { color: ACCENT, fontSize: 14, fontWeight: "700" },
+  selectedFileList: { gap: 8, marginBottom: 14 },
+  selectedFileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#EEEEEE",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  selectedFileIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: "#EBF2FB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectedFileName: { flex: 1, color: "#333333", fontSize: 13, fontWeight: "600" },
+  existingAttachHint: {
+    color: "#888888",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -4,
+    marginBottom: 14,
+  },
 
   errorRow: {
     flexDirection: "row",

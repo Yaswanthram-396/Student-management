@@ -1,4 +1,6 @@
 import { apiRequest } from './api';
+import type { UploadAsset } from './upload';
+import { appendAssetToFormData } from './upload';
 
 export interface HomeworkSubject {
   id: string;
@@ -24,13 +26,7 @@ export interface CreateHomeworkPayload {
   subject_id: string;
   description: string;
   deadline: string; // ISO 8601
-  files?: HomeworkUploadFile[];
-}
-
-export interface HomeworkUploadFile {
-  uri: string;
-  name: string;
-  type?: string | null;
+  files?: UploadAsset[];
 }
 
 interface HomeworkListResponse {
@@ -52,7 +48,7 @@ export const teacherHomeworkApi = {
     );
   },
 
-  create: (payload: CreateHomeworkPayload) => {
+  create: async (payload: CreateHomeworkPayload) => {
     if (!payload.files?.length) {
       const { files: _files, ...jsonPayload } = payload;
       return apiRequest<Homework>('POST', '/teacher/homework/', jsonPayload);
@@ -63,13 +59,9 @@ export const teacherHomeworkApi = {
     formData.append('subject_id', payload.subject_id);
     formData.append('description', payload.description);
     formData.append('deadline', payload.deadline);
-    payload.files.forEach((file) => {
-      formData.append('files', {
-        uri: file.uri,
-        name: file.name,
-        type: file.type ?? 'application/octet-stream',
-      } as any);
-    });
+    for (const file of payload.files) {
+      await appendAssetToFormData(formData, 'files', file, file.name ?? 'homework-attachment');
+    }
 
     return apiRequest<Homework>('POST', '/teacher/homework/', formData, true);
   },

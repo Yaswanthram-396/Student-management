@@ -18,9 +18,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { teacherHomeworkApi, type Homework, type HomeworkUploadFile } from '../../../services/teacher-homework';
+import { teacherHomeworkApi, type Homework } from '../../../services/teacher-homework';
 import { subjectsApi, type Subject } from '../../../services/subjects';
 import { useTeacherStore } from '../../../store/teacher-store';
+import type { UploadAsset } from '../../../services/upload';
 
 const ACCENT = '#185FA5';
 
@@ -95,7 +96,7 @@ export default function HomeworkScreen() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState<Date>(defaultDeadline);
-  const [selectedFiles, setSelectedFiles] = useState<HomeworkUploadFile[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<UploadAsset[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -159,7 +160,8 @@ export default function HomeworkScreen() {
           .map((asset) => ({
             uri: asset.uri,
             name: asset.name,
-            type: asset.mimeType ?? null,
+            mimeType: asset.mimeType ?? null,
+            file: asset.file,
           }))
           .filter((file) => !existing.has(`${file.name}:${file.uri}`));
         return [...prev, ...next];
