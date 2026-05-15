@@ -935,6 +935,25 @@ export function SettingsScreen() {
               color={colors.textMuted}
             />
           </Pressable>
+          <Pressable
+            style={[styles.row, styles.rowBorder]}
+            onPress={() => router.push("/(tabs)/principal/assign-subject")}
+          >
+            <View style={styles.rowIconLabel}>
+              <Ionicons
+                name="school-outline"
+                size={16}
+                color={colors.principal}
+                style={{ marginRight: spacing.sm }}
+              />
+              <Text style={styles.rowLabel}>Assign Subject</Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.textMuted}
+            />
+          </Pressable>
           <Pressable style={styles.row} onPress={openCreateSectionSheet}>
             <View style={styles.rowIconLabel}>
               <Ionicons

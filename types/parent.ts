@@ -47,6 +47,7 @@ export interface ParentProfile {
   phone_number?: string;
   school: ParentSchool;
   students: ParentStudent[];
+  profile_pic_url: string | null;
 }
 
 export interface StudentsListResponse {

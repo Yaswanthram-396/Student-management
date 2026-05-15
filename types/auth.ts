@@ -68,6 +68,7 @@ export interface PrincipalMeResponse {
   role: "PRINCIPAL";
   profile_pic_url: string | null;
   profile: PrincipalProfile;
+
   school: SchoolSummary;
 }
 
@@ -93,6 +94,8 @@ export interface ParentMeResponse {
   id: string;
   username: string;
   role: "PARENT";
+  phone_number: string;
+  mobile_number?: string;
   profile_pic_url: string | null;
   profile: ParentProfile;
   school: SchoolSummary;
