@@ -33,6 +33,7 @@ interface SectionsResponse {
   results: TeacherSection[];
 }
 
+// Used by attendance screen (simpler shape, legacy endpoint)
 export interface SectionStudent {
   id: string;
   name: string;
@@ -43,6 +44,22 @@ export interface SectionStudent {
 interface SectionStudentsResponse {
   count: number;
   results: SectionStudent[];
+}
+
+// Richer student shape returned by GET /api/v1/sections/{id}/students/
+export interface SectionStudentDetail {
+  id: string;
+  user_id: string;
+  name: string;
+  roll_number: string;
+  admission_number: string;
+  academic_class: { id: string; name: string };
+  section: { id: string; name: string };
+}
+
+interface SectionStudentDetailResponse {
+  count: number;
+  results: SectionStudentDetail[];
 }
 
 export const teacherSectionsApi = {
@@ -61,6 +78,10 @@ export const teacherSectionsApi = {
       })),
     };
   },
+  // Used by attendance
   getStudents: (sectionId: string) =>
     apiRequest<SectionStudentsResponse>('GET', `/teacher/sections/${sectionId}/students/`),
+  // Richer list used by the students roster screen
+  getSectionStudentDetails: (sectionId: string) =>
+    apiRequest<SectionStudentDetailResponse>('GET', `/sections/${sectionId}/students/`),
 };

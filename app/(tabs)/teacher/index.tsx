@@ -209,6 +209,33 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── Class roster card ── */}
+        {selectedSection && (
+          <Pressable
+            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            onPress={() =>
+              router.push(
+                `/teacher-students?sectionId=${encodeURIComponent(selectedSection.id)}&sectionName=${encodeURIComponent(selectedSection.section_name)}&className=${encodeURIComponent(selectedSection.class_name)}` as any,
+              )
+            }
+          >
+            <View style={styles.cardHeader}>
+              <View style={[styles.cardIconWrap, { backgroundColor: '#EBF2FB' }]}>
+                <Ionicons name="people" size={20} color={ACCENT} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Class Roster</Text>
+                <Text style={styles.cardSubtitle}>
+                  {selectedSection.student_count > 0
+                    ? `${selectedSection.student_count} student${selectedSection.student_count !== 1 ? 's' : ''} · ${selectedSection.class_name} – ${selectedSection.section_name}`
+                    : `${selectedSection.class_name} – ${selectedSection.section_name}`}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#CCCCCC" />
+            </View>
+          </Pressable>
+        )}
+
         {/* ── Open queries card (hidden when parent_query_enabled=false) ── */}
         {queriesEnabled && openQueries > 0 && (
           <Pressable
