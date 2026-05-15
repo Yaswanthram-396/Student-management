@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../../store/auth-store';
 import { useTeacherStore } from '../../../store/teacher-store';
+import { useSchoolStore, DEFAULT_SCHOOL_CONFIG } from '../../../store/school-store';
 import { notificationsApi } from '../../../services/notifications';
 import { teacherQueriesApi } from '../../../services/teacher-queries';
 import { teacherHomeworkApi, type Homework } from '../../../services/teacher-homework';
@@ -51,6 +52,9 @@ const AUDIENCE_COLOR: Record<string, string> = {
 export default function HomeScreen() {
   const { currentUser } = useAuthStore();
   const { selectedSection } = useTeacherStore();
+  const { configuration } = useSchoolStore();
+  const config = configuration ?? DEFAULT_SCHOOL_CONFIG;
+  const queriesEnabled = config.parent_query_enabled;
   const teacher = currentUser as TeacherMeResponse | null;
 
   const [loading, setLoading] = useState(true);
@@ -68,7 +72,9 @@ export default function HomeScreen() {
 
     const [notifRes, queriesRes, hwRes, annRes] = await Promise.allSettled([
       notificationsApi.getUnreadCount(),
-      teacherQueriesApi.getAll({ status: 'OPEN', ...(selectedSection?.id ? { section_id: selectedSection.id } : {}) }),
+      queriesEnabled
+        ? teacherQueriesApi.getAll({ status: 'OPEN', ...(selectedSection?.id ? { section_id: selectedSection.id } : {}) })
+        : Promise.resolve({ count: 0, results: [] }),
       selectedSection?.id ? teacherHomeworkApi.getAll({ section_id: selectedSection.id }) : Promise.resolve({ count: 0, results: [] }),
       teacherAnnouncementsApi.getAll(),
     ]);
@@ -190,7 +196,7 @@ export default function HomeScreen() {
                 <Text style={[styles.statChipLabel, { color: ACCENT }]}>unread</Text>
               </Pressable>
             )}
-            {openQueries > 0 && (
+            {queriesEnabled && openQueries > 0 && (
               <Pressable
                 style={[styles.statChip, { backgroundColor: '#FFFBEB' }]}
                 onPress={() => router.navigate('/(tabs)/teacher/queries')}
@@ -203,8 +209,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Open queries card ── */}
-        {openQueries > 0 && (
+        {/* ── Open queries card (hidden when parent_query_enabled=false) ── */}
+        {queriesEnabled && openQueries > 0 && (
           <Pressable
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             onPress={() => router.navigate('/(tabs)/teacher/queries')}
@@ -292,7 +298,7 @@ export default function HomeScreen() {
         )}
 
         {/* Empty state — nothing to show */}
-        {openQueries === 0 && upcomingHw.length === 0 && announcements.length === 0 && (
+        {(!queriesEnabled || openQueries === 0) && upcomingHw.length === 0 && announcements.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle-outline" size={52} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>All caught up!</Text>
