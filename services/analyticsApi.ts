@@ -14,6 +14,7 @@ import type {
   SectionQuestionDetailResponse,
   SectionQuestionStatsResponse,
   SectionStudentsResponse,
+  StudentExamsResponse,
   StudentSubjectResponse,
   StudentSummaryResponse,
   UploadExamResponse,
@@ -132,6 +133,12 @@ export const analyticsApi = {
     ),
 
   // ── Student screens ─────────────────────────────────────────────────────────
+
+  getStudentExams: (studentId: string) =>
+    apiRequest<StudentExamsResponse>(
+      'GET',
+      `/analytics/student/${studentId}/exams/`,
+    ),
 
   getStudentSummary: (studentId: string, examId: string) =>
     apiRequest<StudentSummaryResponse>(

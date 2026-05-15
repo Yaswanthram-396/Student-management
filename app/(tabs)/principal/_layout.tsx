@@ -1,83 +1,25 @@
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-
-const ACCENT = '#534AB7';
+import { Stack } from 'expo-router';
 
 export default function PrincipalLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: ACCENT,
-        tabBarInactiveTintColor: '#AAAAAA',
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '500' },
-        tabBarStyle: {
-          height: 56,
-          borderTopWidth: 0.5,
-          borderTopColor: '#EEEEEE',
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="announce"
-        options={{
-          title: 'Announce',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="megaphone-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="results"
-        options={{
-          title: 'Results',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="ribbon-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="class-attendance"
-        options={{ href: null }}
-      />
-      <Tabs.Screen name="class-detail" options={{ href: null }} />
-      <Tabs.Screen name="exam-overview"    options={{ href: null }} />
-      <Tabs.Screen name="section-detail"   options={{ href: null }} />
-      <Tabs.Screen name="section-students" options={{ href: null }} />
-      <Tabs.Screen name="question-heatmap" options={{ href: null }} />
-      <Tabs.Screen name="question-detail"  options={{ href: null }} />
-      <Tabs.Screen name="student-summary"  options={{ href: null }} />
-      <Tabs.Screen name="student-subject"  options={{ href: null }} />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="analytics" />
+      <Stack.Screen name="calendar" />
+      <Stack.Screen name="class-attendance" />
+      <Stack.Screen name="class-people" />
+      <Stack.Screen name="class-teachers" />
+      <Stack.Screen name="class-students" />
+      <Stack.Screen name="class-detail" />
+      <Stack.Screen name="exam-overview" />
+      <Stack.Screen name="section-detail" />
+      <Stack.Screen name="section-students" />
+      <Stack.Screen name="question-heatmap" />
+      <Stack.Screen name="question-detail" />
+      <Stack.Screen name="student-detail" />
+      <Stack.Screen name="student-exams" />
+      <Stack.Screen name="student-summary" />
+      <Stack.Screen name="student-subject" />
+    </Stack>
   );
 }

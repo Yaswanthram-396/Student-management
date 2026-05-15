@@ -81,6 +81,11 @@ function ExamCard({ exam, onUpload }: { exam: AnalyticsExam; onUpload: (id: stri
           <Text style={styles.examType}>
             {exam.type === 'CLASS' ? 'Whole Class Exam' : 'Section Exam'}
           </Text>
+          {(exam.academic_class || exam.section) && (
+            <Text style={styles.examDate}>
+              {exam.academic_class?.name ?? exam.section?.name}
+            </Text>
+          )}
         </View>
         <StatusChip status={exam.analytics_status} />
       </View>
@@ -123,8 +128,6 @@ export function ExamListScreen() {
   const [uploadExamId, setUploadExamId] = useState<string | null>(null);
   const [uploading, setUploading]       = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-  const [legacyUploading, setLegacyUploading] = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const filteredSections = sections.filter(s => s.class_id === selectedClass);
 
   // ── Load exams ──────────────────────────────────────────────────────────────
@@ -213,43 +216,6 @@ export function ExamListScreen() {
     }
   }
 
-  async function handleLegacyUpload() {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'application/csv'],
-        multiple: false,
-      });
-
-      if (result.canceled || result.assets.length === 0) return;
-
-      const asset = result.assets[0];
-      const formData = new FormData();
-      await appendAssetToFormData(formData, 'csv_file', asset, asset.name ?? 'analytics.csv');
-
-      setLegacyUploading(true);
-      await analyticsApi.legacyUpload(formData);
-      Alert.alert('Legacy Upload Started', 'The CSV has been queued for processing.');
-      loadExams();
-    } catch (err: any) {
-      Alert.alert('Legacy Upload Error', err.details ?? 'Failed to upload the CSV.');
-    } finally {
-      setLegacyUploading(false);
-    }
-  }
-
-  async function handleSeed() {
-    setSeeding(true);
-    try {
-      await analyticsApi.seed();
-      Alert.alert('Seed Started', 'Synthetic analytics data is being prepared.');
-      loadExams();
-    } catch (err: any) {
-      Alert.alert('Seed Error', err.details ?? 'Seed data is not available right now.');
-    } finally {
-      setSeeding(false);
-    }
-  }
-
   // ── Upload files ─────────────────────────────────────────────────────────────
 
   async function handleUpload() {
@@ -326,12 +292,12 @@ export function ExamListScreen() {
         center={<Text style={styles.headerTitle}>Exam Analytics</Text>}
         right={
           <View style={styles.headerActions}>
-            <Pressable
+            {/* <Pressable
               onPress={() => router.push('/(tabs)/principal/analytics' as any)}
               style={styles.headerIconBtn}
             >
               <Ionicons name="grid-outline" size={22} color={colors.principal} />
-            </Pressable>
+            </Pressable> */}
             <Pressable
               onPress={handleDownloadTemplate}
               disabled={downloadingTemplate}
@@ -373,30 +339,6 @@ export function ExamListScreen() {
               <Text style={styles.sectionLabel}>
                 {exams.length} exam{exams.length !== 1 ? 's' : ''}
               </Text>
-              <View style={styles.utilityRow}>
-                <Pressable
-                  style={[styles.utilityBtn, legacyUploading && styles.utilityBtnDisabled]}
-                  onPress={handleLegacyUpload}
-                  disabled={legacyUploading}
-                >
-                  <Ionicons name="cloud-upload-outline" size={14} color={colors.principal} />
-                  <Text style={styles.utilityBtnText}>
-                    {legacyUploading ? 'Uploading…' : 'Legacy CSV'}
-                  </Text>
-                </Pressable>
-                {__DEV__ && (
-                  <Pressable
-                    style={[styles.utilityBtn, seeding && styles.utilityBtnDisabled]}
-                    onPress={handleSeed}
-                    disabled={seeding}
-                  >
-                    <Ionicons name="flask-outline" size={14} color={colors.principal} />
-                    <Text style={styles.utilityBtnText}>
-                      {seeding ? 'Seeding…' : 'Seed Data'}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
             </View>
           }
         />
@@ -551,21 +493,6 @@ const styles = StyleSheet.create({
   sectionLabel: { ...(typography.label as object), color: colors.textMuted, marginBottom: spacing.sm },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   headerIconBtn: { padding: 4, minWidth: 30, alignItems: 'center' },
-  utilityRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  utilityBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: 8,
-    paddingHorizontal: spacing.md,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.principal,
-  },
-  utilityBtnDisabled: { opacity: 0.6 },
-  utilityBtnText: { ...(typography.caption as object), color: colors.principal, fontWeight: '600' },
-
   // Exam card
   examCard: {
     backgroundColor: colors.surface,

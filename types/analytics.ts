@@ -19,6 +19,10 @@ export interface AnalyticsExam {
   exam_date: string;
   analytics_status: AnalyticsStatus;
   type?: 'CLASS' | 'SECTION';
+  academic_class: { id: string; name: string } | null;
+  section?: { id: string; name: string } | null;
+  sections?: { id: string; name: string }[];
+  my_sections?: { id: string; name: string }[] | null;
 }
 
 export interface ListExamsResponse {
@@ -79,6 +83,7 @@ export interface ExamOverviewBase {
     exam_date: string;
     analytics_status: AnalyticsStatus;
     type: 'CLASS' | 'SECTION';
+    section: { id: string; name: string } | null;
   };
   role_view: 'STAFF';
   top_students: TopStudent[];
@@ -90,7 +95,6 @@ export interface ExamOverviewStaffClass extends ExamOverviewBase {
 }
 
 export interface ExamOverviewStaffSection extends ExamOverviewBase {
-  section: { id: string; name: string };
   subject_avgs: SubjectAvg[];
 }
 
@@ -304,7 +308,14 @@ export interface StudentExamTimelineItem {
   id: string;
   exam_name: string;
   exam_date: string;
+  max_marks: number;
+  percentage: number;
   total_marks: number;
+  exam_total_marks: number;
+  exam_max_marks: number;
+  exam_percentage: number;
+  class_rank: number;
+  section_rank: number;
   overall_risk: RiskLabel;
   subjects: {
     subject_id: string;
@@ -325,6 +336,7 @@ export interface StudentExamsResponse {
     section_name: string;
   };
   exams: StudentExamTimelineItem[];
+  message?: string;
 }
 
 // ── Student summary ───────────────────────────────────────────────────────────
@@ -354,7 +366,15 @@ export interface StudentSummaryResponse {
     section_name: string;
   };
   exam: { id: string; exam_name: string; exam_date: string };
-  exams: AnalyticsExam[];
+  total_marks: number;
+  max_marks: number;
+  percentage: number;
+  exam_total_marks: number;
+  exam_max_marks: number;
+  exam_percentage: number;
+  class_rank: number;
+  section_rank: number;
+  exams?: AnalyticsExam[];
   subjects: StudentSubjectSummary[];
   overall_risk: RiskLabel;
 }

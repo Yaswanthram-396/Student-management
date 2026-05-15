@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import {
     Dimensions,
     FlatList,
+    Image,
     Pressable,
     StyleSheet,
     Text,
@@ -15,6 +16,7 @@ import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
 import { principalApi } from "../../services/principal";
 import { useAuthStore } from "../../store/auth-store";
+import type { PrincipalMeResponse } from "../../types/auth";
 import type { ClassAttendanceSummary } from "../../types/principal";
 import { HeaderBar, LoadingScreen } from "../shared";
 
@@ -63,6 +65,8 @@ export function HomeScreen() {
   const [announcements, setAnnouncements] = useState<Announcement[]>(FALLBACK_ANNOUNCEMENTS);
   const [attendanceClasses, setAttendanceClasses] = useState<ClassAttendanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const principal = currentUser as PrincipalMeResponse | null;
+  const picUrl = principal?.profile_pic_url ?? null;
   const schoolName = currentUser?.school.name?.trim() || "School";
   const schoolInitials = schoolName
     .split(/\s+/)
@@ -119,9 +123,15 @@ export function HomeScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <HeaderBar
         left={
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>{schoolInitials || "SC"}</Text>
-          </View>
+          <Pressable onPress={() => router.push("/principal-profile")} hitSlop={8}>
+            {picUrl ? (
+              <Image source={{ uri: picUrl }} style={styles.logoCircle} />
+            ) : (
+              <View style={styles.logoCircle}>
+                <Text style={styles.logoText}>{schoolInitials || "SC"}</Text>
+              </View>
+            )}
+          </Pressable>
         }
         center={<Text style={styles.headerTitle}>{schoolName}</Text>}
         right={
@@ -152,10 +162,10 @@ export function HomeScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <View style={styles.quickActionsRow}>
+            {/* <View style={styles.quickActionsRow}>
               <Pressable
                 style={styles.quickActionCard}
-                onPress={() => router.push('/(tabs)/principal/results' as any)}
+                onPress={() => router.push('/(tabs)/principal/(tabs)/results' as any)}
               >
                 <Ionicons name="bar-chart-outline" size={18} color={colors.principal} />
                 <Text style={styles.quickActionTitle}>Exam Analytics</Text>
@@ -163,13 +173,13 @@ export function HomeScreen() {
               </Pressable>
               <Pressable
                 style={styles.quickActionCard}
-                onPress={() => router.push('/(tabs)/principal/results' as any)}
+                onPress={() => router.push('/(tabs)/principal/(tabs)/results' as any)}
               >
                 <Ionicons name="grid-outline" size={18} color={colors.principal} />
                 <Text style={styles.quickActionTitle}>Analytics Dashboard</Text>
                 <Text style={styles.quickActionMeta}>Open the same exam flow for class, section, and student drill-downs</Text>
               </Pressable>
-            </View>
+            </View> */}
 
             <View style={styles.heatmapSection}>
               <Text style={styles.sectionLabel}>Class Attendance This Week</Text>
