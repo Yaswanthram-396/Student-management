@@ -172,8 +172,7 @@ export default function AttendanceScreen() {
   const hasStudents = !loading && !error && students.length > 0;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
 
         {/* ── Date navigator ── */}
         <View style={styles.dateNav}>
@@ -265,28 +264,36 @@ export default function AttendanceScreen() {
           </View>
         )}
 
-        {/* ── Search bar ── */}
-        {hasStudents && (
-          <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={16} color="#AAAAAA" />
-            <TextInput style={styles.searchInput} value={search} onChangeText={setSearch}
-              placeholder="Search by name or roll number…" placeholderTextColor="#AAAAAA"
-              returnKeyType="search" clearButtonMode="while-editing" />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch('')} hitSlop={8}>
-                <Ionicons name="close-circle" size={17} color="#CCCCCC" />
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* ── Student list (fills all remaining space) ── */}
-        <ScrollView
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+        {/* ── ScrollView + footer wrapped in KAV so keyboard pushes them up ── */}
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
+          {/* Search is index 0 inside ScrollView → sticky via stickyHeaderIndices */}
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            stickyHeaderIndices={hasStudents ? [0] : undefined}
+          >
+          {/* ── Sticky search bar (index 0) ── */}
+          {hasStudents && (
+            <View style={styles.searchStickyWrap}>
+              <View style={styles.searchWrap}>
+                <Ionicons name="search-outline" size={16} color="#AAAAAA" />
+                <TextInput style={styles.searchInput} value={search} onChangeText={setSearch}
+                  placeholder="Search by name or roll number…" placeholderTextColor="#AAAAAA"
+                  returnKeyType="search" clearButtonMode="while-editing" />
+                {search.length > 0 && (
+                  <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={17} color="#CCCCCC" />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
           {/* Loading */}
           {loading && (
             <View style={styles.centered}>
@@ -395,34 +402,42 @@ export default function AttendanceScreen() {
               })}
             </View>
           )}
-        </ScrollView>
+          </ScrollView>
 
-        {/* ── Confirm button ── */}
-        {hasStudents && !isConfirmed && (
-          <View style={styles.footer}>
-            <Pressable
-              style={({ pressed }) => [styles.confirmBtn, pressed && { opacity: 0.88 }, confirming && styles.btnDisabled]}
-              onPress={handleConfirmPress}
-              disabled={confirming}
-            >
-              {confirming
-                ? <ActivityIndicator size="small" color="#FFF" />
-                : (<>
-                    <Ionicons name="checkmark-done" size={18} color="#FFF" />
-                    <Text style={styles.confirmBtnText}>Confirm Attendance</Text>
-                  </>)
-              }
-            </Pressable>
-          </View>
-        )}
+          {/* ── Confirm button (inside KAV, moves up with keyboard) ── */}
+          {hasStudents && !isConfirmed && (
+            <View style={styles.footer}>
+              <Pressable
+                style={({ pressed }) => [styles.confirmBtn, pressed && { opacity: 0.88 }, confirming && styles.btnDisabled]}
+                onPress={handleConfirmPress}
+                disabled={confirming}
+              >
+                {confirming
+                  ? <ActivityIndicator size="small" color="#FFF" />
+                  : (<>
+                      <Ionicons name="checkmark-done" size={18} color="#FFF" />
+                      <Text style={styles.confirmBtnText}>Confirm Attendance</Text>
+                    </>)
+                }
+              </Pressable>
+            </View>
+          )}
+        </KeyboardAvoidingView>
+
       </SafeAreaView>
-    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: BG },
+  // Sticky search wrapper — white bg so it covers rows underneath when pinned
+  searchStickyWrap: {
+    backgroundColor: BG,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
 
   // ── Date navigator
   dateNav: {
@@ -493,18 +508,17 @@ const styles = StyleSheet.create({
   searchWrap: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 14, marginTop: 12, marginBottom: 8,
     paddingHorizontal: 14, paddingVertical: 12,
     borderRadius: 14, borderWidth: 1, borderColor: LINE,
     gap: 8,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
   searchInput: { flex: 1, fontSize: 14, color: INK, paddingVertical: 0 },
 
   // ── Student list
   list: { flex: 1 },
-  listContent: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 16 },
+  listContent: { paddingHorizontal: 14, paddingTop: 0, paddingBottom: 16 },
 
   centered: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   stateText: { fontSize: 14, color: MUTED },
