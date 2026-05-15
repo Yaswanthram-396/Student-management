@@ -222,6 +222,7 @@ function QueryDetailSheet({
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [replySent, setReplySent] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -229,6 +230,7 @@ function QueryDetailSheet({
     setDetail(null);
     setReplyText("");
     setReplyError(null);
+    setReplySent(false);
     setLoading(true);
     getQueryById(queryId)
       .then(setDetail)
@@ -244,7 +246,11 @@ function QueryDetailSheet({
       const newReply = await replyToQuery(detail.id, replyText.trim());
       setDetail((prev) => prev ? { ...prev, replies: [...prev.replies, newReply] } : prev);
       setReplyText("");
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      setReplySent(true);
+      setTimeout(() => {
+        setReplySent(false);
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 2000);
     } catch {
       setReplyError("Failed to send. Try again.");
     } finally {
@@ -309,6 +315,12 @@ function QueryDetailSheet({
               </View>
             ) : (
               <View style={styles.replyInputRow}>
+                {replySent && (
+                  <View style={styles.replySentBanner}>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.parent} />
+                    <Text style={styles.replySentText}>Reply sent!</Text>
+                  </View>
+                )}
                 {replyError && <Text style={styles.replyErrorText}>{replyError}</Text>}
                 <View style={styles.replyRow}>
                   <TextInput
@@ -880,6 +892,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closedBannerText: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+
+  replySentBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  replySentText: {
+    fontSize: 13,
+    color: colors.parent,
+    fontWeight: "500",
+  },
 
   fab: {
     position: "absolute",

@@ -124,6 +124,7 @@ export interface HomeworkItem {
   description: string;
   deadline: string;
   assigned_by: PersonRef;
+  file_url?: string;
 }
 
 export interface HomeworkResponse {

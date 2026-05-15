@@ -2,8 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -269,9 +271,30 @@ function HomeworkDetailModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const [openingFile, setOpeningFile] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  async function handleOpenFile(url: string) {
+    setOpeningFile(true);
+    setFileError(null);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        setFileError("Cannot open this file on your device.");
+      }
+    } catch {
+      setFileError("Failed to open file. Please try again.");
+    } finally {
+      setOpeningFile(false);
+    }
+  }
+
   if (!item) return null;
 
   const theme = getSubjectTheme(item.subject.name);
+  const hasFile = !!item.file_url;
 
   return (
     <Modal
@@ -327,6 +350,43 @@ function HomeworkDetailModal({
                 </Text>
               </View>
             </View>
+
+            {hasFile && (
+              <View style={styles.attachmentSection}>
+                <Text style={styles.attachmentLabel}>ATTACHMENT</Text>
+                <Pressable
+                  style={[
+                    styles.attachmentRow,
+                    openingFile && styles.attachmentRowDisabled,
+                  ]}
+                  onPress={() => handleOpenFile(item.file_url!)}
+                  disabled={openingFile}
+                >
+                  <View style={[styles.attachmentIcon, { backgroundColor: theme.bg }]}>
+                    {openingFile ? (
+                      <ActivityIndicator size={18} color={theme.accent} />
+                    ) : (
+                      <Ionicons name="document-text-outline" size={20} color={theme.accent} />
+                    )}
+                  </View>
+                  <View style={styles.attachmentMeta}>
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {item.file_url!.split("/").pop() ?? "Attachment"}
+                    </Text>
+                    <Text style={styles.attachmentHint}>Tap to open file</Text>
+                  </View>
+                  <View style={styles.attachmentOpenBtn}>
+                    <Ionicons name="open-outline" size={16} color={theme.accent} />
+                    <Text style={[styles.attachmentOpenText, { color: theme.accent }]}>
+                      Open
+                    </Text>
+                  </View>
+                </Pressable>
+                {fileError && (
+                  <Text style={styles.fileErrorText}>{fileError}</Text>
+                )}
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -343,9 +403,12 @@ export function HomeworkScreen() {
   const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
   const [homework, setHomework] = useState<TaggedHW[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingHomework, setLoadingHomework] = useState(false);
+  const [homeworkError, setHomeworkError] = useState<string | null>(null);
 
   const loadHomework = useCallback(() => {
     setLoadingProfile(true);
+    setHomeworkError(null);
     parentApi
       .getProfile()
       .then(async (profile) => {
@@ -364,23 +427,32 @@ export function HomeworkScreen() {
             ? prev
             : "ALL",
         );
-        const results = await Promise.all(
-          studentList.map((s) =>
-            parentApi
-              .getHomework(s.id)
-              .then((data) =>
-                data.results.map((hw) => ({
-                  ...hw,
-                  studentId: s.id,
-                  studentName: s.name,
-                })),
-              )
-              .catch(() => [] as TaggedHW[]),
-          ),
-        );
-        setHomework(results.flat());
+        setLoadingHomework(true);
+        try {
+          const results = await Promise.all(
+            studentList.map((s) =>
+              parentApi
+                .getHomework(s.id)
+                .then((data) =>
+                  data.results.map((hw) => ({
+                    ...hw,
+                    studentId: s.id,
+                    studentName: s.name,
+                  })),
+                )
+                .catch(() => [] as TaggedHW[]),
+            ),
+          );
+          setHomework(results.flat());
+        } catch {
+          setHomeworkError("Could not load homework. Please try again.");
+        } finally {
+          setLoadingHomework(false);
+        }
       })
-      .catch(() => {})
+      .catch(() => {
+        setHomeworkError("Could not load profile. Please try again.");
+      })
       .finally(() => setLoadingProfile(false));
   }, []);
 
@@ -454,35 +526,57 @@ export function HomeworkScreen() {
         </ScrollView>
       </View> */}
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => `${item.id}-${item.studentName}`}
-        renderItem={({ item, index }) => (
-          <HomeworkCard
-            item={item}
-            index={index}
-            onPress={setSelectedHomework}
-          />
-        )}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <View style={styles.emptyIcon}>
-              <Ionicons
-                name="checkmark-done-outline"
-                size={30}
-                color={colors.parent}
-              />
-            </View>
-            <Text style={styles.emptyTitle}>Nothing here</Text>
-            <Text style={styles.emptyText}>
-              No homework found for this filter.
-            </Text>
+      {loadingHomework && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator color={colors.parent} size="small" />
+          <Text style={styles.loadingOverlayText}>Loading homework...</Text>
+        </View>
+      )}
+
+      {!loadingHomework && homeworkError && (
+        <View style={styles.emptyWrap}>
+          <View style={[styles.emptyIcon, { backgroundColor: colors.redLight }]}>
+            <Ionicons name="alert-circle-outline" size={30} color={colors.red} />
           </View>
-        }
-      />
+          <Text style={styles.emptyTitle}>Something went wrong</Text>
+          <Text style={styles.emptyText}>{homeworkError}</Text>
+          <Pressable style={styles.retryBtn} onPress={loadHomework}>
+            <Text style={styles.retryBtnText}>Try Again</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {!loadingHomework && !homeworkError && (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => `${item.id}-${item.studentName}`}
+          renderItem={({ item, index }) => (
+            <HomeworkCard
+              item={item}
+              index={index}
+              onPress={setSelectedHomework}
+            />
+          )}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyIcon}>
+                <Ionicons
+                  name="checkmark-done-outline"
+                  size={30}
+                  color={colors.parent}
+                />
+              </View>
+              <Text style={styles.emptyTitle}>Nothing here</Text>
+              <Text style={styles.emptyText}>
+                No homework found for this filter.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       <HomeworkDetailModal
         item={selectedHomework}
@@ -977,5 +1071,90 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: "center",
     marginTop: spacing.xs,
+  },
+  loadingOverlay: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+  },
+  loadingOverlayText: {
+    fontSize: 14,
+    color: colors.textMuted,
+  },
+  retryBtn: {
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.parent,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  retryBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.parent,
+  },
+
+  // Attachment section in detail modal
+  attachmentSection: {
+    marginTop: spacing.lg,
+  },
+  attachmentLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+  },
+  attachmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  attachmentRowDisabled: { opacity: 0.6 },
+  attachmentIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  attachmentMeta: { flex: 1 },
+  attachmentName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  attachmentHint: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  attachmentOpenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  attachmentOpenText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  fileErrorText: {
+    fontSize: 12,
+    color: colors.red,
+    marginTop: spacing.sm,
   },
 });
