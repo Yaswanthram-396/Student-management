@@ -510,8 +510,10 @@ export default function SectionAnalyticsScreen() {
 
   function openStudentSubject(studentId: string, subjectId: string, subjectName: string) {
     const student = students.find(s => s.student_id === studentId);
+    // TODO: replace hardcoded ID with actual studentId once backend mapping is ready
+    const resolvedStudentId = "eeaa5388-cd26-48ac-a4de-2ef1dde429b6";
     router.push(
-      `/teacher-student-subject?studentId=${safeParam(studentId)}&studentName=${safeParam(student?.name ?? '')}&studentRefId=${safeParam(student?.student_ref_id ?? '')}&subjectId=${safeParam(subjectId)}&subjectName=${safeParam(subjectName)}&examId=${safeParam(examId)}&examName=${safeParam(examName)}` as any
+      `/teacher-student-subject?studentId=${safeParam(resolvedStudentId)}&studentName=${safeParam(student?.name ?? '')}&studentRefId=${safeParam(student?.student_ref_id ?? '')}&subjectId=${safeParam(subjectId)}&subjectName=${safeParam(subjectName)}&examId=${safeParam(examId)}&examName=${safeParam(examName)}` as any
     );
   }
 
