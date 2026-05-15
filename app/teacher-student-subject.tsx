@@ -311,9 +311,9 @@ export default function TeacherStudentSubjectScreen() {
   if (error || !data) return <FailureState onRetry={load} />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <Header name={studentName || data.student.name} exam={examName || data.exam.exam_name} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Header name={studentName || data.student.name} exam={examName || data.exam.exam_name} />
         <HeroCard        data={data} />
         <ScoreBreakdown  result={data.result} />
         <PerformanceCard result={data.result} />
@@ -326,7 +326,7 @@ export default function TeacherStudentSubjectScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: BG },
-  scroll: { paddingHorizontal: 16, paddingTop: 34, paddingBottom: 32, gap: 18 },
+  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, gap: 18 },
 
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 14 },
   centeredText: { color: MUTED, fontSize: 13, fontWeight: "700" },
@@ -342,10 +342,19 @@ const styles = StyleSheet.create({
   },
   retryBtnText: { color: "#FFF", fontSize: 14, fontWeight: "900" },
 
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 4 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: SURFACE,
+    borderBottomWidth: 1,
+    borderBottomColor: LINE,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   headerText:  { flex: 1 },
-  headerTitle: { fontSize: 22, fontWeight: "900", color: INK },
+  headerTitle: { fontSize: 20, fontWeight: "900", color: INK },
   headerSub:   { fontSize: 13, color: MUTED, marginTop: 2 },
 
   heroCard: { backgroundColor: ACCENT, borderRadius: 18, padding: 18, gap: 16 },

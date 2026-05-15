@@ -533,14 +533,13 @@ export default function SectionAnalyticsScreen() {
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <Header title={`Section ${sectionName}`} subtitle={examName} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Header title={`Section ${sectionName}`} subtitle={examName} />
-
         <View style={styles.heroCard}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>
@@ -583,12 +582,21 @@ export default function SectionAnalyticsScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: BG },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 34, gap: 18, paddingBottom: 28 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 16, gap: 18, paddingBottom: 28 },
   pressed: { opacity: 0.76 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28, gap: 12 },
   centeredText: { color: MUTED, fontSize: 13, fontWeight: "700" },
 
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 4 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: SURFACE,
+    borderBottomWidth: 1,
+    borderBottomColor: LINE,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   backButton: {
     width: 38,
     height: 38,
@@ -597,7 +605,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerText: { flex: 1 },
-  pageTitle: { fontSize: 24, fontWeight: "900", color: INK },
+  pageTitle: { fontSize: 20, fontWeight: "900", color: INK },
   pageSubtitle: { marginTop: 2, fontSize: 13, color: MUTED },
 
   heroCard: { backgroundColor: ACCENT, borderRadius: 18, padding: 18 },
