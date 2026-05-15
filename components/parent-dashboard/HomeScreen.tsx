@@ -4,17 +4,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  ViewToken,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    FlatList,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    ViewToken,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../constants/colors";
@@ -25,11 +25,11 @@ import { notificationsApi } from "../../services/notifications";
 import { parentApi } from "../../services/parent";
 import { formatQueryDate } from "../../src/lib/formatDate";
 import {
-  getQueryById,
-  QueryDetail,
-  QueryReply,
-  QueryStatus,
-  replyToQuery,
+    getQueryById,
+    QueryDetail,
+    QueryReply,
+    QueryStatus,
+    replyToQuery,
 } from "../../src/lib/parentQueryApi";
 import type { ParentAnnouncement, ParentProfile } from "../../types/parent";
 import { BottomSheet, StatusPill } from "../shared";
@@ -106,7 +106,13 @@ function statusLabel(status: QueryStatus): string {
 
 // ─── Child Card Component ────────────────────────────────────────────────────
 
-function ChildCard({ item, onAttendancePress }: { item: Child; onAttendancePress: () => void }) {
+function ChildCard({
+  item,
+  onAttendancePress,
+}: {
+  item: Child;
+  onAttendancePress: () => void;
+}) {
   return (
     <View style={[styles.childCard, { width: CARD_WIDTH }]}>
       <LinearGradient
@@ -140,13 +146,8 @@ function ChildCard({ item, onAttendancePress }: { item: Child; onAttendancePress
           />
         </Pressable>
       </View>
-      <Pressable
-        style={styles.childBottomRow}
-        onPress={onAttendancePress}
-      >
-        <Text style={styles.childBottomText}>
-          View attendance history
-        </Text>
+      <Pressable style={styles.childBottomRow} onPress={onAttendancePress}>
+        <Text style={styles.childBottomText}>View attendance history</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </Pressable>
     </View>
@@ -414,7 +415,11 @@ function QueryDetailSheet({
               <View style={styles.replyInputRow}>
                 {replySent && (
                   <View style={styles.replySentBanner}>
-                    <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={14}
+                      color={colors.primary}
+                    />
                     <Text style={styles.replySentText}>Reply sent!</Text>
                   </View>
                 )}
@@ -469,15 +474,8 @@ export function HomeScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [parentProfileState, setParentProfileState] =
     useState<ParentProfile>(PARENT_PROFILE);
-  const [childrenData, setChildrenData] = useState<Child[]>(() =>
-    parentProfileState.students.map((s) => ({
-      id: s.id,
-      name: s.name,
-      cls: `${s.academic_class.name} · Section ${s.section.name}`,
-      rollNo: s.roll_number,
-      attendance: "pending" as const,
-    })),
-  );
+  const [childrenData, setChildrenData] = useState<Child[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Query sheet state & actions (memoize to prevent infinite updates)
   const memoizedProfile = React.useMemo(
@@ -519,6 +517,7 @@ export function HomeScreen() {
   }, []);
 
   const loadProfileAndAttendance = useCallback(async () => {
+    setLoading(true);
     try {
       const profile = await parentApi.getProfile();
       setParentProfileState(profile);
@@ -554,6 +553,8 @@ export function HomeScreen() {
       setChildrenData(children);
     } catch {
       // keep defaults on error
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -615,6 +616,40 @@ export function HomeScreen() {
     }, 400);
     return () => clearTimeout(t);
   }, []);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        <View style={styles.headerWrap}>
+          <View style={styles.headerTop}>
+            <View style={styles.schoolPill}>
+              <Text style={styles.schoolPillText}>···</Text>
+            </View>
+            <View style={styles.headerIcons}>
+              <Ionicons
+                name="calendar-outline"
+                size={24}
+                color={colors.primary}
+              />
+              <View style={{ marginLeft: 8 }}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={24}
+                  color={colors.textMuted}
+                />
+              </View>
+            </View>
+          </View>
+          <View style={styles.headerBottom}>
+            <Text style={styles.greeting}>Loading...</Text>
+          </View>
+        </View>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={ACCENT} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -692,7 +727,10 @@ export function HomeScreen() {
                       onAttendancePress={() =>
                         router.push({
                           pathname: "/(tabs)/parent/attendance-history",
-                          params: { student_id: item.id, student_name: item.name },
+                          params: {
+                            student_id: item.id,
+                            student_name: item.name,
+                          },
                         })
                       }
                     />
@@ -977,6 +1015,12 @@ const styles = StyleSheet.create({
   emptyText: {
     ...(typography.body as object),
     color: colors.textMuted,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.lg,
   },
   announcementsHeader: {
     flexDirection: "row",

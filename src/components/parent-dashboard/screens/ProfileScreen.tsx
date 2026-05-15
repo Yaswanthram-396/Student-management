@@ -1,23 +1,27 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { authApi } from "../../../../services/auth";
+import { meApi } from "../../../../services/me";
+import { parentApi } from "../../../../services/parent";
+import type { ParentProfile, ParentStudent } from "../../../../types/parent";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
 import { typography } from "../../../constants/typography";
-import { authApi } from "../../../../services/auth";
-import { parentApi } from "../../../../services/parent";
-import type { ParentProfile, ParentStudent } from "../../../../types/parent";
 import { BottomSheet, HeaderBar } from "../../shared";
-
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -60,7 +64,9 @@ function StudentCard({ item }: { item: ParentStudent }) {
               : styles.queryPillTextEnabled,
           ]}
         >
-          {item.is_parent_query_disabled ? "Queries Disabled" : "Queries Enabled"}
+          {item.is_parent_query_disabled
+            ? "Queries Disabled"
+            : "Queries Enabled"}
         </Text>
       </View>
     </View>
@@ -74,14 +80,84 @@ export function ProfileScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [logoutMessage, setLogoutMessage] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
+  const picUrl = profile?.profile_pic_url ?? null;
+  const initials = getInitials(profile?.name ?? "P A");
   useEffect(() => {
-    parentApi
-      .getProfile()
-      .then(setProfile)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const fetchProfile = async () => {
+      try {
+        const [parentProfile, currentUser] = await Promise.all([
+          parentApi.getProfile(),
+          meApi.getCurrentUser(),
+        ]);
+
+        setProfile({
+          ...parentProfile,
+          ...currentUser,
+          profile_pic_url: currentUser.profile_pic_url ?? null,
+        });
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
   }, []);
+
+  async function handlePickImage() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "Permission required",
+        "Please allow access to your photo library to upload a profile picture.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    const formData = new FormData();
+    const fallbackExt = asset.uri.split(".").pop() || "jpg";
+    const mimeType = asset.mimeType ?? `image/${fallbackExt}`;
+    const filename = asset.fileName ?? `profile.${fallbackExt}`;
+
+    if (Platform.OS === "web") {
+      const blob = await fetch(asset.uri).then((res) => res.blob());
+      formData.append("profile_pic", blob, filename);
+    } else {
+      formData.append("profile_pic", {
+        uri: asset.uri,
+        name: filename,
+        type: mimeType,
+      } as any);
+    }
+
+    setUploading(true);
+    try {
+      const res = await parentApi.updateProfilePic(formData);
+      setProfile((p) =>
+        p ? { ...p, profile_pic_url: res.profile_pic_url } : null,
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Upload failed",
+        err.details ?? "Could not upload profile picture. Please try again.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -122,11 +198,26 @@ export function ProfileScreen() {
             <View>
               <View style={styles.parentCard}>
                 <View style={styles.parentTopRow}>
-                  <View style={styles.parentAvatar}>
-                    <Text style={styles.parentAvatarText}>
-                      {getInitials(profile.name)}
-                    </Text>
-                  </View>
+                  <Pressable
+                    style={styles.parentAvatar}
+                    onPress={handlePickImage}
+                  >
+                    {picUrl ? (
+                      <Image
+                        source={{ uri: picUrl }}
+                        style={styles.avatarImg}
+                      />
+                    ) : (
+                      <Text style={styles.parentAvatarText}>{initials}</Text>
+                    )}
+                    <View style={styles.cameraBtn}>
+                      {uploading ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <Ionicons name="camera" size={20} color="white" />
+                      )}
+                    </View>
+                  </Pressable>
                   <View style={styles.parentInfo}>
                     <Text style={styles.parentName}>{profile.name}</Text>
                     {!!profile.phone_number && (
@@ -204,7 +295,11 @@ export function ProfileScreen() {
               style={styles.logoutBtn}
               onPress={() => setShowLogoutModal(true)}
             >
-              <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+              <Ionicons
+                name="log-out-outline"
+                size={18}
+                color={colors.danger}
+              />
               <Text style={styles.logoutBtnText}>Logout</Text>
             </Pressable>
 
@@ -215,9 +310,14 @@ export function ProfileScreen() {
         }
       />
 
-      <BottomSheet visible={showPinSheet} onClose={() => setShowPinSheet(false)}>
+      <BottomSheet
+        visible={showPinSheet}
+        onClose={() => setShowPinSheet(false)}
+      >
         <Text style={styles.sheetTitle}>Change PIN</Text>
-        <Text style={styles.sheetBody}>This feature will be available soon.</Text>
+        <Text style={styles.sheetBody}>
+          This feature will be available soon.
+        </Text>
         <Pressable
           style={styles.sheetCloseBtn}
           onPress={() => setShowPinSheet(false)}
@@ -296,6 +396,22 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.parent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarImg: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  cameraBtn: {
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.5)",
     alignItems: "center",
     justifyContent: "center",
   },
