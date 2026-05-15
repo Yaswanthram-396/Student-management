@@ -209,8 +209,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Class roster card ── */}
-        {selectedSection && (
+        {/* ── Class roster card (class teachers only) ── */}
+        {selectedSection?.is_class_teacher && (
           <Pressable
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             onPress={() =>
