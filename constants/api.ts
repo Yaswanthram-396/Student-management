@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-
 const DEFAULT_BASE_URL =
   Platform.OS === "android"
     ? "https://schoolsbackend-production.up.railway.app"

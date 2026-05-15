@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   slot: {
-    width: 40,
+    minWidth: 40,
     alignItems: 'flex-start',
     justifyContent: 'center',
   },

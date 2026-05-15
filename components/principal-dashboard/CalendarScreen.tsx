@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, TextInput, Alert, StyleSheet, Dimensions,
+  View, Text, FlatList, Pressable, TextInput, Alert, StyleSheet, Dimensions, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
 import { typography } from '../../constants/typography';
@@ -17,12 +18,20 @@ const WEEK_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 interface CalEvent {
   id: string;
-  bar: string; name: string; date: string;
-  audience: string; audienceBg: string; audienceText: string;
-  month: number;
-  year: number;
-  day: number;
+  bar: string;
+  title: string;
+  date: string;
+  description: string;
+  audience: string;
+  audienceBg: string;
+  audienceText: string;
+  eventType: 'HOLIDAY' | 'EXAM' | 'EVENT';
+  startDate: string;
+  endDate: string;
+  visibleTo: ('TEACHER' | 'STUDENT' | 'PARENT')[];
 }
+
+type VisibleRole = 'TEACHER' | 'STUDENT' | 'PARENT';
 
 const PRINCIPAL_ACCENT = colors.principal;
 
@@ -49,80 +58,256 @@ const COLOR_OPTIONS = [
   { label: 'Red', value: colors.danger },
 ];
 
-const AUDIENCE_CFG: Record<string, { bg: string; text: string }> = {
-  All: { bg: '#EDEDFA', text: PRINCIPAL_ACCENT },
-  Students: { bg: colors.warningBg, text: '#92400E' },
-  Teachers: { bg: '#DBEAFE', text: colors.teacher },
+const AUDIENCE_CFG: Record<'ALL' | 'PARTIAL' | 'EMPTY', { bg: string; text: string }> = {
+  ALL: { bg: '#EDEDFA', text: PRINCIPAL_ACCENT },
+  PARTIAL: { bg: '#DBEAFE', text: colors.teacher },
+  EMPTY: { bg: colors.dangerBg, text: colors.danger },
 };
 
-const AUDIENCE_OPTIONS = ['All', 'Students', 'Teachers'];
+const EVENT_TYPE_OPTIONS: ('HOLIDAY' | 'EXAM' | 'EVENT')[] = ['HOLIDAY', 'EXAM', 'EVENT'];
+const VISIBLE_TO_OPTIONS: VisibleRole[] = ['TEACHER', 'STUDENT', 'PARENT'];
 
-const VISIBLE_TO_MAP: Record<string, string[]> = {
-  All:      ['TEACHER', 'STUDENT', 'PARENT'],
-  Students: ['STUDENT', 'PARENT'],
-  Teachers: ['TEACHER'],
-};
+function getAudienceFromVisibleTo(visibleTo: VisibleRole[]) {
+  if (visibleTo.length === 3) return 'All';
+  if (visibleTo.length === 0) return 'No audience';
+  return visibleTo
+    .map((role) => role.charAt(0) + role.slice(1).toLowerCase())
+    .join(' + ');
+}
 
 function mapApiEvent(e: CalendarEventResponse): CalEvent {
-  const ac = AUDIENCE_CFG['All'];
+  const audience = getAudienceFromVisibleTo(e.visible_to);
+  const ac = e.visible_to.length === 3
+    ? AUDIENCE_CFG.ALL
+    : e.visible_to.length === 0
+      ? AUDIENCE_CFG.EMPTY
+      : AUDIENCE_CFG.PARTIAL;
   const d = new Date(e.start_date);
   return {
     id: String(e.id),
     bar: PRINCIPAL_ACCENT,
-    name: e.title,
+    title: e.title,
     date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-    audience: 'All',
+    description: e.description ?? '',
+    audience,
     audienceBg: ac.bg,
     audienceText: ac.text,
-    month: d.getMonth(),
-    year: d.getFullYear(),
-    day: d.getDate(),
+    eventType: e.event_type,
+    startDate: e.start_date,
+    endDate: e.end_date,
+    visibleTo: e.visible_to,
   };
+}
+
+function toIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function isSameDate(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 export function CalendarScreen() {
   const [monthIdx, setMonthIdx] = useState(0);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [showSheet, setShowSheet] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [evtName, setEvtName] = useState('');
-  const [audience, setAudience] = useState('All');
+  const [evtDescription, setEvtDescription] = useState('');
+  const [evtType, setEvtType] = useState<'HOLIDAY' | 'EXAM' | 'EVENT'>('EVENT');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [visibleTo, setVisibleTo] = useState<VisibleRole[]>(['TEACHER', 'STUDENT', 'PARENT']);
   const [barColor, setBarColor] = useState<string>(PRINCIPAL_ACCENT);
-  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(NOW);
+  const selectedDateRef = useRef<Date>(NOW);
 
   const mon = getMonthInfo(monthIdx);
-  const visibleEvents = events.filter(e => e.month === mon.month && e.year === mon.year);
-  const eventDatesInMonth = new Set(visibleEvents.map(e => e.day));
+  const selectedDateLabel = selectedDate.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 
   const calDays: (number | null)[] = Array(mon.firstDay).fill(null);
   for (let d = 1; d <= mon.days; d++) calDays.push(d);
 
-  // ── Load events on mount ──────────────────────────────────────────────────
   useEffect(() => {
-    principalApi.getCalendarEvents()
-      .then(data => setEvents(data.results.map(mapApiEvent)))
-      .catch(() => {}); // keep mock events on network error
+    selectedDateRef.current = selectedDate;
+  }, [selectedDate]);
+
+  function resetForm() {
+    const today = new Date().toISOString().split('T')[0];
+    setSelectedEvent(null);
+    setEvtName('');
+    setEvtDescription('');
+    setEvtType('EVENT');
+    setStartDate(today);
+    setEndDate(today);
+    setVisibleTo(['TEACHER', 'STUDENT', 'PARENT']);
+    setBarColor(PRINCIPAL_ACCENT);
+  }
+
+  function openCreateSheet() {
+    resetForm();
+    setShowSheet(true);
+  }
+
+  function openEditSheet(event: CalEvent) {
+    setSelectedEvent(event);
+    setEvtName(event.title);
+    setEvtDescription(event.description);
+    setEvtType(event.eventType);
+    setStartDate(event.startDate);
+    setEndDate(event.endDate);
+    setVisibleTo(event.visibleTo);
+    setBarColor(event.bar);
+    setShowSheet(true);
+  }
+
+  function toggleVisibleRole(role: VisibleRole) {
+    setVisibleTo((current) => (
+      current.includes(role)
+        ? current.filter((item) => item !== role)
+        : [...current, role]
+    ));
+  }
+
+  // ── Load events for the selected date ─────────────────────────────────────
+  const loadEvents = useCallback(async (
+    targetDate: Date,
+    preferBackendToday = false,
+  ) => {
+    setLoadingEvents(true);
+    setEventsError(null);
+    try {
+      const targetIso = toIsoDate(targetDate);
+      const data = await principalApi.getCalendarEvents({
+        start_date: targetIso,
+        end_date: targetIso,
+      });
+      setEvents(data.results.map(mapApiEvent));
+      if (preferBackendToday && data.today) {
+        const backendToday = new Date(`${data.today}T00:00:00`);
+        if (!isSameDate(backendToday, targetDate)) {
+          setSelectedDate(backendToday);
+          setMonthIdx(
+            (backendToday.getFullYear() - TODAY_YEAR) * 12 +
+            (backendToday.getMonth() - TODAY_MONTH),
+          );
+          void loadEvents(backendToday, false);
+        }
+      }
+    } catch (err: any) {
+      setEventsError(err.details ?? 'Failed to load calendar events.');
+    } finally {
+      setLoadingEvents(false);
+    }
   }, []);
 
-  // ── Add event ─────────────────────────────────────────────────────────────
-  async function handleAddEvent() {
-    setAdding(true);
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const created = await principalApi.createCalendarEvent({
-        title: evtName || 'New Event',
-        event_type: 'EVENT',
-        start_date: today,
-        end_date: today,
-        visible_to: VISIBLE_TO_MAP[audience] ?? ['TEACHER', 'STUDENT', 'PARENT'],
-      });
-      setEvents(prev => [mapApiEvent(created), ...prev]);
-      setShowSheet(false);
-      setEvtName(''); setAudience('All');
-    } catch (err: any) {
-      Alert.alert('Error', err.details ?? 'Failed to add event.');
-    } finally {
-      setAdding(false);
+  useFocusEffect(
+    useCallback(() => {
+      void loadEvents(selectedDateRef.current, true);
+    }, [loadEvents]),
+  );
+
+  function selectDate(nextDate: Date) {
+    setSelectedDate(nextDate);
+    void loadEvents(nextDate);
+  }
+
+  function handleMonthChange(direction: -1 | 1) {
+    setMonthIdx((currentIdx) => {
+      const nextIdx = Math.max(0, Math.min(11, currentIdx + direction));
+      const nextMonth = getMonthInfo(nextIdx);
+      const nextDay = Math.min(selectedDate.getDate(), nextMonth.days);
+      const nextDate = new Date(nextMonth.year, nextMonth.month, nextDay);
+      setSelectedDate(nextDate);
+      void loadEvents(nextDate);
+      return nextIdx;
+    });
+  }
+
+  async function handleSaveEvent() {
+    if (!evtName.trim()) {
+      Alert.alert('Missing title', 'Event name is required.');
+      return;
     }
+    if (!startDate || !endDate) {
+      Alert.alert('Missing dates', 'Start date and end date are required.');
+      return;
+    }
+    if (new Date(`${endDate}T00:00:00`).getTime() < new Date(`${startDate}T00:00:00`).getTime()) {
+      Alert.alert('Invalid dates', 'End date must be on or after the start date.');
+      return;
+    }
+    if (visibleTo.length === 0) {
+      Alert.alert('Missing audience', 'Choose at least one role who can see this event.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        title: evtName.trim(),
+        event_type: evtType,
+        start_date: startDate,
+        end_date: endDate,
+        description: evtDescription.trim() || undefined,
+        visible_to: visibleTo,
+      };
+      if (selectedEvent) {
+        await principalApi.updateCalendarEvent(selectedEvent.id, payload);
+      } else {
+        await principalApi.createCalendarEvent(payload);
+      }
+      await loadEvents(selectedDate);
+      setShowSheet(false);
+      resetForm();
+    } catch (err: any) {
+      Alert.alert(
+        'Error',
+        err.details ?? `Failed to ${selectedEvent ? 'update' : 'add'} event.`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleDeleteEvent() {
+    if (!selectedEvent) return;
+    Alert.alert(
+      'Delete Event',
+      `Delete "${selectedEvent.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await principalApi.deleteCalendarEvent(selectedEvent.id);
+              await loadEvents(selectedDate);
+              setShowSheet(false);
+              resetForm();
+            } catch (err: any) {
+              Alert.alert('Error', err.details ?? 'Failed to delete event.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   const CalHeader = (
@@ -131,14 +316,14 @@ export function CalendarScreen() {
       <View style={styles.monthNav}>
         <Pressable
           style={[styles.navBtn, monthIdx === 0 && styles.navBtnDisabled]}
-          onPress={() => setMonthIdx(i => Math.max(0, i - 1))}
+          onPress={() => handleMonthChange(-1)}
         >
           <Text style={styles.navArrow}>‹</Text>
         </Pressable>
         <Text style={styles.monthLabel}>{mon.name}</Text>
         <Pressable
           style={[styles.navBtn, monthIdx === 11 && styles.navBtnDisabled]}
-          onPress={() => setMonthIdx(i => Math.min(11, i + 1))}
+          onPress={() => handleMonthChange(1)}
         >
           <Text style={styles.navArrow}>›</Text>
         </Pressable>
@@ -156,24 +341,45 @@ export function CalendarScreen() {
       {/* Calendar grid */}
       <View style={styles.calGrid}>
         {calDays.map((d, i) => {
-          const isToday = d === TODAY_DATE && mon.month === TODAY_MONTH && mon.year === TODAY_YEAR;
-          const hasEvent = d !== null && eventDatesInMonth.has(d);
+          const cellDate = d !== null ? new Date(mon.year, mon.month, d) : null;
+          const isToday =
+            cellDate !== null &&
+            cellDate.getDate() === TODAY_DATE &&
+            cellDate.getMonth() === TODAY_MONTH &&
+            cellDate.getFullYear() === TODAY_YEAR;
+          const isSelected = cellDate !== null && isSameDate(cellDate, selectedDate);
           return (
-            <View key={i} style={[styles.dayCell, { width: CELL_SIZE }]}>
+            <Pressable
+              key={i}
+              style={[styles.dayCell, { width: CELL_SIZE }]}
+              disabled={!cellDate}
+              onPress={() => cellDate && selectDate(cellDate)}
+            >
               {d !== null && (
-                <>
-                  <View style={[styles.dayCircle, isToday && styles.todayCircle]}>
-                    <Text style={[styles.dayNum, isToday && styles.todayNum]}>{d}</Text>
-                  </View>
-                  {hasEvent && <View style={styles.eventDot} />}
-                </>
+                <View
+                  style={[
+                    styles.dayCircle,
+                    isToday && styles.todayCircle,
+                    isSelected && styles.selectedDayCircle,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dayNum,
+                      isToday && styles.todayNum,
+                      isSelected && styles.selectedDayNum,
+                    ]}
+                  >
+                    {d}
+                  </Text>
+                </View>
               )}
-            </View>
+            </Pressable>
           );
         })}
       </View>
 
-      <Text style={styles.sectionLabel}>Events This Month</Text>
+      <Text style={styles.sectionLabel}>Events On {selectedDateLabel}</Text>
     </View>
   );
 
@@ -182,25 +388,54 @@ export function CalendarScreen() {
       <HeaderBar
         center={<Text style={styles.headerTitle}>Academic Calendar</Text>}
         right={
-          <Pressable onPress={() => setShowSheet(true)}>
+          <Pressable onPress={openCreateSheet}>
             <Ionicons name="add-circle-outline" size={24} color={colors.principal} />
           </Pressable>
         }
       />
 
       <FlatList
-        data={visibleEvents}
+        data={events}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        ListHeaderComponent={CalHeader}
+        ListHeaderComponent={
+          <>
+            {CalHeader}
+            {loadingEvents && (
+              <View style={styles.stateCard}>
+                <ActivityIndicator size="small" color={colors.principal} />
+                <Text style={styles.stateText}>Loading events...</Text>
+              </View>
+            )}
+            {!!eventsError && !loadingEvents && (
+              <View style={styles.errorCard}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+                <Text style={styles.errorText}>{eventsError}</Text>
+                <Pressable
+                  style={styles.retryBtn}
+                  onPress={() => void loadEvents(selectedDate)}
+                >
+                  <Text style={styles.retryText}>Retry</Text>
+                </Pressable>
+              </View>
+            )}
+            {!loadingEvents && !eventsError && events.length === 0 && (
+              <View style={styles.stateCard}>
+                <Text style={styles.stateText}>
+                  No events found for {selectedDateLabel}.
+                </Text>
+              </View>
+            )}
+          </>
+        }
         renderItem={({ item }) => (
-          <View style={styles.eventCard}>
+          <Pressable style={styles.eventCard} onPress={() => openEditSheet(item)}>
             <View style={[styles.eventAccent, { backgroundColor: item.bar }]} />
             <View style={styles.eventBody}>
               <View>
-                <Text style={styles.eventName}>{item.name}</Text>
+                <Text style={styles.eventName}>{item.title}</Text>
                 <Text style={styles.eventDate}>{item.date}</Text>
               </View>
               <View style={[styles.audiencePill, { backgroundColor: item.audienceBg }]}>
@@ -209,12 +444,21 @@ export function CalendarScreen() {
                 </Text>
               </View>
             </View>
-          </View>
+          </Pressable>
         )}
       />
 
-      <BottomSheet visible={showSheet} onClose={() => setShowSheet(false)}>
-        <Text style={styles.sheetTitle}>Add Event</Text>
+      <BottomSheet
+        visible={showSheet}
+        onClose={() => {
+          if (saving || deleting) return;
+          setShowSheet(false);
+          resetForm();
+        }}
+      >
+        <Text style={styles.sheetTitle}>
+          {selectedEvent ? 'Edit Event' : 'Add Event'}
+        </Text>
 
         <Text style={styles.fieldLabel}>Event Name</Text>
         <TextInput
@@ -225,20 +469,69 @@ export function CalendarScreen() {
           placeholderTextColor={colors.textMuted}
         />
 
-        <Text style={styles.fieldLabel}>Audience</Text>
+        <Text style={styles.fieldLabel}>Event Type</Text>
         <View style={styles.optionRow}>
-          {AUDIENCE_OPTIONS.map(opt => (
+          {EVENT_TYPE_OPTIONS.map(opt => (
             <Pressable
               key={opt}
-              style={[styles.optionPill, audience === opt && styles.optionPillActive]}
-              onPress={() => setAudience(opt)}
+              style={[styles.optionPill, evtType === opt && styles.optionPillActive]}
+              onPress={() => setEvtType(opt)}
             >
-              <Text style={[styles.optionText, audience === opt && styles.optionTextActive]}>
+              <Text style={[styles.optionText, evtType === opt && styles.optionTextActive]}>
                 {opt}
               </Text>
             </Pressable>
           ))}
         </View>
+
+        <Text style={styles.fieldLabel}>Start Date</Text>
+        <TextInput
+          style={styles.textInput}
+          value={startDate}
+          onChangeText={setStartDate}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+        />
+
+        <Text style={styles.fieldLabel}>End Date</Text>
+        <TextInput
+          style={styles.textInput}
+          value={endDate}
+          onChangeText={setEndDate}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+        />
+
+        <Text style={styles.fieldLabel}>Description</Text>
+        <TextInput
+          style={[styles.textInput, styles.textInputMultiline]}
+          value={evtDescription}
+          onChangeText={setEvtDescription}
+          placeholder="Add a description..."
+          placeholderTextColor={colors.textMuted}
+          multiline
+          textAlignVertical="top"
+        />
+
+        <Text style={styles.fieldLabel}>Visible To</Text>
+        <View style={styles.optionRow}>
+          {VISIBLE_TO_OPTIONS.map(opt => (
+            <Pressable
+              key={opt}
+              style={[styles.optionPill, visibleTo.includes(opt) && styles.optionPillActive]}
+              onPress={() => toggleVisibleRole(opt)}
+            >
+              <Text style={[styles.optionText, visibleTo.includes(opt) && styles.optionTextActive]}>
+                {opt.charAt(0) + opt.slice(1).toLowerCase()}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.helperText}>
+          Select one or more roles. The backend accepts Teacher, Student, and Parent in any combination.
+        </Text>
 
         <Text style={styles.fieldLabel}>Color</Text>
         <View style={styles.colorRow}>
@@ -263,14 +556,42 @@ export function CalendarScreen() {
         </View>
 
         <View style={styles.sheetBtns}>
-          <Pressable style={styles.cancelBtn} onPress={() => setShowSheet(false)}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </Pressable>
+          {selectedEvent ? (
+            <Pressable
+              style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+              onPress={handleDeleteEvent}
+              disabled={saving || deleting}
+            >
+              <Text style={styles.deleteBtnText}>
+                {deleting ? 'Deleting...' : 'Delete Event'}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={styles.cancelBtn}
+              onPress={() => {
+                setShowSheet(false);
+                resetForm();
+              }}
+              disabled={saving || deleting}
+            >
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </Pressable>
+          )}
           <Pressable
-            style={[styles.addBtn, adding && styles.addBtnAdding]}
-            onPress={handleAddEvent}
+            style={[styles.addBtn, saving && styles.addBtnAdding]}
+            onPress={handleSaveEvent}
+            disabled={saving || deleting}
           >
-            <Text style={styles.addBtnText}>{adding ? 'Adding...' : 'Add Event'}</Text>
+            <Text style={styles.addBtnText}>
+              {saving
+                ? selectedEvent
+                  ? 'Saving...'
+                  : 'Adding...'
+                : selectedEvent
+                  ? 'Save Changes'
+                  : 'Add Event'}
+            </Text>
           </Pressable>
         </View>
       </BottomSheet>
@@ -310,10 +631,47 @@ const styles = StyleSheet.create({
   dayCell: { alignItems: 'center', paddingVertical: 3 },
   dayCircle: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   todayCircle: { backgroundColor: colors.principal },
+  selectedDayCircle: {
+    backgroundColor: colors.principal,
+    borderWidth: 2,
+    borderColor: colors.principal,
+  },
   dayNum: { ...(typography.caption as object), color: colors.textPrimary },
   todayNum: { color: colors.surface, fontWeight: '600' },
-  eventDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.principal, marginTop: 2 },
+  selectedDayNum: { color: colors.surface, fontWeight: '600' },
   sectionLabel: { ...(typography.label as object), color: colors.textMuted, marginBottom: spacing.sm },
+  stateCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+  },
+  stateText: { ...(typography.caption as object), color: colors.textMuted },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.dangerBg,
+  },
+  errorText: { flex: 1, ...(typography.caption as object), color: colors.danger },
+  retryBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+  },
+  retryText: { ...(typography.caption as object), fontWeight: '700', color: colors.danger },
   // Event card
   eventCard: {
     flexDirection: 'row',
@@ -343,6 +701,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, ...(typography.body as object),
     color: colors.textPrimary, marginBottom: spacing.md,
   },
+  textInputMultiline: { minHeight: 88 },
   optionRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md },
   optionPill: {
     paddingVertical: spacing.xs, paddingHorizontal: spacing.md,
@@ -361,6 +720,7 @@ const styles = StyleSheet.create({
   },
   colorDot: { width: 10, height: 10, borderRadius: 5 },
   colorLabel: { ...(typography.caption as object) },
+  helperText: { ...(typography.caption as object), color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
   sheetBtns: { flexDirection: 'row', gap: spacing.sm },
   cancelBtn: {
     flex: 1, height: 48, borderRadius: 10,
@@ -368,6 +728,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   cancelBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.textSecondary },
+  deleteBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteBtnDisabled: { opacity: 0.7 },
+  deleteBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.danger },
   addBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: colors.principal, alignItems: 'center', justifyContent: 'center' },
   addBtnAdding: { backgroundColor: colors.success },
   addBtnText: { ...(typography.h3 as object), fontWeight: '500', color: colors.surface },

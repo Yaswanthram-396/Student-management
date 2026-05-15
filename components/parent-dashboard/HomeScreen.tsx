@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   Pressable,
@@ -19,6 +21,7 @@ import { colors } from "../../constants/colors";
 import { PARENT_PROFILE } from "../../constants/parentData";
 import { spacing } from "../../constants/spacing";
 import { typography } from "../../constants/typography";
+import { notificationsApi } from "../../services/notifications";
 import { parentApi } from "../../services/parent";
 import { formatQueryDate } from "../../src/lib/formatDate";
 import {
@@ -29,7 +32,8 @@ import {
   replyToQuery,
 } from "../../src/lib/parentQueryApi";
 import type { ParentAnnouncement, ParentProfile } from "../../types/parent";
-import { BottomSheet, HeaderBar, StatusPill } from "../shared";
+import { BottomSheet, StatusPill } from "../shared";
+import { NotificationsSheet } from "./NotificationsSheet";
 import { QuerySheet } from "./QuerySheet";
 import { useParentQuery } from "./hooks/useParentQuery";
 
@@ -102,32 +106,49 @@ function statusLabel(status: QueryStatus): string {
 
 // ─── Child Card Component ────────────────────────────────────────────────────
 
-function ChildCard({ item }: { item: Child }) {
+function ChildCard({ item, onAttendancePress }: { item: Child; onAttendancePress: () => void }) {
   return (
     <View style={[styles.childCard, { width: CARD_WIDTH }]}>
+      <LinearGradient
+        colors={[colors.primaryLight + "AA", colors.surface + "AA"]}
+        start={[0, 0]}
+        end={[1, 0]}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.childRow}>
         <View style={styles.childInfo}>
           <Text style={styles.childName}>{item.name}</Text>
           <Text style={styles.childCls}>{item.cls}</Text>
           <Text style={styles.childRoll}>Roll No. {item.rollNo}</Text>
         </View>
-        <StatusPill
-          variant={
-            item.attendance === "present"
-              ? "success"
-              : item.attendance === "pending"
-                ? "warning"
-                : "danger"
-          }
-          label={
-            item.attendance === "present"
-              ? "Present Today"
-              : item.attendance === "pending"
-                ? "Pending"
-                : "Absent Today"
-          }
-        />
+        <Pressable onPress={onAttendancePress}>
+          <StatusPill
+            variant={
+              item.attendance === "present"
+                ? "success"
+                : item.attendance === "pending"
+                  ? "warning"
+                  : "danger"
+            }
+            label={
+              item.attendance === "present"
+                ? "Present · 9:02 AM"
+                : item.attendance === "pending"
+                  ? "Attendance Pending"
+                  : "Absent Today"
+            }
+          />
+        </Pressable>
       </View>
+      <Pressable
+        style={styles.childBottomRow}
+        onPress={onAttendancePress}
+      >
+        <Text style={styles.childBottomText}>
+          View attendance history
+        </Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      </Pressable>
     </View>
   );
 }
@@ -141,6 +162,50 @@ function FeedCard({ item }: { item: Update }) {
       <View style={styles.feedBody}>
         <Text style={styles.feedTitle}>{item.title}</Text>
         <Text style={styles.feedSub}>{item.sub}</Text>
+        <Text style={styles.feedTime}>{item.time}</Text>
+      </View>
+    </View>
+  );
+}
+
+function AnnouncementCard({ item, index }: { item: Update; index: number }) {
+  const featured = index === 0;
+  if (featured) {
+    return (
+      <View
+        style={[
+          styles.featuredCard,
+          { backgroundColor: colors.primaryLight, borderRadius: 24 },
+        ]}
+      >
+        <View
+          style={[styles.featuredAccent, { backgroundColor: item.color }]}
+        />
+        <View style={styles.featuredContent}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name="megaphone-outline"
+              size={16}
+              color={colors.textPrimary}
+            />
+            <Text style={styles.feedTitle}>{item.title}</Text>
+          </View>
+          <Text style={styles.featuredBody} numberOfLines={3}>
+            {item.sub}
+          </Text>
+          <Text style={styles.feedTime}>{item.time}</Text>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.feedCard}>
+      <View style={[styles.feedAccent, { backgroundColor: item.color }]} />
+      <View style={styles.feedBody}>
+        <Text style={styles.feedTitle}>{item.title}</Text>
+        <Text style={styles.feedSub} numberOfLines={2}>
+          {item.sub}
+        </Text>
         <Text style={styles.feedTime}>{item.time}</Text>
       </View>
     </View>
@@ -226,6 +291,7 @@ function QueryDetailSheet({
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [replySent, setReplySent] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -250,7 +316,11 @@ function QueryDetailSheet({
         prev ? { ...prev, replies: [...prev.replies, newReply] } : prev,
       );
       setReplyText("");
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      setReplySent(true);
+      setTimeout(() => {
+        setReplySent(false);
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 2000);
     } catch {
       setReplyError("Failed to send. Try again.");
     } finally {
@@ -342,6 +412,12 @@ function QueryDetailSheet({
               </View>
             ) : (
               <View style={styles.replyInputRow}>
+                {replySent && (
+                  <View style={styles.replySentBanner}>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+                    <Text style={styles.replySentText}>Reply sent!</Text>
+                  </View>
+                )}
                 {replyError && (
                   <Text style={styles.replyErrorText}>{replyError}</Text>
                 )}
@@ -389,6 +465,8 @@ export function HomeScreen() {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
   const [announcements, setAnnouncements] = useState<ParentAnnouncement[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [parentProfileState, setParentProfileState] =
     useState<ParentProfile>(PARENT_PROFILE);
   const [childrenData, setChildrenData] = useState<Child[]>(() =>
@@ -428,6 +506,15 @@ export function HomeScreen() {
       .then((data) => setAnnouncements(data.results))
       .catch(() => {
         // silently ignore announcements fetch errors
+      });
+  }, []);
+
+  const loadUnreadCount = useCallback(() => {
+    notificationsApi
+      .getUnreadCount()
+      .then((data) => setUnreadCount(data.count))
+      .catch(() => {
+        // silently ignore unread count errors
       });
   }, []);
 
@@ -473,12 +560,13 @@ export function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadProfileAndAttendance();
+      loadUnreadCount();
       // Load announcements after profile is fetched
       const timer = setTimeout(() => {
         loadAnnouncements();
       }, 100);
       return () => clearTimeout(timer);
-    }, [loadProfileAndAttendance, loadAnnouncements]),
+    }, [loadProfileAndAttendance, loadAnnouncements, loadUnreadCount]),
   );
 
   const onViewableItemsChanged = useRef(
@@ -497,51 +585,95 @@ export function HomeScreen() {
     time: formatPublishedAt(a.published_at),
   }));
 
+  // Animations: bell dot pulse (once) and FAB entry
+  const bellPulse = useRef(new Animated.Value(1)).current;
+  const fabScale = useRef(new Animated.Value(0)).current;
+  const [showFabLabel, setShowFabLabel] = useState(false);
+
+  useEffect(() => {
+    // bell pulse once
+    Animated.sequence([
+      Animated.timing(bellPulse, {
+        toValue: 0.6,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(bellPulse, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // FAB entry after slight delay
+    const t = setTimeout(() => {
+      Animated.spring(fabScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 6,
+      }).start();
+    }, 400);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <HeaderBar
-        left={
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>{schoolInitials || "···"}</Text>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <View style={styles.headerWrap}>
+        <View style={styles.headerTop}>
+          <View style={styles.schoolPill}>
+            <Text style={styles.schoolPillText}>{schoolInitials || "···"}</Text>
           </View>
-        }
-        center={
-          <View style={styles.headerCenter}>
-            <Text style={styles.greeting} numberOfLines={1}>
-              {getGreeting()}, {parentFirstName}
-            </Text>
-            <Text style={styles.schoolSub} numberOfLines={1}>
-              {parentProfileState.school.name}
-            </Text>
-          </View>
-        }
-        right={
-          <View style={styles.headerRight}>
+          <View style={styles.headerIcons}>
             <Pressable onPress={() => router.push("/(tabs)/parent/calendar")}>
               <Ionicons
                 name="calendar-outline"
-                size={22}
-                color={colors.parent}
+                size={24}
+                color={colors.primary}
               />
             </Pressable>
-            <View>
-              <Ionicons
-                name="notifications-outline"
-                size={22}
-                color={colors.textMuted}
-              />
-              {announcements.length > 0 && <View style={styles.notifDot} />}
+            <View style={{ marginLeft: 8 }}>
+              <Pressable onPress={() => setShowNotifications(true)}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={24}
+                  color={colors.textMuted}
+                />
+                {unreadCount > 0 && (
+                  <Animated.View
+                    style={[styles.notifDot, { opacity: bellPulse }]}
+                  />
+                )}
+              </Pressable>
             </View>
           </View>
-        }
-      />
+        </View>
+
+        <View style={styles.headerBottom}>
+          <View>
+            <Text style={styles.greeting} numberOfLines={1}>
+              {getGreeting()}, {parentFirstName}
+            </Text>
+            <View style={styles.schoolRow}>
+              <Text style={styles.schoolSub} numberOfLines={1}>
+                {parentProfileState.school.name}
+              </Text>
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={colors.primary}
+                style={{ marginLeft: 6 }}
+              />
+            </View>
+          </View>
+        </View>
+      </View>
 
       <FlatList
         data={feedItems}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <View style={styles.feedWrapper}>
-            <FeedCard item={item} />
+            <AnnouncementCard item={item} index={index} />
           </View>
         )}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
@@ -554,7 +686,17 @@ export function HomeScreen() {
                 <FlatList
                   data={childrenData}
                   keyExtractor={(c) => c.id}
-                  renderItem={({ item }) => <ChildCard item={item} />}
+                  renderItem={({ item }) => (
+                    <ChildCard
+                      item={item}
+                      onAttendancePress={() =>
+                        router.push({
+                          pathname: "/(tabs)/parent/attendance-history",
+                          params: { student_id: item.id, student_name: item.name },
+                        })
+                      }
+                    />
+                  )}
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
@@ -566,14 +708,11 @@ export function HomeScreen() {
                     {childrenData.map((_, i) => (
                       <View
                         key={i}
-                        style={[
-                          styles.dot,
-                          {
-                            width: i === activeIndex ? 20 : 6,
-                            backgroundColor:
-                              i === activeIndex ? colors.parent : colors.border,
-                          },
-                        ]}
+                        style={
+                          i === activeIndex
+                            ? styles.indicatorActive
+                            : styles.indicatorInactive
+                        }
                       />
                     ))}
                   </View>
@@ -582,19 +721,12 @@ export function HomeScreen() {
             )}
             {feedItems.length > 0 && (
               <View style={styles.announcementsHeader}>
-                <Text style={styles.sectionLabel}>Announcements</Text>
-                <Pressable
-                  onPress={queryActions.openQuerySheet}
-                  style={styles.raiseQueryInline}
+                <Text style={styles.sectionLabel}>ANNOUNCEMENTS</Text>
+                {/* <Pressable
+                  onPress={() => router.push("/(tabs)/parent/(tabs)/queries")}
                 >
-                  <Text style={styles.raiseQueryTextInline}>Raise a Query</Text>
-                  <Ionicons
-                    name="chatbubble-outline"
-                    size={16}
-                    color={ACCENT}
-                    style={styles.raiseQueryIcon}
-                  />
-                </Pressable>
+                  <Text style={styles.seeAll}>See all</Text>
+                </Pressable> */}
               </View>
             )}
           </View>
@@ -604,6 +736,12 @@ export function HomeScreen() {
             <Text style={styles.emptyText}>No announcements yet</Text>
           </View>
         }
+      />
+
+      <NotificationsSheet
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        onUnreadCountChange={setUnreadCount}
       />
 
       {/* Success toast */}
@@ -631,6 +769,60 @@ export function HomeScreen() {
           setSelectedQueryId(null);
         }}
       />
+      {/* FAB */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          right: 20,
+          bottom: "20%",
+          transform: [{ scale: fabScale }],
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {showFabLabel && (
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 16,
+                marginRight: 8,
+                shadowColor: "#000",
+                shadowOpacity: 0.1,
+                shadowOffset: { width: 0, height: 2 },
+                shadowRadius: 8,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: colors.textPrimary }}>
+                Raise a Query
+              </Text>
+            </View>
+          )}
+          <Pressable
+            onPress={() => queryActions.openQuerySheet()}
+            onLongPress={() => setShowFabLabel(true)}
+            onPressOut={() => setShowFabLabel(false)}
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 26,
+              backgroundColor: colors.primary,
+              alignItems: "center",
+              justifyContent: "center",
+              shadowColor: colors.primary,
+              shadowOpacity: 0.35,
+              shadowOffset: { width: 0, height: 4 },
+              shadowRadius: 16,
+            }}
+          >
+            <Ionicons
+              name="chatbubble-ellipses"
+              size={22}
+              color={colors.surface}
+            />
+          </Pressable>
+        </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -641,53 +833,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
   },
-  listContent: { paddingBottom: spacing.lg },
-  logoCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.parent,
-    alignItems: "center",
-    justifyContent: "center",
+  listContent: { paddingBottom: spacing.xxxl + 72 },
+  headerWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background,
   },
-  logoText: {
-    ...(typography.label as object),
-    color: colors.surface,
-    fontWeight: "700",
-    fontSize: 9,
-  },
-  greeting: { ...(typography.h3 as object), color: colors.textPrimary },
-  headerCenter: {
-    alignItems: "center",
-  },
-  schoolSub: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  headerRight: {
+  headerTop: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: spacing.md,
   },
+  schoolPill: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  schoolPillText: {
+    color: colors.primary,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  headerIcons: { flexDirection: "row", alignItems: "center" },
+  greeting: {
+    ...(typography.h1 as object),
+    color: colors.textPrimary,
+    fontSize: 22,
+  },
+  headerBottom: { marginTop: spacing.sm },
+  schoolRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  schoolSub: { fontSize: 13, color: colors.textMuted },
   notifDot: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    width: 7,
-    height: 7,
-    borderRadius: 999,
-    backgroundColor: colors.danger,
-    borderWidth: 1.5,
-    borderColor: colors.surface,
+    top: -2,
+    right: -2,
+    width: 6,
+    height: 6,
+    borderRadius: 6,
+    backgroundColor: colors.red,
   },
   childCard: {
-    backgroundColor: colors.successBg,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: spacing.lg,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 12,
   },
   childRow: {
     flexDirection: "row",
@@ -710,10 +905,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: spacing.xs,
+    gap: 8,
     marginBottom: spacing.xl,
   },
-  dot: { height: 6, borderRadius: 999 },
+  dot: { height: 6, borderRadius: 3 },
+  indicatorActive: {
+    width: 20,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  indicatorInactive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#D1D5DB",
+  },
   sectionLabel: {
     ...(typography.label as object),
     color: colors.textMuted,
@@ -727,6 +934,23 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 14,
     overflow: "hidden",
+  },
+  featuredCard: {
+    flexDirection: "row",
+    borderRadius: 14,
+    overflow: "hidden",
+    alignItems: "stretch",
+  },
+  featuredAccent: {
+    width: 6,
+    borderTopLeftRadius: 3,
+    borderBottomLeftRadius: 3,
+  },
+  featuredContent: { flex: 1, padding: 14 },
+  featuredBody: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+    marginTop: 6,
   },
   feedAccent: { width: 3 },
   feedBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.lg },
@@ -762,18 +986,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
-  raiseQueryInline: {
+  seeAll: { fontSize: 13, color: colors.primary, fontWeight: "500" },
+
+  // Child card bottom row
+  childBottomRow: {
+    marginTop: spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: spacing.sm,
+    justifyContent: "space-between",
   },
-  raiseQueryTextInline: {
-    ...(typography.body as object),
-    color: colors.parent,
-    textDecorationLine: "underline",
-    fontWeight: "500",
-  },
-  raiseQueryIcon: { marginLeft: spacing.xs },
+  childBottomText: { fontSize: 12, color: colors.textMuted },
 
   // Success toast
   successToast: {
@@ -781,11 +1003,13 @@ const styles = StyleSheet.create({
     bottom: spacing.xxl,
     left: spacing.lg,
     right: spacing.lg,
-    backgroundColor: "#1D9E75",
-    borderRadius: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
   },
   successToastText: {
     ...(typography.body as object),
@@ -827,7 +1051,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.parent,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -952,7 +1176,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.parent,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -963,5 +1187,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#e53935",
     marginBottom: spacing.sm,
+  },
+  replySentBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  replySentText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: "500",
   },
 });

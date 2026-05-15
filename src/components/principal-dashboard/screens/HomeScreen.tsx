@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { router } from "expo-router";
 import React from "react";
 import { Dimensions, FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
 import { typography } from "../../../constants/typography";
+import { useAuthStore } from "../../../../store/auth-store";
 import { HeaderBar, MetricCard } from "../../shared";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -54,25 +56,35 @@ function heatColor(val: number) {
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
+  const { currentUser } = useAuthStore();
+  const schoolName = currentUser?.school.name?.trim() || "School";
+  const schoolInitials = schoolName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <HeaderBar
         left={
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>DPS</Text>
+            <Text style={styles.logoText}>{schoolInitials || "SC"}</Text>
           </View>
         }
-        center={<Text style={styles.headerTitle}>Delhi Public School</Text>}
+        center={<Text style={styles.headerTitle}>{schoolName}</Text>}
         right={
-          <View>
+          <Pressable
+            onPress={() => router.push("/(tabs)/principal/calendar")}
+            hitSlop={8}
+          >
             <Ionicons
-              name="notifications-outline"
+              name="calendar-outline"
               size={22}
-              color={colors.textMuted}
+              color={colors.textPrimary}
             />
-            <View style={styles.notifDot} />
-          </View>
+          </Pressable>
         }
       />
 
@@ -185,17 +197,6 @@ const styles = StyleSheet.create({
     ...(typography.label as object),
     color: colors.surface,
     fontWeight: "700",
-  },
-  notifDot: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    width: 7,
-    height: 7,
-    borderRadius: 999,
-    backgroundColor: colors.danger,
-    borderWidth: 1.5,
-    borderColor: colors.surface,
   },
   listContent: { padding: spacing.lg, gap: spacing.lg },
   listHeader: { gap: spacing.lg },

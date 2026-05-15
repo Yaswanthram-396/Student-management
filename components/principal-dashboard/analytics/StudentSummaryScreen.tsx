@@ -230,6 +230,13 @@ export function StudentSummaryScreen() {
                       {data.student.class_name} · Section {data.student.section_name} · {data.student.student_ref_id}
                     </Text>
                     <Text style={styles.examLabel}>{data.exam.exam_name}</Text>
+                    <Text style={styles.examDateLabel}>
+                      {new Date(data.exam.exam_date).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </Text>
                   </View>
                   {riskCfg && (
                     <View style={[styles.overallRiskBadge, { backgroundColor: riskCfg.bg }]}>
@@ -239,11 +246,46 @@ export function StudentSummaryScreen() {
                     </View>
                   )}
                 </View>
+
+                <View style={styles.summaryMetricsRow}>
+                  <View style={styles.summaryMetricCard}>
+                    <Text style={styles.summaryMetricValue}>
+                      {data.total_marks}/{data.max_marks}
+                    </Text>
+                    <Text style={styles.summaryMetricLabel}>Marks</Text>
+                  </View>
+                  <View style={styles.summaryMetricCard}>
+                    <Text style={styles.summaryMetricValue}>
+                      {data.percentage.toFixed(1)}%
+                    </Text>
+                    <Text style={styles.summaryMetricLabel}>Percentage</Text>
+                  </View>
+                  <View style={styles.summaryMetricCard}>
+                    <Text style={styles.summaryMetricValue}>#{data.class_rank}</Text>
+                    <Text style={styles.summaryMetricLabel}>Class Rank</Text>
+                  </View>
+                  <View style={styles.summaryMetricCard}>
+                    <Text style={styles.summaryMetricValue}>#{data.section_rank}</Text>
+                    <Text style={styles.summaryMetricLabel}>Section Rank</Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={styles.timelineBtn}
+                  onPress={() =>
+                    router.push(
+                      `/(tabs)/principal/student-exams?student_id=${student_id}` as any,
+                    )
+                  }
+                >
+                  <Ionicons name="time-outline" size={14} color={colors.principal} />
+                  <Text style={styles.timelineBtnText}>View All Exams</Text>
+                </Pressable>
               </View>
 
               {/* Exam picker */}
               <ExamPicker
-                exams={data.exams}
+                exams={data.exams ?? []}
                 currentExamId={exam_id!}
                 studentId={student_id!}
               />
@@ -279,8 +321,34 @@ const styles = StyleSheet.create({
   studentCardName: { ...(typography.h3 as object), fontWeight: '600', color: colors.textPrimary },
   studentCardMeta: { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
   examLabel:       { ...(typography.caption as object), color: colors.principal, marginTop: 4, fontWeight: '500' },
+  examDateLabel:   { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
   overallRiskBadge:{ paddingVertical: 4, paddingHorizontal: spacing.sm, borderRadius: 999 },
   overallRiskText: { ...(typography.label as object), fontWeight: '700' },
+  summaryMetricsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  summaryMetricCard: {
+    flex: 1,
+    minWidth: 68,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+  },
+  summaryMetricValue: { ...(typography.body as object), fontWeight: '700', color: colors.textPrimary },
+  summaryMetricLabel: { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
+  timelineBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.principal,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+  },
+  timelineBtnText: { ...(typography.caption as object), color: colors.principal, fontWeight: '600' },
 
   examPicker:    { marginBottom: -spacing.sm },
   examPickerRow: { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },

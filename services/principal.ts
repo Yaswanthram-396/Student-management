@@ -1,17 +1,27 @@
 import { apiRequest } from './api';
+import { appendAssetToFormData } from './upload';
+import type { UploadAsset } from './upload';
 import type {
+  AcademicClassResponse,
+  AcademicClassesListResponse,
   SchoolConfig,
+  SubjectResponse,
+  SubjectsListResponse,
   TeacherResponse,
+  TeachersListResponse,
   BulkUploadBatch,
   AnnouncementResponse,
   AnnouncementsListResponse,
   CalendarEventResponse,
   CalendarEventsListResponse,
+  DeleteSuccessResponse,
   ExamResponse,
   ResultsResponse,
   AnalyticsResponse,
   SectionResponse,
   SectionsListResponse,
+  SectionStudentsListResponse,
+  StudentDetailResponse,
   DailySummaryResponse,
   ClassAttendanceDetailResponse,
 } from '../types/principal';
@@ -24,10 +34,46 @@ export const principalApi = {
   updateConfig: (body: Partial<Omit<SchoolConfig, 'school_id' | 'subdomain'>>) =>
     apiRequest<SchoolConfig>('PATCH', '/principal/configuration/', body),
 
+  // ── Classes ──────────────────────────────────────────────────────────────────
+  getClasses: () =>
+    apiRequest<AcademicClassesListResponse>('GET', '/classes/'),
+
+  createClass: (body: {
+    name: string;
+    display_order: number;
+  }) => apiRequest<AcademicClassResponse>('POST', '/principal/classes/', body),
+
+  updateClass: (classId: string, body: {
+    name?: string;
+    display_order?: number;
+  }) => apiRequest<AcademicClassResponse>('PATCH', `/principal/classes/${classId}/`, body),
+
+  deleteClass: (classId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/classes/${classId}/`),
+
+  // ── Subjects ─────────────────────────────────────────────────────────────────
+  getSubjects: () =>
+    apiRequest<SubjectsListResponse>('GET', '/subjects/'),
+
+  createSubject: (body: {
+    name: string;
+    code: string;
+    is_active: boolean;
+  }) => apiRequest<SubjectResponse>('POST', '/principal/subjects/', body),
+
+  updateSubject: (subjectId: string, body: {
+    name?: string;
+    code?: string;
+    is_active?: boolean;
+  }) => apiRequest<SubjectResponse>('PATCH', `/principal/subjects/${subjectId}/`, body),
+
+  deleteSubject: (subjectId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/subjects/${subjectId}/`),
+
   // ── Teachers ─────────────────────────────────────────────────────────────────
   createTeacher: (body: {
     name: string;
-    mobile_number: string;
+    phone_number: string;
     username: string;
     password: string;
     primary_subject_id: string;
@@ -42,15 +88,21 @@ export const principalApi = {
             .map(([k, v]) => [k, String(v)])
         ).toString()
       : '';
-    return apiRequest<TeacherResponse[]>('GET', `/principal/teachers/${qs}`);
+    return apiRequest<TeachersListResponse>('GET', `/principal/teachers/${qs}`);
   },
 
   updateTeacher: (id: string, body: {
     name?: string;
-    mobile_number?: string;
+    phone_number?: string;
     primary_subject_id?: string;
     assigned_section_ids?: string[];
   }) => apiRequest<TeacherResponse>('PATCH', `/principal/teachers/${id}/`, body),
+
+  bulkUploadTeachers: (formData: FormData) =>
+    apiRequest<BulkUploadBatch>('POST', '/principal/teachers/bulk-upload/', formData, true),
+
+  getTeacherBulkUploadStatus: (batchId: string) =>
+    apiRequest<BulkUploadBatch>('GET', `/principal/teachers/bulk-upload/${batchId}/`),
 
   // ── Student bulk upload ───────────────────────────────────────────────────────
   bulkUploadStudents: (formData: FormData) =>
@@ -59,15 +111,70 @@ export const principalApi = {
   getBulkUploadStatus: (batchId: string) =>
     apiRequest<BulkUploadBatch>('GET', `/principal/students/bulk-upload/${batchId}/`),
 
+  // ── Profile ───────────────────────────────────────────────────────────────────
+  uploadProfilePic: async (asset: UploadAsset) => {
+    const formData = new FormData();
+    await appendAssetToFormData(formData, 'profile_pic', asset, 'profile_pic.jpg');
+    return apiRequest<{ profile_pic_url: string }>(
+      'PATCH', '/principal/profile/pic/', formData, true,
+    );
+  },
+
   // ── Announcements ─────────────────────────────────────────────────────────────
-  createAnnouncement: (body: {
+  createAnnouncement: async (params: {
     title: string;
     body: string;
     audience: 'SCHOOL' | 'CLASS' | 'SECTION';
     class_ids?: string[];
     section_ids?: string[];
     publish_now: boolean;
-  }) => apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', body),
+    attachments?: UploadAsset[];
+  }) => {
+    if (!params.attachments?.length) {
+      const { attachments: _a, ...jsonBody } = params;
+      return apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', jsonBody);
+    }
+    const formData = new FormData();
+    formData.append('title', params.title);
+    formData.append('body', params.body);
+    formData.append('audience', params.audience);
+    formData.append('publish_now', String(params.publish_now));
+    params.class_ids?.forEach((id) => formData.append('class_ids', id));
+    params.section_ids?.forEach((id) => formData.append('section_ids', id));
+    for (const asset of params.attachments) {
+      await appendAssetToFormData(formData, 'attachments', asset);
+    }
+    return apiRequest<AnnouncementResponse>('POST', '/principal/announcements/', formData, true);
+  },
+
+  updateAnnouncement: async (announcementId: string, params: {
+    title?: string;
+    body?: string;
+    audience?: 'SCHOOL' | 'CLASS' | 'SECTION';
+    class_ids?: string[];
+    section_ids?: string[];
+    publish_now?: boolean;
+    attachments?: UploadAsset[];
+  }) => {
+    if (!params.attachments?.length) {
+      const { attachments: _a, ...jsonBody } = params;
+      return apiRequest<AnnouncementResponse>('PATCH', `/principal/announcements/${announcementId}/`, jsonBody);
+    }
+    const formData = new FormData();
+    if (params.title !== undefined) formData.append('title', params.title);
+    if (params.body !== undefined) formData.append('body', params.body);
+    if (params.audience !== undefined) formData.append('audience', params.audience);
+    if (params.publish_now !== undefined) formData.append('publish_now', String(params.publish_now));
+    params.class_ids?.forEach((id) => formData.append('class_ids', id));
+    params.section_ids?.forEach((id) => formData.append('section_ids', id));
+    for (const asset of params.attachments) {
+      await appendAssetToFormData(formData, 'attachments', asset);
+    }
+    return apiRequest<AnnouncementResponse>('PATCH', `/principal/announcements/${announcementId}/`, formData, true);
+  },
+
+  deleteAnnouncement: (announcementId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/announcements/${announcementId}/`),
 
   getAnnouncements: (params?: { audience?: 'SCHOOL' | 'CLASS' | 'SECTION'; published_after?: string }) => {
     const qs = params
@@ -90,7 +197,13 @@ export const principalApi = {
     visible_to: string[];
   }) => apiRequest<CalendarEventResponse>('POST', '/principal/calendar-events/', body),
 
-  getCalendarEvents: (params?: { event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT'; start_date?: string; end_date?: string }) => {
+  getCalendarEvents: (params?: {
+    event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT';
+    start_date?: string;
+    end_date?: string;
+    month?: number;
+    year?: number;
+  }) => {
     const qs = params
       ? '?' + new URLSearchParams(
           Object.entries(params)
@@ -101,14 +214,51 @@ export const principalApi = {
     return apiRequest<CalendarEventsListResponse>('GET', `/calendar-events/${qs}`);
   },
 
+  updateCalendarEvent: (eventId: string, body: {
+    title?: string;
+    event_type?: 'HOLIDAY' | 'EXAM' | 'EVENT';
+    start_date?: string;
+    end_date?: string;
+    description?: string;
+    visible_to?: string[];
+  }) => apiRequest<CalendarEventResponse>('PATCH', `/principal/calendar-events/${eventId}/`, body),
+
+  deleteCalendarEvent: (eventId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/calendar-events/${eventId}/`),
+
   // ── Sections ──────────────────────────────────────────────────────────────────
   getSections: (params?: { class_id?: string }) => {
     const qs = params?.class_id ? `?class_id=${params.class_id}` : '';
-    return apiRequest<SectionsListResponse>('GET', `/principal/sections/${qs}`);
+    return apiRequest<SectionsListResponse>('GET', `/sections/${qs}`);
   },
 
-  updateSection: (sectionId: string, body: { parent_query_enabled: boolean }) =>
+  getSectionStudents: (sectionId: string) =>
+    apiRequest<SectionStudentsListResponse>(
+      'GET',
+      `/sections/${sectionId}/students/`,
+    ),
+
+  getStudentDetail: (studentId: string, params?: { date?: string }) => {
+    const qs = params?.date ? `?date=${params.date}` : '';
+    return apiRequest<StudentDetailResponse>('GET', `/students/${studentId}/${qs}`);
+  },
+
+  createSection: (body: {
+    class_id: string;
+    name: string;
+    class_teacher_id?: string | null;
+    parent_query_enabled: boolean;
+  }) => apiRequest<SectionResponse>('POST', '/principal/sections/', body),
+
+  updateSection: (sectionId: string, body: {
+    name?: string;
+    class_teacher_id?: string | null;
+    parent_query_enabled?: boolean;
+  }) =>
     apiRequest<SectionResponse>('PATCH', `/principal/sections/${sectionId}/`, body),
+
+  deleteSection: (sectionId: string) =>
+    apiRequest<DeleteSuccessResponse>('DELETE', `/principal/sections/${sectionId}/`),
 
   // ── Attendance ────────────────────────────────────────────────────────────────
   getAttendanceDailySummary: (params?: { date?: string }) => {

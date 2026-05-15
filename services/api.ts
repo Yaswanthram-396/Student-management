@@ -150,6 +150,10 @@ export async function apiRequest<T>(
     throw new ApiError("UNAUTHORIZED", "Session expired. Please log in again.");
   }
 
+  if (res.status === 204) {
+    return {} as T;
+  }
+
   const data = await parseJsonResponse(res, method, fullUrl);
 
   if (!res.ok) {

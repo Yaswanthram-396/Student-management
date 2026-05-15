@@ -21,6 +21,7 @@ import { spacing } from '../../../constants/spacing';
 import { typography } from '../../../constants/typography';
 import { analyticsApi } from '../../../services/analyticsApi';
 import { principalApi } from '../../../services/principal';
+import { appendAssetToFormData } from '../../../services/upload';
 import type { AnalyticsExam, AnalyticsStatus } from '../../../types/analytics';
 import { BottomSheet, HeaderBar } from '../../shared';
 
@@ -77,6 +78,14 @@ function ExamCard({ exam, onUpload }: { exam: AnalyticsExam; onUpload: (id: stri
               })}
             </Text>
           ) : null}
+          <Text style={styles.examType}>
+            {exam.type === 'CLASS' ? 'Whole Class Exam' : 'Section Exam'}
+          </Text>
+          {(exam.academic_class || exam.section) && (
+            <Text style={styles.examDate}>
+              {exam.academic_class?.name ?? exam.section?.name}
+            </Text>
+          )}
         </View>
         <StatusChip status={exam.analytics_status} />
       </View>
@@ -119,6 +128,7 @@ export function ExamListScreen() {
   const [uploadExamId, setUploadExamId] = useState<string | null>(null);
   const [uploading, setUploading]       = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const filteredSections = sections.filter(s => s.class_id === selectedClass);
 
   // ── Load exams ──────────────────────────────────────────────────────────────
 
@@ -131,6 +141,16 @@ export function ExamListScreen() {
   }, []);
 
   useEffect(() => { loadExams(); }, [loadExams]);
+
+  useEffect(() => {
+    const hasActiveJobs = exams.some(
+      (exam) => exam.analytics_status === 'PENDING' || exam.analytics_status === 'RUNNING',
+    );
+    if (!hasActiveJobs) return;
+
+    const timeout = setTimeout(() => loadExams(), 7000);
+    return () => clearTimeout(timeout);
+  }, [exams, loadExams]);
 
   // ── Load classes/sections for create sheet ──────────────────────────────────
 
@@ -155,11 +175,27 @@ export function ExamListScreen() {
       .catch(() => {});
   }, [showCreate]);
 
+  useEffect(() => {
+    if (scopeType !== 'section') return;
+    if (filteredSections.length === 0) return;
+    if (!filteredSections.some((section) => section.id === selectedSection)) {
+      setSelectedSection(filteredSections[0].id);
+    }
+  }, [filteredSections, scopeType, selectedSection]);
+
   // ── Create exam ─────────────────────────────────────────────────────────────
 
   async function handleCreate() {
     if (!examName.trim()) {
       Alert.alert('Validation', 'Please enter an exam name.');
+      return;
+    }
+    if (scopeType === 'class' && !selectedClass) {
+      Alert.alert('Validation', 'Please choose a class before creating the exam.');
+      return;
+    }
+    if (scopeType === 'section' && !selectedSection) {
+      Alert.alert('Validation', 'Please choose a section before creating the exam.');
       return;
     }
     const body =
@@ -199,17 +235,16 @@ export function ExamListScreen() {
       const formData = new FormData();
 
       const mimeType = asset.mimeType ?? 'application/octet-stream';
-      const isCSV   = mimeType.includes('csv') || asset.name.endsWith('.csv');
+      const isCSV   = mimeType.includes('csv') || asset.name?.endsWith('.csv');
       const isExcel = mimeType.includes('excel') || mimeType.includes('spreadsheet');
       const isPDF   = mimeType.includes('pdf');
 
       const fieldName = isCSV ? 'csv_file' : isExcel ? 'excel_file' : isPDF ? 'pdf_file' : 'csv_file';
 
-      formData.append(fieldName, {
-        uri: asset.uri,
-        name: asset.name,
-        type: mimeType,
-      } as unknown as Blob);
+      await appendAssetToFormData(formData, fieldName, {
+        ...asset,
+        mimeType,
+      }, asset.name ?? 'upload');
 
       setUploading(true);
       await analyticsApi.uploadExam(uploadExamId, formData);
@@ -251,14 +286,18 @@ export function ExamListScreen() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  const filteredSections = sections.filter(s => s.class_id === selectedClass);
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <HeaderBar
         center={<Text style={styles.headerTitle}>Exam Analytics</Text>}
         right={
           <View style={styles.headerActions}>
+            {/* <Pressable
+              onPress={() => router.push('/(tabs)/principal/analytics' as any)}
+              style={styles.headerIconBtn}
+            >
+              <Ionicons name="grid-outline" size={22} color={colors.principal} />
+            </Pressable> */}
             <Pressable
               onPress={handleDownloadTemplate}
               disabled={downloadingTemplate}
@@ -296,9 +335,11 @@ export function ExamListScreen() {
             <ExamCard exam={item} onUpload={id => setUploadExamId(id)} />
           )}
           ListHeaderComponent={
-            <Text style={styles.sectionLabel}>
-              {exams.length} exam{exams.length !== 1 ? 's' : ''}
-            </Text>
+            <View style={styles.listHeaderBlock}>
+              <Text style={styles.sectionLabel}>
+                {exams.length} exam{exams.length !== 1 ? 's' : ''}
+              </Text>
+            </View>
           }
         />
       )}
@@ -395,9 +436,9 @@ export function ExamListScreen() {
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </Pressable>
           <Pressable
-            style={[styles.primaryBtn, creating && { opacity: 0.6 }]}
+            style={[styles.primaryBtn, (!examName.trim() || (scopeType === 'class' ? !selectedClass : !selectedSection) || creating) && { opacity: 0.6 }]}
             onPress={handleCreate}
-            disabled={creating}
+            disabled={creating || !examName.trim() || (scopeType === 'class' ? !selectedClass : !selectedSection)}
           >
             <Text style={styles.primaryBtnText}>{creating ? 'Creating…' : 'Create Exam'}</Text>
           </Pressable>
@@ -448,10 +489,10 @@ const styles = StyleSheet.create({
   emptyText:    { ...(typography.h3 as object), color: colors.textSecondary },
   emptyHint:    { ...(typography.caption as object), color: colors.textMuted },
   listContent:  { padding: spacing.lg, paddingBottom: spacing.xxxl },
+  listHeaderBlock: { marginBottom: spacing.sm, gap: spacing.sm },
   sectionLabel: { ...(typography.label as object), color: colors.textMuted, marginBottom: spacing.sm },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   headerIconBtn: { padding: 4, minWidth: 30, alignItems: 'center' },
-
   // Exam card
   examCard: {
     backgroundColor: colors.surface,
@@ -462,6 +503,7 @@ const styles = StyleSheet.create({
   examCardTop:      { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   examName:         { ...(typography.body as object), fontWeight: '600', color: colors.textPrimary },
   examDate:         { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
+  examType:         { ...(typography.caption as object), color: colors.textSecondary, marginTop: 4 },
   examCardActions:  { marginTop: spacing.sm },
   uploadBtn: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,

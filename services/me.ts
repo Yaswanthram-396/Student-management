@@ -44,9 +44,10 @@ function normalizeMeResponse(raw: unknown): MeResponse {
         ? (user.profile as UnknownRecord)
         : {};
 
-  // Inject phone_number from user into profile since the API keeps it on the user object
+  // Inject fields from user into profile since the API keeps them on the user object
   const normalizedProfile = {
     ...profile,
+    name: (profile as UnknownRecord).name || (typeof user.name === "string" ? user.name : ""),
     phone_number: typeof user.phone_number === "string" ? user.phone_number : "",
   };
 

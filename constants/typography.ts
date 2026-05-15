@@ -1,35 +1,35 @@
-import { TextStyle } from 'react-native';
+import { TextStyle } from "react-native";
 
 export const typography: Record<string, TextStyle> = {
   display: {
-    fontSize: 28,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: "700",
   },
   h1: {
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: "600",
   },
   h2: {
-    fontSize: 18,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: "600",
   },
   h3: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: "500",
   },
   body: {
     fontSize: 14,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   caption: {
     fontSize: 12,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   label: {
     fontSize: 11,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
   },
 };
 
