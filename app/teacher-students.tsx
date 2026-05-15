@@ -19,116 +19,86 @@ import {
 } from '../services/teacher-sections';
 
 const ACCENT  = '#185FA5';
-const GREEN   = '#16825D';
 const INK     = '#101828';
 const MUTED   = '#667085';
 const LINE    = '#EAECF0';
 const BG      = '#F6F8FB';
 const SURFACE = '#FFFFFF';
 
+const AVATAR_COLORS = [
+  '#185FA5', '#16825D', '#C76A00', '#6941C6', '#0E9384', '#C01048',
+];
+
 function getParam(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v[0] : v ?? '';
 }
-
 function goBack() {
   if (router.canGoBack()) router.back();
   else router.replace('/(tabs)/teacher' as any);
 }
-
 function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase() || '?';
+  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+}
+function avatarColor(i: number) {
+  return AVATAR_COLORS[i % AVATAR_COLORS.length];
 }
 
-// ── Avatar colours cycle ──────────────────────────────────────────────────────
-const AVATAR_COLORS = [
-  '#185FA5', '#16825D', '#C76A00', '#6941C6', '#0E9384', '#C01048',
-];
-function avatarColor(index: number) {
-  return AVATAR_COLORS[index % AVATAR_COLORS.length];
-}
-
-// ── Loading skeleton ──────────────────────────────────────────────────────────
-function SkeletonRow() {
+// ── Skeleton loading ──────────────────────────────────────────────────────────
+function SkeletonRow({ last }: { last?: boolean }) {
   return (
-    <View style={styles.skeletonRow}>
-      <View style={styles.skeletonAvatar} />
-      <View style={styles.skeletonInfo}>
-        <View style={styles.skeletonName} />
-        <View style={styles.skeletonSub} />
+    <>
+      <View style={styles.studentRow}>
+        <View style={[styles.avatar, { backgroundColor: '#EAECF0' }]} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <View style={{ height: 14, width: '55%', borderRadius: 7, backgroundColor: '#EAECF0' }} />
+          <View style={{ height: 11, width: '38%', borderRadius: 6, backgroundColor: '#F2F4F7' }} />
+        </View>
+        <View style={{ width: 20, height: 14, borderRadius: 6, backgroundColor: '#F2F4F7' }} />
       </View>
-    </View>
+      {!last && <View style={styles.divider} />}
+    </>
   );
 }
 
-function LoadingState() {
-  return (
-    <View style={styles.listCard}>
-      {[...Array(8)].map((_, i) => (
-        <React.Fragment key={i}>
-          <SkeletonRow />
-          {i < 7 && <View style={styles.rowDivider} />}
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
-
-// ── Error state ───────────────────────────────────────────────────────────────
-function FailureState({ onRetry }: { onRetry: () => void }) {
-  return (
-    <View style={styles.stateBox}>
-      <View style={styles.stateIconWrap}>
-        <Ionicons name="cloud-offline-outline" size={30} color="#DC2626" />
-      </View>
-      <Text style={styles.stateTitle}>Could not load students</Text>
-      <Text style={styles.stateBody}>Check your connection and try again.</Text>
-      <Pressable style={styles.retryBtn} onPress={onRetry}>
-        <Ionicons name="refresh-outline" size={15} color={SURFACE} />
-        <Text style={styles.retryText}>Try Again</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-// ── Single student row ────────────────────────────────────────────────────────
-function StudentRow({ student, index }: { student: SectionStudentDetail; index: number }) {
-  const color = avatarColor(index);
+// ── Student row ───────────────────────────────────────────────────────────────
+function StudentRow({ student, index, last }: { student: SectionStudentDetail; index: number; last: boolean }) {
+  const color    = avatarColor(index);
   const initials = getInitials(student.name);
 
   return (
-    <View style={styles.studentRow}>
-      <View style={[styles.avatar, { backgroundColor: color }]}>
-        <Text style={styles.avatarText}>{initials}</Text>
-      </View>
-      <View style={styles.studentInfo}>
-        <Text style={styles.studentName}>{student.name}</Text>
-        <View style={styles.studentMeta}>
-          {!!student.roll_number && (
-            <View style={styles.metaChip}>
-              <Ionicons name="id-card-outline" size={11} color={MUTED} />
-              <Text style={styles.metaText}>Roll {student.roll_number}</Text>
-            </View>
-          )}
-          {!!student.admission_number && (
-            <View style={styles.metaChip}>
-              <Ionicons name="document-text-outline" size={11} color={MUTED} />
-              <Text style={styles.metaText}>{student.admission_number}</Text>
-            </View>
-          )}
+    <>
+      <View style={styles.studentRow}>
+        {/* Avatar */}
+        <View style={[styles.avatar, { backgroundColor: color }]}>
+          <Text style={styles.avatarText}>{initials}</Text>
         </View>
+
+        {/* Info */}
+        <View style={styles.studentInfo}>
+          <Text style={styles.studentName}>{student.name}</Text>
+          <View style={styles.badgeRow}>
+            {!!student.roll_number && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>Roll {student.roll_number}</Text>
+              </View>
+            )}
+            {!!student.admission_number && (
+              <View style={[styles.badge, styles.badgeGray]}>
+                <Text style={[styles.badgeText, styles.badgeTextGray]}>{student.admission_number}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Rank */}
+        <Text style={styles.rank}>{index + 1}</Text>
       </View>
-      <Text style={styles.indexNum}>{index + 1}</Text>
-    </View>
+      {!last && <View style={styles.divider} />}
+    </>
   );
 }
 
-// ── Main screen ───────────────────────────────────────────────────────────────
+// ── Screen ────────────────────────────────────────────────────────────────────
 export default function TeacherStudentsScreen() {
   const params      = useLocalSearchParams();
   const sectionId   = getParam(params.sectionId);
@@ -146,7 +116,6 @@ export default function TeacherStudentsScreen() {
     setError(false);
     try {
       const res = await teacherSectionsApi.getSectionStudentDetails(sectionId);
-      // Sort by roll number numerically, fallback to name
       const sorted = [...res.results].sort((a, b) => {
         const ra = parseInt(a.roll_number, 10);
         const rb = parseInt(b.roll_number, 10);
@@ -164,35 +133,35 @@ export default function TeacherStudentsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const q = search.trim().toLowerCase();
+  const q        = search.trim().toLowerCase();
   const filtered = q
-    ? students.filter(
-        s =>
-          s.name.toLowerCase().includes(q) ||
-          s.roll_number.toLowerCase().includes(q) ||
-          s.admission_number.toLowerCase().includes(q),
+    ? students.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.roll_number.toLowerCase().includes(q) ||
+        s.admission_number.toLowerCase().includes(q),
       )
     : students;
 
-  const title    = className && sectionName ? `${className} – ${sectionName}` : sectionName || 'Students';
-  const subtitle = loading ? 'Loading…' : `${students.length} student${students.length !== 1 ? 's' : ''}`;
+  const heading  = [className, sectionName].filter(Boolean).join(' – ') || 'Students';
+  const countStr = loading ? 'Loading…' : `${students.length} student${students.length !== 1 ? 's' : ''}`;
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+    // edges top+bottom: header sits below status bar (truly fixed) and bottom inset is respected
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
-        {/* ── Header ── */}
+        {/* ── Fixed header ── */}
         <View style={styles.header}>
-          <Pressable style={styles.backBtn} onPress={goBack} hitSlop={8}>
+          <Pressable style={styles.backBtn} onPress={goBack} hitSlop={10}>
             <Ionicons name="chevron-back" size={22} color={INK} />
           </Pressable>
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
-            <Text style={styles.headerSub}>{subtitle}</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>{heading}</Text>
+            <Text style={styles.headerSub}>{countStr}</Text>
           </View>
         </View>
 
-        {/* ── Search + list (keyboard-aware) ── */}
+        {/* ── Scrollable content ── */}
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
@@ -201,9 +170,9 @@ export default function TeacherStudentsScreen() {
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={!loading && !error && students.length > 0 ? [0] : undefined}
         >
-          {/* Sticky search bar */}
+          {/* Sticky search (index 0) */}
           {!loading && !error && students.length > 0 && (
-            <View style={styles.searchStickyWrap}>
+            <View style={styles.searchWrap}>
               <View style={styles.searchBar}>
                 <Ionicons name="search-outline" size={16} color="#AAAAAA" />
                 <TextInput
@@ -224,21 +193,41 @@ export default function TeacherStudentsScreen() {
             </View>
           )}
 
-          {/* States */}
-          {loading && <LoadingState />}
-          {!loading && error && <FailureState onRetry={load} />}
+          {/* Loading */}
+          {loading && (
+            <View style={styles.listCard}>
+              {[...Array(8)].map((_, i) => <SkeletonRow key={i} last={i === 7} />)}
+            </View>
+          )}
 
+          {/* Error */}
+          {!loading && error && (
+            <View style={styles.stateBox}>
+              <View style={styles.errorIconWrap}>
+                <Ionicons name="cloud-offline-outline" size={30} color="#DC2626" />
+              </View>
+              <Text style={styles.stateTitle}>Could not load students</Text>
+              <Text style={styles.stateBody}>Check your connection and try again.</Text>
+              <Pressable style={styles.retryBtn} onPress={load}>
+                <Ionicons name="refresh-outline" size={15} color={SURFACE} />
+                <Text style={styles.retryText}>Try Again</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Empty section */}
           {!loading && !error && students.length === 0 && (
             <View style={styles.stateBox}>
-              <Ionicons name="people-outline" size={48} color="#CCCCCC" />
+              <Ionicons name="people-outline" size={52} color="#CCCCCC" />
               <Text style={styles.stateTitle}>No students found</Text>
               <Text style={styles.stateBody}>No active students in this section.</Text>
             </View>
           )}
 
+          {/* No search match */}
           {!loading && !error && students.length > 0 && filtered.length === 0 && (
             <View style={styles.stateBox}>
-              <Ionicons name="search-outline" size={40} color="#CCCCCC" />
+              <Ionicons name="search-outline" size={44} color="#CCCCCC" />
               <Text style={styles.stateTitle}>No results for "{search}"</Text>
               <Text style={styles.stateBody}>Try a different name, roll or admission number.</Text>
             </View>
@@ -248,110 +237,130 @@ export default function TeacherStudentsScreen() {
           {!loading && !error && filtered.length > 0 && (
             <View style={styles.listCard}>
               {filtered.map((student, idx) => (
-                <React.Fragment key={student.id}>
-                  <StudentRow student={student} index={idx} />
-                  {idx < filtered.length - 1 && <View style={styles.rowDivider} />}
-                </React.Fragment>
+                <StudentRow
+                  key={student.id}
+                  student={student}
+                  index={idx}
+                  last={idx === filtered.length - 1}
+                />
               ))}
             </View>
           )}
         </ScrollView>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: BG },
+  flex: { flex: 1 },
 
-  // Header
+  // Fixed header
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: SURFACE,
-    paddingHorizontal: 14, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: LINE,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: LINE,
+    // Shadow so it looks raised above scrolling content
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#F0F4F8',
+  },
   headerText: { flex: 1 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: INK },
-  headerSub:   { fontSize: 13, color: MUTED, marginTop: 2 },
+  headerSub:   { fontSize: 13, color: MUTED, marginTop: 3 },
 
   // Scroll
   scroll: { flex: 1 },
-  scrollContent: { padding: 14, gap: 0, paddingBottom: 24 },
+  scrollContent: { padding: 16, paddingBottom: 28 },
 
-  // Sticky search
-  searchStickyWrap: {
+  // Sticky search wrapper
+  searchWrap: {
     backgroundColor: BG,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: SURFACE,
-    paddingHorizontal: 14, paddingVertical: 12,
+    paddingHorizontal: 14, paddingVertical: 13,
     borderRadius: 14, borderWidth: 1, borderColor: LINE,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   searchInput: { flex: 1, fontSize: 14, color: INK, paddingVertical: 0 },
 
-  // Student list card
+  // List card
   listCard: {
-    backgroundColor: SURFACE, borderRadius: 16,
-    borderWidth: 1, borderColor: LINE, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: LINE,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  rowDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 72 },
+  divider: { height: 1, backgroundColor: '#F4F5F7', marginLeft: 72 },
 
-  // Student row
+  // Student row — generous vertical padding so nothing feels crammed
   studentRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 13, gap: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
   },
   avatar: {
-    width: 44, height: 44, borderRadius: 14,
+    width: 46, height: 46, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   avatarText: { fontSize: 15, fontWeight: '900', color: SURFACE },
-  studentInfo: { flex: 1, gap: 4 },
-  studentName: { fontSize: 15, fontWeight: '700', color: INK, lineHeight: 20 },
-  studentMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaText: { fontSize: 12, color: MUTED, fontWeight: '500' },
-  indexNum: { fontSize: 12, color: '#C8CDD6', fontWeight: '700', flexShrink: 0 },
 
-  // Skeleton
-  skeletonRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 13, gap: 12,
+  studentInfo: { flex: 1, gap: 6 },
+  studentName: { fontSize: 15, fontWeight: '700', color: INK, lineHeight: 20 },
+
+  badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  badge: {
+    backgroundColor: '#EBF2FB',
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6,
   },
-  skeletonAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#EAECF0' },
-  skeletonInfo: { flex: 1, gap: 8 },
-  skeletonName: { height: 14, width: '60%', borderRadius: 7, backgroundColor: '#EAECF0' },
-  skeletonSub:  { height: 11, width: '40%', borderRadius: 6, backgroundColor: '#F2F4F7' },
+  badgeGray: { backgroundColor: '#F2F4F7' },
+  badgeText: { fontSize: 11, fontWeight: '700', color: ACCENT },
+  badgeTextGray: { color: MUTED },
+
+  rank: { fontSize: 13, color: '#C8CDD6', fontWeight: '700', flexShrink: 0 },
 
   // States
   stateBox: {
     alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 60, gap: 10,
+    paddingVertical: 64, gap: 10,
   },
-  stateIconWrap: {
+  errorIconWrap: {
     width: 64, height: 64, borderRadius: 20,
-    backgroundColor: '#FEEDEB', alignItems: 'center', justifyContent: 'center',
-    marginBottom: 4,
+    backgroundColor: '#FEEDEB', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
   },
   stateTitle: { fontSize: 16, fontWeight: '700', color: INK },
   stateBody:  { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 19 },
   retryBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: ACCENT, borderRadius: 10,
-    paddingHorizontal: 18, paddingVertical: 10, marginTop: 4,
+    paddingHorizontal: 18, paddingVertical: 10, marginTop: 6,
   },
   retryText: { color: SURFACE, fontWeight: '700', fontSize: 13 },
-
-  // Green accent used in empty states
-  _green: { color: GREEN },
 });

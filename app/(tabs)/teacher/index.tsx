@@ -224,7 +224,7 @@ export default function HomeScreen() {
                 <Ionicons name="people" size={20} color={ACCENT} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Class Roster</Text>
+                <Text style={styles.cardTitle}>My Students</Text>
                 <Text style={styles.cardSubtitle}>
                   {selectedSection.student_count > 0
                     ? `${selectedSection.student_count} student${selectedSection.student_count !== 1 ? 's' : ''} · ${selectedSection.class_name} – ${selectedSection.section_name}`
