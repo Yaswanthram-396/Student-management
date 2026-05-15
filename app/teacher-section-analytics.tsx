@@ -3,6 +3,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -529,8 +531,16 @@ export default function SectionAnalyticsScreen() {
   }));
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <Header title={`Section ${sectionName}`} subtitle={examName} />
 
         <View style={styles.heroCard}>
@@ -568,10 +578,12 @@ export default function SectionAnalyticsScreen() {
         />
       </ScrollView>
     </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: BG },
   scrollContent: { paddingHorizontal: 16, paddingTop: 34, gap: 18, paddingBottom: 28 },
   pressed: { opacity: 0.76 },
