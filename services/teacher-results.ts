@@ -1,5 +1,5 @@
 import { analyticsApi } from './analyticsApi';
-import type { ExamOverviewClass, ExamOverviewSection, RiskLabel, SectionStudent } from '../types/analytics';
+import type { ExamOverviewClass, ExamOverviewSection, PerformanceLabel, QuestionStatus, RiskLabel, SectionStudent } from '../types/analytics';
 
 // ── Types (unchanged — all screens import these) ──────────────────────────────
 
@@ -283,5 +283,62 @@ export async function fetchTeacherQuestionStudents(
     correct: students.correct ?? [],
     wrong: students.wrong ?? [],
     unattempted: students.unattempted ?? [],
+  };
+}
+
+// ── Student subject drill-down ─────────────────────────────────────────────────
+
+export interface StudentSubjectDrilldown {
+  student: {
+    student_id: string;
+    student_ref_id: string;
+    name: string;
+    class_name: string;
+    section_name: string;
+  };
+  exam: { id: string; exam_name: string; exam_date: string };
+  subject_name: string;
+  result: {
+    total_marks: number;
+    max_marks: number;
+    percentage: number;
+    exam_rank: number;
+    correct: number;
+    wrong: number;
+    unattempted: number;
+    risk_label: RiskLabel;
+    performance_label: PerformanceLabel;
+    z_score: number;
+  };
+  questions: { q_no: number; status: QuestionStatus }[];
+}
+
+/**
+ * GET /analytics/student/{studentId}/subject/{subjectId}/?exam_id={examId}
+ * Returns per-question status + result summary for one student/subject pair.
+ */
+export async function fetchStudentSubjectDrilldown(
+  studentId: string,
+  subjectId: string,
+  examId: string,
+): Promise<StudentSubjectDrilldown> {
+  const data = await analyticsApi.getStudentSubject(studentId, subjectId, examId);
+  return {
+    student: data.student,
+    exam: data.exam,
+    subject_name: data.subject_name,
+    result: {
+      total_marks: data.result.total_marks,
+      max_marks: data.result.max_marks,
+      percentage: data.result.percentage,
+      exam_rank: data.result.exam_rank,
+      correct: data.result.correct,
+      wrong: data.result.wrong,
+      unattempted: data.result.unattempted,
+      risk_label: data.result.risk_label,
+      performance_label: data.result.performance_label,
+      z_score: data.result.z_score,
+    },
+    questions: (data.questions ?? []).map(q => ({ q_no: q.q_no, status: q.status })),
   };
 }

@@ -223,11 +223,13 @@ function StudentPerformanceRow({
   expanded,
   onPress,
   classDetails,
+  onSubjectPress,
 }: {
   student: TeacherSectionStudent;
   expanded: boolean;
   onPress: () => void;
   classDetails: SectionSubjectDetail[];
+  onSubjectPress?: (subjectId: string, subjectName: string) => void;
 }) {
   const initials = student.name
     .split(" ")
@@ -266,12 +268,20 @@ function StudentPerformanceRow({
               const delta = classAvg === undefined ? undefined : subject.subject_percentage - classAvg;
               const positive = (delta ?? 0) >= 0;
               const risk = student.subject_risk[subject.subject_name] as RiskLabel | undefined;
+              const canDrill = !!subject.subject_id && !!onSubjectPress;
 
               return (
-                <View key={`${student.student_id}-${subject.subject_id ?? subject.subject_name}`} style={styles.subjectScoreRow}>
+                <Pressable
+                  key={`${student.student_id}-${subject.subject_id ?? subject.subject_name}`}
+                  onPress={canDrill ? () => onSubjectPress!(subject.subject_id!, subject.subject_name) : undefined}
+                  style={({ pressed }) => [styles.subjectScoreRow, canDrill && pressed && styles.pressed]}
+                >
                   <View style={styles.subjectScoreTop}>
                     <Text style={styles.subjectScoreName}>{subject.subject_name}</Text>
-                    {risk && <RiskBadge risk={risk} />}
+                    <View style={styles.subjectScoreTopRight}>
+                      {risk && <RiskBadge risk={risk} />}
+                      {canDrill && <Ionicons name="chevron-forward" size={14} color="#98A2B3" />}
+                    </View>
                   </View>
                   <View style={styles.subjectScoreMetric}>
                     <Text style={styles.subjectScoreValue}>{subject.subject_percentage.toFixed(1)}%</Text>
@@ -295,7 +305,7 @@ function StudentPerformanceRow({
                       ]}
                     />
                   </View>
-                </View>
+                </Pressable>
               );
             })
           )}
@@ -315,6 +325,7 @@ function StudentPerformancePanel({
   onChangeQuery,
   onToggleStudent,
   onRetry,
+  onSubjectPress,
 }: {
   loading: boolean;
   error: boolean;
@@ -325,6 +336,7 @@ function StudentPerformancePanel({
   onChangeQuery: (value: string) => void;
   onToggleStudent: (studentId: string) => void;
   onRetry: () => void;
+  onSubjectPress?: (studentId: string, subjectId: string, subjectName: string) => void;
 }) {
   const filteredStudents = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -419,6 +431,9 @@ function StudentPerformancePanel({
                   expanded={expandedStudentId === student.student_id}
                   onPress={() => onToggleStudent(student.student_id)}
                   classDetails={classDetails}
+                  onSubjectPress={onSubjectPress
+                    ? (subjectId, subjectName) => onSubjectPress(student.student_id, subjectId, subjectName)
+                    : undefined}
                 />
               ))}
             </View>
@@ -493,6 +508,13 @@ export default function SectionAnalyticsScreen() {
     );
   }
 
+  function openStudentSubject(studentId: string, subjectId: string, subjectName: string) {
+    const student = students.find(s => s.student_id === studentId);
+    router.push(
+      `/teacher-student-subject?studentId=${safeParam(studentId)}&studentName=${safeParam(student?.name ?? '')}&studentRefId=${safeParam(student?.student_ref_id ?? '')}&subjectId=${safeParam(subjectId)}&subjectName=${safeParam(subjectName)}&examId=${safeParam(examId)}&examName=${safeParam(examName)}` as any
+    );
+  }
+
   if (loading) return <LoadingState />;
   if (error || !overview) return <FailureState onRetry={loadData} />;
 
@@ -539,6 +561,7 @@ export default function SectionAnalyticsScreen() {
           onChangeQuery={setStudentQuery}
           onToggleStudent={(studentId) => setExpandedStudentId((current) => current === studentId ? null : studentId)}
           onRetry={loadStudents}
+          onSubjectPress={openStudentSubject}
         />
       </ScrollView>
     </SafeAreaView>
@@ -701,6 +724,7 @@ const styles = StyleSheet.create({
   },
   subjectScoreRow: { gap: 8 },
   subjectScoreTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  subjectScoreTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
   subjectScoreName: { color: INK, fontSize: 13, fontWeight: "900", flex: 1 },
   subjectScoreMetric: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   subjectScoreValue: { color: INK, fontSize: 16, fontWeight: "900" },
