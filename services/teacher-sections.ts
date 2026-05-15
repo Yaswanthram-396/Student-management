@@ -46,7 +46,7 @@ interface SectionStudentsResponse {
   results: SectionStudent[];
 }
 
-// Richer student shape returned by GET /api/v1/sections/{id}/students/
+// Richer student shape returned by GET /api/v1/teacher/sections/{id}/students/
 export interface SectionStudentDetail {
   id: string;
   user_id: string;
@@ -83,5 +83,5 @@ export const teacherSectionsApi = {
     apiRequest<SectionStudentsResponse>('GET', `/teacher/sections/${sectionId}/students/`),
   // Richer list used by the students roster screen
   getSectionStudentDetails: (sectionId: string) =>
-    apiRequest<SectionStudentDetailResponse>('GET', `/sections/${sectionId}/students/`),
+    apiRequest<SectionStudentDetailResponse>('GET', `/teacher/sections/${sectionId}/students/`),
 };

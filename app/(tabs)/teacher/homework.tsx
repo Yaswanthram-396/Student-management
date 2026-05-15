@@ -1,10 +1,12 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -16,7 +18,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { teacherHomeworkApi, type Homework } from '../../../services/teacher-homework';
+import { teacherHomeworkApi, type Homework, type HomeworkUploadFile } from '../../../services/teacher-homework';
 import { subjectsApi, type Subject } from '../../../services/subjects';
 import { useTeacherStore } from '../../../store/teacher-store';
 
@@ -93,6 +95,7 @@ export default function HomeworkScreen() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState<Date>(defaultDeadline);
+  const [selectedFiles, setSelectedFiles] = useState<HomeworkUploadFile[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -124,6 +127,7 @@ export default function HomeworkScreen() {
     setDescription('');
     setDeadline(defaultDeadline());
     setSelectedSubject(null);
+    setSelectedFiles([]);
     setFormError('');
     setShowDatePicker(false);
     setShowTimePicker(false);
@@ -139,6 +143,35 @@ export default function HomeworkScreen() {
         setSubjectsLoading(false);
       }
     }
+  }
+
+  async function pickFiles() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+
+      setSelectedFiles((prev) => {
+        const existing = new Set(prev.map((file) => `${file.name}:${file.uri}`));
+        const next = result.assets
+          .map((asset) => ({
+            uri: asset.uri,
+            name: asset.name,
+            type: asset.mimeType ?? null,
+          }))
+          .filter((file) => !existing.has(`${file.name}:${file.uri}`));
+        return [...prev, ...next];
+      });
+      setFormError('');
+    } catch {
+      setFormError('Could not open file picker. Please try again.');
+    }
+  }
+
+  function removeFile(uri: string) {
+    setSelectedFiles((prev) => prev.filter((file) => file.uri !== uri));
   }
 
   function closeSheet() {
@@ -184,6 +217,7 @@ export default function HomeworkScreen() {
         subject_id: selectedSubject.id,
         description: description.trim(),
         deadline: deadline.toISOString(),
+        files: selectedFiles,
       });
       setHomework((prev) => [created, ...prev]);
       setSheetVisible(false);
@@ -332,6 +366,22 @@ export default function HomeworkScreen() {
                     {formatDeadline(hw.deadline)}
                   </Text>
                 </View>
+                {!!hw.attachments?.length && (
+                  <View style={styles.attachmentList}>
+                    {hw.attachments.map((attachment) => (
+                      <Pressable
+                        key={`${hw.id}-${attachment.url}`}
+                        style={({ pressed }) => [styles.attachmentChip, pressed && styles.attachmentChipPressed]}
+                        onPress={() => Linking.openURL(attachment.url)}
+                      >
+                        <Ionicons name="document-attach-outline" size={14} color={ACCENT} />
+                        <Text style={styles.attachmentName} numberOfLines={1}>
+                          {attachment.filename}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
           );
@@ -475,6 +525,34 @@ export default function HomeworkScreen() {
                 >
                   <Text style={styles.iosDoneBtnText}>Done</Text>
                 </Pressable>
+              )}
+
+              {/* Attachments */}
+              <Text style={styles.fieldLabel}>Attachments</Text>
+              <Pressable
+                style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
+                onPress={pickFiles}
+              >
+                <Ionicons name="attach-outline" size={18} color={ACCENT} />
+                <Text style={styles.attachBtnText}>
+                  {selectedFiles.length ? 'Add more files' : 'Add files'}
+                </Text>
+              </Pressable>
+
+              {selectedFiles.length > 0 && (
+                <View style={styles.selectedFileList}>
+                  {selectedFiles.map((file) => (
+                    <View key={file.uri} style={styles.selectedFileRow}>
+                      <View style={styles.selectedFileIcon}>
+                        <Ionicons name="document-outline" size={16} color={ACCENT} />
+                      </View>
+                      <Text style={styles.selectedFileName} numberOfLines={1}>{file.name}</Text>
+                      <Pressable onPress={() => removeFile(file.uri)} hitSlop={8}>
+                        <Ionicons name="close-circle" size={18} color="#AAAAAA" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
               )}
 
               {/* Error */}
@@ -636,6 +714,19 @@ const styles = StyleSheet.create({
   cardDescription: { fontSize: 14, color: '#333333', lineHeight: 20, marginBottom: 12 },
   cardDeadlineRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   cardDeadlineText: { fontSize: 12, fontWeight: '500' },
+  attachmentList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  attachmentChip: {
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EBF2FB',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  attachmentChipPressed: { opacity: 0.72 },
+  attachmentName: { color: ACCENT, fontSize: 12, fontWeight: '600', maxWidth: 220 },
 
   modalWrap: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
@@ -718,6 +809,42 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   iosDoneBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+
+  attachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#D5E7F8',
+    backgroundColor: '#F3F8FE',
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginBottom: 12,
+  },
+  attachBtnPressed: { opacity: 0.75 },
+  attachBtnText: { color: ACCENT, fontSize: 14, fontWeight: '700' },
+  selectedFileList: { gap: 8, marginBottom: 16 },
+  selectedFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  selectedFileIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: '#EBF2FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedFileName: { flex: 1, color: '#333333', fontSize: 13, fontWeight: '600' },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
   errorRowText: { fontSize: 13, color: '#DC2626', flex: 1 },
