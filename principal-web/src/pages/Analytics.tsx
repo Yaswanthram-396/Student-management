@@ -41,7 +41,7 @@ const INK     = '#101828'
 const LINE    = '#EAECF0'
 const BG      = '#F6F8FB'
 const WHITE   = '#FFFFFF'
-const CHART_COLORS = [ACCENT, GREEN, AMBER, '#9B59B6', '#E74C3C']
+const CHART_COLORS = ['#185FA5', '#2563EB', '#3B82F6', '#60A5FA', '#93C5FD']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function riskColor(r: string) {
@@ -174,15 +174,20 @@ function ExamOverviewView({
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
         {/* Subject averages chart */}
         {chartData.length > 0 && (
-          <div className="bg-white border border-[#EAECF0] rounded-xl p-5 shadow-sm">
-            <p className="text-sm font-semibold text-[#101828] mb-4">Class Subject Averages</p>
+          <div className="bg-white border border-[#EAECF0] rounded-[12px] p-6 shadow-card">
+            <p className="text-sm font-bold text-[#1a2340] mb-1">Class Subject Averages</p>
+            <p className="text-xs text-[#4B6FA8] mb-5">Average percentage per subject</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} barSize={28}>
-                <CartesianGrid strokeDasharray="3 3" stroke={LINE} vertical={false} />
+              <BarChart data={chartData} barSize={32}>
+                <CartesianGrid strokeDasharray="0" stroke="#F0F4FF" vertical={false} />
                 <XAxis dataKey="subject" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: MUTED }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: MUTED }} domain={[0, 100]} tickFormatter={v => `${v}%`} />
-                <Tooltip contentStyle={{ border: 'none', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'Average']} />
-                <Bar dataKey="avg" radius={[4, 4, 0, 0]}>
+                <Tooltip
+                  contentStyle={{ border: '1.5px solid #185FA5', borderRadius: 10, fontSize: 12, backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(24,95,165,0.12)', padding: '10px 14px' }}
+                  cursor={{ fill: '#F0F4FF' }}
+                  formatter={(v: number) => [`${v}%`, 'Average']}
+                />
+                <Bar dataKey="avg" radius={[6, 6, 0, 0]}>
                   {chartData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                 </Bar>
               </BarChart>
@@ -192,22 +197,43 @@ function ExamOverviewView({
 
         {/* Top students */}
         {top.length > 0 && (
-          <div className="bg-white border border-[#EAECF0] rounded-xl shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#EAECF0] flex items-center gap-2">
+          <div className="bg-white border border-[#EAECF0] rounded-[12px] shadow-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#F0F4FF] flex items-center gap-2 bg-[#F8FAFF]">
               <Trophy size={16} className="text-[#C76A00]" />
-              <p className="text-sm font-semibold text-[#101828]">Top Students</p>
+              <p className="text-sm font-bold text-[#1a2340]">Top Students</p>
             </div>
-            <div className="divide-y divide-[#EAECF0]">
-              {top.slice(0, 5).map((st, i) => (
-                <div key={st.student_id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="text-sm font-bold text-[#C76A00] w-6">#{st.rank ?? i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#101828] truncate">{st.name}</p>
-                    <p className="text-xs text-[#667085]">{st.student_ref_id}</p>
+            <div className="divide-y divide-[#F0F4FF]">
+              {top.slice(0, 5).map((st, i) => {
+                const rank = st.rank ?? i + 1
+                const medal =
+                  rank === 1 ? { bg: '#FEF9C3', color: '#CA8A04', label: '🥇' } :
+                  rank === 2 ? { bg: '#F1F5F9', color: '#64748B', label: '🥈' } :
+                  rank === 3 ? { bg: '#FEF3E2', color: '#C05621', label: '🥉' } : null
+                return (
+                  <div key={st.student_id} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-[#F8FAFF]">
+                    {medal ? (
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-base flex-shrink-0"
+                        style={{ backgroundColor: medal.bg }}
+                      >
+                        {medal.label}
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[#F0F4FF] flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-[#4B6FA8]">#{rank}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-[#1a2340] truncate">{st.name}</p>
+                      <p className="text-xs text-[#667085]">{st.student_ref_id}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-sm font-bold text-[#185FA5]">{st.total_marks}</span>
+                      <p className="text-xs text-[#667085]">marks</p>
+                    </div>
                   </div>
-                  <span className="text-sm font-bold text-[#185FA5]">{st.total_marks}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -215,29 +241,42 @@ function ExamOverviewView({
 
       {/* Sections */}
       {sections.length > 0 && (
-        <div className="bg-white border border-[#EAECF0] rounded-xl shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#EAECF0]">
-            <p className="text-sm font-semibold text-[#101828]">Sections</p>
+        <div className="bg-white border border-[#EAECF0] rounded-[12px] shadow-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#F0F4FF] bg-[#F8FAFF]">
+            <p className="text-sm font-bold text-[#1a2340]">Section Performance</p>
           </div>
-          <div className="divide-y divide-[#EAECF0]">
-            {sections.map(sec => (
-              <div key={sec.section_id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <p className="text-sm font-medium text-[#101828]">Section {sec.section_name}</p>
-                  <p className="text-xs text-[#667085]">{sec.avg.toFixed(1)}% average</p>
+          <div className="divide-y divide-[#F0F4FF]">
+            {sections.map(sec => {
+              const pct = Math.min(sec.avg, 100)
+              const barColor = pct >= 70 ? '#185FA5' : pct >= 50 ? '#60A5FA' : '#BFDBFE'
+              return (
+                <div key={sec.section_id} className="flex items-center justify-between px-5 py-4 hover:bg-[#F8FAFF] transition-colors">
+                  <div className="flex-1 min-w-0 mr-4">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-sm font-semibold text-[#1a2340]">Section {sec.section_name}</p>
+                      <span className="text-sm font-bold text-[#185FA5]">{sec.avg.toFixed(1)}%</span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full h-1.5 bg-[#F0F4FF] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%`, backgroundColor: barColor }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button variant="ghost" size="sm"
+                      onClick={() => onSectionDetail(sec.section_id, sec.section_name)}>
+                      Subjects
+                    </Button>
+                    <Button variant="secondary" size="sm" leftIcon={<Users size={13} />}
+                      onClick={() => onSectionStudents(sec.section_id, sec.section_name)}>
+                      Students
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm"
-                    onClick={() => onSectionDetail(sec.section_id, sec.section_name)}>
-                    Subjects
-                  </Button>
-                  <Button variant="secondary" size="sm" leftIcon={<Users size={13} />}
-                    onClick={() => onSectionStudents(sec.section_id, sec.section_name)}>
-                    Students
-                  </Button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

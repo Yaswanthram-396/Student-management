@@ -170,61 +170,53 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-7">
         {/* Weekly trend */}
         <Card>
-          <h3 className="text-sm font-semibold text-[#101828] mb-4">Weekly Attendance Trend</h3>
+          <h3 className="text-sm font-bold text-[#1a2340] mb-1">Weekly Attendance Trend</h3>
+          <p className="text-xs text-[#4B6FA8] mb-5">Present vs absent — last 5 days</p>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={weeklyData} barSize={24} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#EAECF0" vertical={false} />
-              <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#667085' }} />
-              <YAxis
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: '#667085' }}
-                domain={[0, 100]}
-              />
+            <BarChart data={weeklyData} barSize={22} barCategoryGap="32%" style={{ padding: '0 8px' }}>
+              <CartesianGrid strokeDasharray="0" stroke="#F0F4FF" vertical={false} />
+              <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#667085', fontFamily: 'Plus Jakarta Sans' }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#667085' }} domain={[0, 100]} tickFormatter={v => `${v}%`} />
               <Tooltip
-                contentStyle={{ border: 'none', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                contentStyle={{ border: '1.5px solid #185FA5', borderRadius: 10, fontSize: 12, backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(24,95,165,0.12)', padding: '10px 14px' }}
+                cursor={{ fill: '#F0F4FF' }}
               />
-              <Bar dataKey="present" name="Present %" fill="#16825D" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="absent" name="Absent %" fill="#FEE4E2" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="present" name="Present %" fill="#185FA5" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="absent"  name="Absent %"  fill="#BFDBFE" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
 
-        {/* Section-wise attendance today */}
+        {/* Class-wise attendance today */}
         <Card>
-          <h3 className="text-sm font-semibold text-[#101828] mb-4">Today's Section Attendance</h3>
+          <h3 className="text-sm font-bold text-[#1a2340] mb-1">Today's Class Attendance</h3>
+          <p className="text-xs text-[#4B6FA8] mb-5">Attendance percentage by class</p>
           {attendanceData.length === 0 ? (
             <div className="flex items-center justify-center h-[220px] text-sm text-[#667085]">
               No attendance data for today
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={attendanceData} barSize={20} barCategoryGap="25%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#EAECF0" vertical={false} />
-                <XAxis
-                  dataKey="class_name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#667085' }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#667085' }}
-                  domain={[0, 100]}
-                />
+              <BarChart data={attendanceData} barSize={28} barCategoryGap="28%">
+                <CartesianGrid strokeDasharray="0" stroke="#F0F4FF" vertical={false} />
+                <XAxis dataKey="class_name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#667085' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#667085' }} domain={[0, 100]} tickFormatter={v => `${v}%`} />
                 <Tooltip
-                  contentStyle={{ border: 'none', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                  contentStyle={{ border: '1.5px solid #185FA5', borderRadius: 10, fontSize: 12, backgroundColor: '#fff', boxShadow: '0 4px 16px rgba(24,95,165,0.12)', padding: '10px 14px' }}
+                  cursor={{ fill: '#F0F4FF' }}
                   formatter={(value: number) => [`${value}%`, 'Attendance']}
                 />
-                <Bar dataKey="attendance_percentage" name="Attendance %" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="attendance_percentage" name="Attendance %" radius={[6, 6, 0, 0]}>
                   {attendanceData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.attendance_percentage >= 80 ? '#16825D' : entry.attendance_percentage >= 60 ? '#C76A00' : '#D92D20'}
+                      fill={
+                        entry.attendance_percentage >= 80 ? '#185FA5' :
+                        entry.attendance_percentage >= 60 ? '#60A5FA' : '#BFDBFE'
+                      }
                     />
                   ))}
                 </Bar>
@@ -235,7 +227,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Quick Actions */}
         <Card>
           <h3 className="text-sm font-semibold text-[#101828] mb-4">Quick Actions</h3>

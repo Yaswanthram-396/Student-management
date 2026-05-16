@@ -152,26 +152,43 @@ export default function StudentsPage() {
       </div>
 
       {/* Bulk upload */}
-      <div className="mb-5">
+      <div className="mb-6">
         <div
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-            dragOver ? 'border-[#185FA5] bg-[#185FA5]/5' : 'border-[#EAECF0] hover:border-[#185FA5]/40'
+          className={`rounded-[12px] p-8 text-center transition-all duration-200 ${
+            dragOver
+              ? 'bg-[#F0F4FF] border-2 border-[#185FA5]'
+              : 'bg-[#F8FAFF] border-2 hover:border-[#185FA5]/60'
           }`}
+          style={{
+            borderStyle: 'dashed',
+            borderColor: dragOver ? '#185FA5' : '#BFDBFE',
+          }}
           onDragOver={e => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
         >
           <div className="flex flex-col items-center gap-3">
-            {uploadLoading ? <Spinner size="md" className="text-[#185FA5]" /> : <CloudUpload size={32} className="text-[#667085]" />}
+            {uploadLoading ? (
+              <Spinner size="md" className="text-[#185FA5]" />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-[#F0F4FF] border border-[#DBEAFE] flex items-center justify-center">
+                <CloudUpload size={24} className="text-[#185FA5]" />
+              </div>
+            )}
             <div>
-              <p className="text-sm font-medium text-[#101828]">
-                Drag & drop a CSV, or{' '}
-                <button onClick={() => fileInputRef.current?.click()} className="text-[#185FA5] hover:underline">browse</button>
+              <p className="text-sm font-semibold text-[#1a2340]">
+                Drag & drop a CSV file, or{' '}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-[#185FA5] hover:underline font-bold"
+                >
+                  browse to upload
+                </button>
               </p>
-              <p className="text-xs text-[#667085] mt-1">
+              <p className="text-xs text-[#4B6FA8] mt-1.5 font-medium">
                 Required: student_name, class, section, parent_name, parent_mobile_number
               </p>
-              <p className="text-xs text-[#667085]">
+              <p className="text-xs text-[#667085] mt-0.5">
                 Optional: roll_number, admission_number, student_username, parent_username
               </p>
             </div>
@@ -180,22 +197,35 @@ export default function StudentsPage() {
           </div>
         </div>
         {uploadMsg && (
-          <p className={`mt-2 text-sm font-medium ${
-            uploadStatus === 'COMPLETED' ? 'text-[#16825D]' :
-            uploadStatus === 'FAILED'    ? 'text-[#D92D20]' : 'text-[#185FA5]'}`}>
+          <div className={`mt-3 flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold border ${
+            uploadStatus === 'COMPLETED'
+              ? 'bg-[#DCFAE6] text-[#16825D] border-[#ABEFC6]'
+              : uploadStatus === 'FAILED'
+              ? 'bg-[#FEE4E2] text-[#D92D20] border-[#FCA5A5]'
+              : 'bg-[#EFF8FF] text-[#185FA5] border-[#BFDBFE]'
+          }`}>
             {uploadMsg}
-          </p>
+          </div>
         )}
+      </div>
+
+      {/* Styled "or" divider */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent to-[#DBEAFE]" />
+        <span className="text-xs font-bold text-[#4B6FA8] px-3 py-1 rounded-full bg-[#F0F4FF] border border-[#DBEAFE]">
+          OR VIEW BY CLASS
+        </span>
+        <div className="flex-1 h-px bg-gradient-to-l from-transparent to-[#DBEAFE]" />
       </div>
 
       {/* Student list */}
       {!selectedSection ? (
-        <EmptyState icon={<GraduationCap size={48} />} title="Select a class and section"
+        <EmptyState icon={<GraduationCap size={40} />} title="Select a class and section"
           description="Choose a class and section above to view its student list." />
       ) : (
-        <div className="bg-white border border-[#EAECF0] rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#EAECF0]">
-            <p className="text-sm font-semibold text-[#101828]">
+        <div className="bg-white rounded-[12px] shadow-card overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-[#F0F4FF] bg-[#F8FAFF]">
+            <p className="text-sm font-bold text-[#1a2340]">
               {students.length} student{students.length !== 1 ? 's' : ''}
             </p>
           </div>

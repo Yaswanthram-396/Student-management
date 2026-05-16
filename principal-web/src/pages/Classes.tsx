@@ -246,112 +246,105 @@ export default function ClassesPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {classes.map((cls) => (
-            <div key={cls.id} className="bg-white border border-[#EAECF0] rounded-xl shadow-sm overflow-hidden">
-              {/* Class header */}
-              <div className="flex items-center justify-between px-5 py-4">
-                <button
-                  className="flex items-center gap-3 flex-1 text-left group"
-                  onClick={() => toggleExpand(cls)}
-                >
-                  <div className="p-2 rounded-lg bg-blue-50 text-[#185FA5]">
-                    <BookOpen size={16} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[#101828] group-hover:text-[#185FA5] transition-colors">
-                      {cls.name}
-                    </p>
-                    <p className="text-xs text-[#667085]">
-                      {cls.sections ? cls.sections.length : 0} section{cls.sections && cls.sections.length !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  {cls.expanded ? (
-                    <ChevronDown size={16} className="ml-2 text-[#667085]" />
-                  ) : (
-                    <ChevronRight size={16} className="ml-2 text-[#667085]" />
-                  )}
-                </button>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    leftIcon={<Pencil size={14} />}
-                    onClick={() => openEditClass(cls)}
+            <div
+              key={cls.id}
+              className="group bg-white rounded-[12px] shadow-card overflow-hidden hover-lift"
+              style={{ borderLeft: '4px solid #185FA5' }}
+            >
+              {/* Card header */}
+              <div className="px-5 py-5">
+                <div className="flex items-start justify-between mb-3">
+                  <button
+                    className="flex items-center gap-3 text-left flex-1 min-w-0"
+                    onClick={() => toggleExpand(cls)}
                   >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    leftIcon={<Trash2 size={14} />}
-                    className="text-[#D92D20] hover:bg-red-50"
-                    onClick={() => confirmDelete('class', cls.id, cls.name)}
-                  >
-                    Delete
-                  </Button>
+                    <div className="w-10 h-10 rounded-[10px] bg-[#F0F4FF] flex items-center justify-center flex-shrink-0">
+                      <BookOpen size={18} className="text-[#185FA5]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-[#1a2340] text-base leading-tight group-hover:text-[#185FA5] transition-colors">
+                        {cls.name}
+                      </p>
+                      <p className="text-xs text-[#4B6FA8] mt-0.5 font-medium">
+                        {cls.sections ? cls.sections.length : 0} section{cls.sections && cls.sections.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </button>
+                  {/* Actions — visible on hover */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0 ml-2">
+                    <button
+                      onClick={() => openEditClass(cls)}
+                      className="p-1.5 rounded-lg text-[#667085] hover:bg-[#F0F4FF] hover:text-[#185FA5] transition-all-smooth"
+                      title="Edit class"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => confirmDelete('class', cls.id, cls.name)}
+                      className="p-1.5 rounded-lg text-[#667085] hover:bg-[#FEE4E2] hover:text-[#D92D20] transition-all-smooth"
+                      title="Delete class"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Expand toggle */}
+                <button
+                  onClick={() => toggleExpand(cls)}
+                  className="flex items-center gap-1.5 text-xs text-[#185FA5] font-semibold hover:text-[#0e3d6e] transition-colors"
+                >
+                  {cls.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {cls.expanded ? 'Hide sections' : 'View sections'}
+                </button>
               </div>
 
               {/* Sections panel */}
               {cls.expanded && (
-                <div className="border-t border-[#EAECF0] bg-gray-50 px-5 py-4">
+                <div className="border-t border-[#F0F4FF] bg-[#F8FAFF] px-5 py-4">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-[#667085] uppercase tracking-wide">
-                      Sections
-                    </p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      leftIcon={<Plus size={14} />}
-                      onClick={() => openCreateSection(cls.id)}
-                    >
+                    <p className="text-xs font-bold text-[#4B6FA8] uppercase tracking-wider">Sections</p>
+                    <Button variant="secondary" size="sm" leftIcon={<Plus size={13} />} onClick={() => openCreateSection(cls.id)}>
                       Add Section
                     </Button>
                   </div>
                   {cls.loadingSections ? (
-                    <div className="flex justify-center py-6">
+                    <div className="flex justify-center py-5">
                       <Spinner size="sm" className="text-[#185FA5]" />
                     </div>
                   ) : cls.sections && cls.sections.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="space-y-2">
                       {cls.sections.map((sec) => (
                         <div
                           key={sec.id}
-                          className="bg-white border border-[#EAECF0] rounded-lg p-3 flex items-center justify-between"
+                          className="group/sec bg-white border border-[#DBEAFE]/70 rounded-[10px] px-3 py-2.5 flex items-center justify-between shadow-sm"
                         >
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-md bg-[#185FA5]/10 text-[#185FA5]">
-                              <Users size={14} />
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-[#F0F4FF] flex items-center justify-center">
+                              <Users size={13} className="text-[#185FA5]" />
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-[#101828]">{sec.name}</p>
+                              <p className="text-sm font-semibold text-[#1a2340]">Section {sec.name}</p>
                               {sec.class_teacher && (
                                 <p className="text-xs text-[#667085]">CT: {sec.class_teacher.name}</p>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => openEditSection(sec)}
-                              className="p-1.5 rounded-md text-[#667085] hover:bg-gray-100 hover:text-[#185FA5] transition-colors"
-                            >
-                              <Pencil size={13} />
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover/sec:opacity-100 transition-opacity">
+                            <button onClick={() => openEditSection(sec)} className="p-1.5 rounded text-[#667085] hover:bg-[#F0F4FF] hover:text-[#185FA5] transition-all-smooth">
+                              <Pencil size={12} />
                             </button>
-                            <button
-                              onClick={() => confirmDelete('section', sec.id, sec.name)}
-                              className="p-1.5 rounded-md text-[#667085] hover:bg-red-50 hover:text-[#D92D20] transition-colors"
-                            >
-                              <Trash2 size={13} />
+                            <button onClick={() => confirmDelete('section', sec.id, sec.name)} className="p-1.5 rounded text-[#667085] hover:bg-[#FEE4E2] hover:text-[#D92D20] transition-all-smooth">
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-[#667085] text-center py-4">
-                      No sections yet. Add one above.
-                    </p>
+                    <p className="text-sm text-[#667085] text-center py-3">No sections yet.</p>
                   )}
                 </div>
               )}
