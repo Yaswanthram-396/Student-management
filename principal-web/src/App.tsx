@@ -15,6 +15,7 @@ import AnalyticsPage from './pages/Analytics'
 import AnnouncementsPage from './pages/Announcements'
 import CalendarPage from './pages/CalendarPage'
 import SettingsPage from './pages/Settings'
+import SubjectsPage from './pages/Subjects'
 
 function ProtectedLayout() {
   const { isAuthenticated, loading } = useAuth()
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/announcements" element={<AnnouncementsPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/subjects" element={<SubjectsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

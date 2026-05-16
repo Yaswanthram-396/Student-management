@@ -15,6 +15,7 @@ import {
   X,
   Bell,
   ChevronRight,
+  FlaskConical,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Classes', path: '/classes', icon: <BookOpen size={20} /> },
   { label: 'Teachers', path: '/teachers', icon: <Users size={20} /> },
   { label: 'Students', path: '/students', icon: <GraduationCap size={20} /> },
+  { label: 'Subjects', path: '/subjects', icon: <FlaskConical size={20} /> },
   { label: 'Attendance', path: '/attendance', icon: <CalendarCheck size={20} /> },
   { label: 'Analytics', path: '/analytics', icon: <BarChart3 size={20} /> },
   { label: 'Announcements', path: '/announcements', icon: <Megaphone size={20} /> },
