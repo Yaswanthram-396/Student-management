@@ -9,6 +9,7 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -28,8 +29,61 @@ type AssignmentStep = "teachers" | "subjects" | "sections";
 
 type SectionGroup = {
   title: string;
+  classId: string;
   data: SectionResponse[];
 };
+
+// ── Step indicator ────────────────────────────────────────────────────────────
+const STEPS: { key: AssignmentStep; label: string }[] = [
+  { key: "teachers", label: "Teacher"  },
+  { key: "subjects", label: "Subject"  },
+  { key: "sections", label: "Sections" },
+];
+
+function StepIndicator({ current }: { current: AssignmentStep }) {
+  const activeIdx = STEPS.findIndex((s) => s.key === current);
+  return (
+    <View style={siStyles.row}>
+      {STEPS.map((s, i) => {
+        const done    = i < activeIdx;
+        const active  = i === activeIdx;
+        return (
+          <React.Fragment key={s.key}>
+            <View style={siStyles.item}>
+              <View style={[siStyles.circle, done && siStyles.circleDone, active && siStyles.circleActive]}>
+                {done
+                  ? <Ionicons name="checkmark" size={12} color="#fff" />
+                  : <Text style={[siStyles.num, active && siStyles.numActive]}>{i + 1}</Text>
+                }
+              </View>
+              <Text style={[siStyles.label, active && siStyles.labelActive, done && siStyles.labelDone]}>
+                {s.label}
+              </Text>
+            </View>
+            {i < STEPS.length - 1 && (
+              <View style={[siStyles.line, done && siStyles.lineDone]} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+const siStyles = StyleSheet.create({
+  row:         { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 0.5, borderBottomColor: colors.border },
+  item:        { alignItems: "center", gap: 4 },
+  line:        { flex: 1, height: 1.5, backgroundColor: colors.border, marginBottom: 18 },
+  lineDone:    { backgroundColor: colors.principal },
+  circle:      { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  circleActive:{ borderColor: colors.principal },
+  circleDone:  { borderColor: colors.principal, backgroundColor: colors.principal },
+  num:         { ...(typography.caption as object), fontWeight: "700", color: colors.textMuted },
+  numActive:   { color: colors.principal },
+  label:       { ...(typography.caption as object), color: colors.textMuted, fontWeight: "500" },
+  labelActive: { color: colors.principal, fontWeight: "700" },
+  labelDone:   { color: colors.principal },
+});
 
 function formatTeacherSections(teacher: TeacherResponse) {
   if (teacher.assigned_sections.length === 0) {
@@ -145,14 +199,12 @@ export function TeacherAssignmentScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(
-    null,
-  );
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
-    null,
-  );
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [teacherQuery, setTeacherQuery] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   async function loadData(showLoader = false) {
     if (showLoader) {
@@ -222,6 +274,16 @@ export function TeacherAssignmentScreen() {
     [subjects, selectedSubjectId],
   );
 
+  const filteredTeachers = useMemo(() => {
+    const q = teacherQuery.trim().toLowerCase();
+    if (!q) return teachers;
+    return teachers.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.phone_number?.toLowerCase().includes(q),
+    );
+  }, [teachers, teacherQuery]);
+
   const groupedSections = useMemo<SectionGroup[]>(() => {
     const classOrder = new Map(classes.map((item) => [item.id, item.display_order]));
     const classNameOrder = new Map(classes.map((item) => [item.id, item.name]));
@@ -232,6 +294,7 @@ export function TeacherAssignmentScreen() {
       if (!grouped.has(classId)) {
         grouped.set(classId, {
           title: classNameOrder.get(classId) ?? section.academic_class.name,
+          classId,
           data: [],
         });
       }
@@ -310,7 +373,7 @@ export function TeacherAssignmentScreen() {
       setSelectedTeacherId(null);
       setSelectedSubjectId(null);
       setSelectedSectionIds([]);
-      Alert.alert("Success", response.message);
+      setSuccessMsg(response.message || "Assignment saved successfully.");
     } catch (err: any) {
       Alert.alert("Error", err?.details ?? "Failed to assign subject and sections.");
     } finally {
@@ -340,8 +403,12 @@ export function TeacherAssignmentScreen() {
         center={<Text style={styles.headerTitle}>{headerTitle}</Text>}
       />
 
+      {/* Step progress indicator */}
+      <StepIndicator current={step} />
+
       {error ? (
         <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={40} color={colors.textMuted} />
           <Text style={styles.errorText}>{error}</Text>
           <Pressable style={styles.retryBtn} onPress={() => loadData(true)}>
             <Text style={styles.retryBtnText}>Retry</Text>
@@ -350,37 +417,61 @@ export function TeacherAssignmentScreen() {
       ) : null}
 
       {!error && step === "teachers" ? (
-        <SectionList
-          sections={[
-            {
-              title: "Teachers",
-              data: teachers,
-            },
-          ]}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          stickySectionHeadersEnabled={false}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <View style={styles.sectionIntro}>
-              <Text style={styles.sectionLabel}>Select Teacher</Text>
-              <Text style={styles.sectionText}>
-                Choose a teacher to replace their primary subject and assigned
-                sections.
-              </Text>
+        <View style={{ flex: 1 }}>
+          {/* Search bar */}
+          <View style={styles.searchBar}>
+            <Ionicons name="search-outline" size={16} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
+            <TextInput
+              style={styles.searchInput}
+              value={teacherQuery}
+              onChangeText={setTeacherQuery}
+              placeholder="Search by name or mobile…"
+              placeholderTextColor={colors.textMuted}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+            />
+          </View>
+
+          {/* Success banner */}
+          {!!successMsg && (
+            <View style={styles.successBanner}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+              <Text style={styles.successBannerText}>{successMsg}</Text>
+              <Pressable onPress={() => setSuccessMsg("")} hitSlop={8}>
+                <Ionicons name="close" size={16} color={colors.success} />
+              </Pressable>
             </View>
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No teachers available.</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TeacherCard teacher={item} onPress={() => openTeacher(item)} />
           )}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-          renderSectionHeader={() => null}
-        />
+
+          <SectionList
+            sections={[{ title: "Teachers", data: filteredTeachers }]}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            stickySectionHeadersEnabled={false}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={
+              <View style={styles.sectionIntro}>
+                <Text style={styles.sectionLabel}>Select Teacher</Text>
+                <Text style={styles.sectionText}>
+                  Choose a teacher to update their primary subject and assigned sections.
+                </Text>
+              </View>
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  {teacherQuery ? "No teachers match your search." : "No teachers available."}
+                </Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <TeacherCard teacher={item} onPress={() => openTeacher(item)} />
+            )}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+            renderSectionHeader={() => null}
+          />
+        </View>
       ) : null}
 
       {!error && step === "subjects" ? (
@@ -464,9 +555,28 @@ export function TeacherAssignmentScreen() {
                 <Text style={styles.emptyText}>No sections available.</Text>
               </View>
             }
-            renderSectionHeader={({ section }) => (
-              <Text style={styles.groupTitle}>{section.title}</Text>
-            )}
+            renderSectionHeader={({ section }) => {
+              const sectionIds = section.data.map((s) => s.id);
+              const allSelected = sectionIds.every((id) => selectedSectionIds.includes(id));
+              return (
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupTitle}>{section.title}</Text>
+                  <Pressable
+                    onPress={() => {
+                      if (allSelected) {
+                        setSelectedSectionIds((prev) => prev.filter((id) => !sectionIds.includes(id)));
+                      } else {
+                        setSelectedSectionIds((prev) => [...new Set([...prev, ...sectionIds])]);
+                      }
+                    }}
+                  >
+                    <Text style={styles.groupToggleText}>
+                      {allSelected ? "Deselect all" : "Select all"}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            }}
             renderItem={({ item }) => (
               <View style={styles.subjectSpacing}>
                 <SectionRow
@@ -654,11 +764,52 @@ const styles = StyleSheet.create({
   subjectSpacing: {
     marginBottom: spacing.sm,
   },
+  groupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   groupTitle: {
     ...(typography.label as object),
     color: colors.textSecondary,
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
+  },
+  groupToggleText: {
+    ...(typography.caption as object),
+    color: colors.principal,
+    fontWeight: "700",
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    ...(typography.body as object),
+    color: colors.textPrimary,
+    paddingVertical: 0,
+  },
+  successBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: "#EAF7F1",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#A7F3D0",
+  },
+  successBannerText: {
+    ...(typography.body as object),
+    color: colors.success,
+    fontWeight: "500",
+    flex: 1,
   },
   checkbox: {
     width: 20,
