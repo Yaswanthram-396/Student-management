@@ -5,27 +5,28 @@ const BASE_URL = 'https://schoolsbackend-production.up.railway.app/api/v1'
 export interface LoginResponse {
   access: string
   refresh: string
-  user?: {
-    id: number
-    username: string
-    email: string
-  }
 }
 
-export async function login(username: string, password: string): Promise<LoginResponse> {
+export async function login(phone_number: string, password: string): Promise<LoginResponse> {
   const res = await fetch(`${BASE_URL}/auth/login/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ phone_number, password }),
   })
 
   if (!res.ok) {
-    let errMsg = 'Invalid username or password'
+    let errMsg = 'Invalid phone number or password'
     try {
       const errData = await res.json()
-      errMsg = errData.detail || errData.non_field_errors?.[0] || errMsg
+      if (errData.code === 'AUTHENTICATION_FAILED') {
+        errMsg = 'Invalid phone number or password. Please try again.'
+      } else if (errData.code === 'PERMISSION_DENIED') {
+        errMsg = 'Your account is inactive. Please contact the administrator.'
+      } else {
+        errMsg = errData.details || errData.detail || errData.non_field_errors?.[0] || errMsg
+      }
     } catch {
-      // ignore
+      // ignore parse errors
     }
     throw new Error(errMsg)
   }

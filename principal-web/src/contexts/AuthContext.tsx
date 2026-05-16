@@ -4,15 +4,15 @@ import { getAccessToken } from '../api/client'
 
 interface User {
   id?: number
-  username: string
-  email?: string
+  name: string
+  phone_number?: string
 }
 
 interface AuthContextValue {
   user: User | null
   isAuthenticated: boolean
   loading: boolean
-  login: (username: string, password: string) => Promise<void>
+  login: (phone_number: string, password: string) => Promise<void>
   logout: () => void
 }
 
@@ -32,34 +32,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Restore session from stored token
     const token = getAccessToken()
     if (token) {
-      // We have a token; try to decode user info from JWT payload
       try {
         const payload = JSON.parse(atob(token.split('.')[1]))
         setUser({
           id: payload.user_id,
-          username: payload.username || payload.name || 'Principal',
-          email: payload.email,
+          name: payload.name || payload.username || 'Principal',
+          phone_number: payload.phone_number,
         })
       } catch {
-        // Token exists but can't decode — still treat as authenticated
-        setUser({ username: 'Principal' })
+        setUser({ name: 'Principal' })
       }
     }
     setLoading(false)
   }, [])
 
-  const login = useCallback(async (username: string, password: string) => {
-    const data = await apiLogin(username, password)
-    // Try to decode token for user info
+  const login = useCallback(async (phone_number: string, password: string) => {
+    const data = await apiLogin(phone_number, password)
     try {
       const payload = JSON.parse(atob(data.access.split('.')[1]))
       setUser({
         id: payload.user_id,
-        username: payload.username || username,
-        email: payload.email,
+        name: payload.name || payload.username || 'Principal',
+        phone_number,
       })
     } catch {
-      setUser({ username })
+      setUser({ name: 'Principal', phone_number })
     }
   }, [])
 

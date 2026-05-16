@@ -8,7 +8,7 @@ import { Input } from '../components/ui/Input'
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [username, setUsername] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -18,8 +18,12 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
 
-    if (!username.trim()) {
-      setError('Username is required')
+    if (!phone.trim()) {
+      setError('Phone number is required')
+      return
+    }
+    if (!/^\d{10}$/.test(phone.trim())) {
+      setError('Enter a valid 10-digit phone number')
       return
     }
     if (!password) {
@@ -29,7 +33,7 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
-      await login(username.trim(), password)
+      await login(phone.trim(), password)
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
@@ -62,13 +66,14 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <Input
-              label="Username"
-              type="text"
-              placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
+              label="Phone Number"
+              type="tel"
+              placeholder="Enter your 10-digit phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="tel"
               autoFocus
+              maxLength={10}
             />
 
             <div className="flex flex-col gap-1">

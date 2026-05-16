@@ -104,13 +104,13 @@ function SidebarContent({
       <div className="border-t border-[#EAECF0] p-3">
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors">
           <div className="w-8 h-8 bg-[#185FA5]/10 text-[#185FA5] rounded-full flex items-center justify-center font-semibold text-sm">
-            {user?.username?.charAt(0).toUpperCase() || 'P'}
+            {user?.name?.charAt(0).toUpperCase() || 'P'}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-[#101828] truncate">
-              {user?.username || 'Principal'}
+              {user?.name || 'Principal'}
             </p>
-            <p className="text-xs text-[#667085] truncate">{user?.email || 'Admin'}</p>
+            <p className="text-xs text-[#667085] truncate">{user?.phone_number || ''}</p>
           </div>
           <button
             onClick={handleLogout}
