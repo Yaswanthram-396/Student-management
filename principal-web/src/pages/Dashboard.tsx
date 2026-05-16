@@ -29,8 +29,8 @@ import { getClasses } from '../api/principal'
 import { getTeachers } from '../api/principal'
 import { getAttendanceDailySummary } from '../api/principal'
 import { getAnnouncements } from '../api/principal'
-import { getAllSections } from '../api/principal'
-import type { Announcement, AttendanceSectionSummary } from '../types'
+import { getSections } from '../api/principal'
+import type { Announcement, AttendanceClassSummary } from '../types'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -51,7 +51,7 @@ export default function DashboardPage() {
     studentCount: 0,
     attendancePct: 0,
   })
-  const [attendanceData, setAttendanceData] = useState<AttendanceSectionSummary[]>([])
+  const [attendanceData, setAttendanceData] = useState<AttendanceClassSummary[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -63,39 +63,29 @@ export default function DashboardPage() {
       const [classes, teachers, sections, attSummary, anns] = await Promise.allSettled([
         getClasses(),
         getTeachers(),
-        getAllSections(),
+        getSections(),
         getAttendanceDailySummary(today()),
         getAnnouncements(),
       ])
 
-      const classData = classes.status === 'fulfilled' ? classes.value : []
-      const teacherData = teachers.status === 'fulfilled' ? teachers.value : []
-      const sectionData = sections.status === 'fulfilled' ? sections.value : []
-      const attData =
-        attSummary.status === 'fulfilled' ? attSummary.value : { date: today(), sections: [] }
-      const annData = anns.status === 'fulfilled' ? anns.value : []
+      const classData   = classes.status   === 'fulfilled' ? classes.value   : []
+      const teacherData = teachers.status  === 'fulfilled' ? teachers.value  : []
+      const sectionData = sections.status  === 'fulfilled' ? sections.value  : []
+      const attData     = attSummary.status === 'fulfilled' ? attSummary.value : { date: today(), classes: [] }
+      const annData     = anns.status      === 'fulfilled' ? anns.value      : []
 
-      // Estimate student count from sections
-      const totalStudents = sectionData.reduce(
-        (sum, s) => sum + (s.student_count || 0),
-        0
-      )
-
-      // Calculate average attendance
-      const sections_att = attData.sections || []
-      const avgAtt =
-        sections_att.length > 0
-          ? sections_att.reduce((sum, s) => sum + (s.attendance_pct || 0), 0) /
-            sections_att.length
-          : 0
+      const classAtt = attData.classes || []
+      const totalStudents = classAtt.reduce((sum, c) => sum + c.total_students, 0)
+      const totalPresent  = classAtt.reduce((sum, c) => sum + c.present_count,  0)
+      const avgAtt = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0
 
       setStats({
-        classCount: classData.length,
-        teacherCount: teacherData.length,
-        studentCount: totalStudents,
-        attendancePct: Math.round(avgAtt),
+        classCount:    classData.length,
+        teacherCount:  teacherData.length,
+        studentCount:  sectionData.length > 0 ? totalStudents : 0,
+        attendancePct: avgAtt,
       })
-      setAttendanceData(sections_att.slice(0, 10))
+      setAttendanceData(classAtt.slice(0, 10))
       setAnnouncements(annData.slice(0, 3))
     } catch (err) {
       setError('Failed to load dashboard data')
@@ -215,7 +205,7 @@ export default function DashboardPage() {
               <BarChart data={attendanceData} barSize={20} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#EAECF0" vertical={false} />
                 <XAxis
-                  dataKey="section_name"
+                  dataKey="class_name"
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 11, fill: '#667085' }}
@@ -230,11 +220,11 @@ export default function DashboardPage() {
                   contentStyle={{ border: 'none', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
                   formatter={(value: number) => [`${value}%`, 'Attendance']}
                 />
-                <Bar dataKey="attendance_pct" name="Attendance %" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="attendance_percentage" name="Attendance %" radius={[4, 4, 0, 0]}>
                   {attendanceData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.attendance_pct >= 80 ? '#16825D' : entry.attendance_pct >= 60 ? '#C76A00' : '#D92D20'}
+                      fill={entry.attendance_percentage >= 80 ? '#16825D' : entry.attendance_percentage >= 60 ? '#C76A00' : '#D92D20'}
                     />
                   ))}
                 </Bar>
@@ -332,7 +322,7 @@ export default function DashboardPage() {
                     </div>
                     <p className="text-xs text-[#667085] mt-0.5 truncate">{ann.body}</p>
                     <p className="text-xs text-[#667085] mt-1">
-                      {new Date(ann.created_at).toLocaleDateString()}
+                      {ann.published_at ? new Date(ann.published_at).toLocaleDateString() : 'Draft'}
                     </p>
                   </div>
                 </div>

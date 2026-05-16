@@ -1,176 +1,335 @@
-// Auth
+// ── Auth ──────────────────────────────────────────────────────────────────────
 export interface AuthTokens {
   access: string
   refresh: string
 }
 
-// School
+// ── Shared list wrapper ───────────────────────────────────────────────────────
+export interface PaginatedResponse<T> {
+  count: number
+  results: T[]
+}
+
+// ── School ────────────────────────────────────────────────────────────────────
+export interface SchoolConfiguration {
+  attendance_frequency: 'ONCE' | 'TWICE'
+  whatsapp_absent_automation_enabled: boolean
+  parent_query_enabled: boolean
+}
+
 export interface School {
-  id: number
+  id: string
   name: string
   subdomain: string
+  address: string
   contact_email: string
   contact_phone: string
-  address?: string
-  logo?: string
+  is_active: boolean
+  configuration: SchoolConfiguration
 }
 
-// Configuration
+// ── Configuration (principal-specific) ───────────────────────────────────────
 export interface Configuration {
+  school_id: string
   attendance_frequency: 'ONCE' | 'TWICE'
-  parent_query_enabled: boolean
   whatsapp_absent_automation_enabled: boolean
+  parent_query_enabled: boolean
+  subdomain: string
 }
 
-// Class
+// ── Academic Class ────────────────────────────────────────────────────────────
 export interface SchoolClass {
-  id: number
+  id: string
   name: string
-  sections?: Section[]
-  section_count?: number
-  teacher_count?: number
+  display_order: number
 }
 
-// Section
+// ── Section ───────────────────────────────────────────────────────────────────
+export interface SectionClassTeacher {
+  id: string
+  name: string
+}
+
 export interface Section {
-  id: number
+  id: string
   name: string
-  class_id: number
-  class_name?: string
-  class_teacher?: Teacher | null
-  student_count?: number
+  academic_class: {
+    id: string
+    name: string
+  }
+  class_teacher: SectionClassTeacher | null
+  parent_query_enabled?: boolean
 }
 
-// Subject
+// ── Subject ───────────────────────────────────────────────────────────────────
 export interface Subject {
-  id: number
+  id: string
   name: string
   code?: string
+  is_active: boolean
 }
 
-// Teacher
+// ── Teacher ───────────────────────────────────────────────────────────────────
+export interface TeacherAssignedSection {
+  id: string
+  class_name: string
+  section_name: string
+}
+
 export interface Teacher {
-  id: number
+  id: string
   name: string
-  email?: string
-  phone?: string
-  subjects?: Subject[]
-  sections?: Section[]
-  user?: {
-    id: number
+  mobile_number: string
+  user: {
+    id: string
     username: string
-    email: string
+    role: 'TEACHER'
+  }
+  primary_subject: {
+    id: string
+    name: string
+  } | null
+  assigned_sections: TeacherAssignedSection[]
+}
+
+export interface CreateTeacherData {
+  name: string
+  mobile_number: string
+  username: string
+  password: string
+  primary_subject_id?: string
+  assigned_section_ids?: string[]
+}
+
+export interface UpdateTeacherData {
+  name?: string
+  mobile_number?: string
+  primary_subject_id?: string
+  assigned_section_ids?: string[]
+}
+
+// ── Bulk upload ───────────────────────────────────────────────────────────────
+export interface BulkUploadStatus {
+  batch_id: string
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  total_rows: number
+  success_count: number
+  error_count: number
+  error_report_url?: string
+}
+
+// ── Student (from shared /sections/{id}/students/) ────────────────────────────
+export interface SectionStudent {
+  id: string
+  user_id: string
+  name: string
+  roll_number: string
+  admission_number: string
+  academic_class: { id: string; name: string }
+  section: { id: string; name: string }
+}
+
+// ── Student detail (from /students/{id}/) ─────────────────────────────────────
+export type DayAttendanceStatus = 'PRESENT' | 'ABSENT' | 'PARTIAL' | 'NOT_MARKED'
+
+export interface StudentDetailResponse {
+  student: {
+    id: string
+    user_id: string
+    name: string
+    roll_number: string
+    admission_number: string
+    academic_class: { id: string; name: string }
+    section: { id: string; name: string }
+  }
+  attendance: {
+    date: string
+    status: DayAttendanceStatus
+    present_count: number
+    absent_count: number
+    records: {
+      slot: 'MORNING' | 'AFTERNOON'
+      status: 'PRESENT' | 'ABSENT'
+      confirmed_at: string
+    }[]
   }
 }
 
-// Student
-export interface Student {
-  id: number
-  name: string
-  roll_number?: string
-  admission_number?: string
-  section?: Section
-  class_name?: string
-  section_name?: string
-  parent_phone?: string
-  gender?: string
+// ── Announcement ──────────────────────────────────────────────────────────────
+export interface AnnouncementAttachment {
+  id: string
+  filename: string
+  content_type: string
+  file_url: string
 }
 
-// Announcement
 export interface Announcement {
-  id: number
+  id: string
+  title: string
+  body: string
+  author_role: string
+  audience: 'SCHOOL' | 'CLASS' | 'SECTION'
+  published_at: string | null
+  attachments: AnnouncementAttachment[]
+}
+
+export interface CreateAnnouncementData {
   title: string
   body: string
   audience: 'SCHOOL' | 'CLASS' | 'SECTION'
+  class_ids?: string[]
+  section_ids?: string[]
   publish_now: boolean
-  created_at: string
-  updated_at?: string
-  class_id?: number
-  section_id?: number
 }
 
-// Calendar Event
+// ── Calendar Event ────────────────────────────────────────────────────────────
+export type CalendarEventType = 'HOLIDAY' | 'EXAM' | 'EVENT'
+export type CalendarVisibleTo = 'TEACHER' | 'STUDENT' | 'PARENT'
+
 export interface CalendarEvent {
-  id: number
+  id: string
   title: string
-  date: string
-  event_type: 'HOLIDAY' | 'EXAM' | 'EVENT'
+  event_type: CalendarEventType
+  start_date: string
+  end_date: string
   description?: string
+  visible_to: CalendarVisibleTo[]
 }
 
-// Attendance
-export interface AttendanceSectionSummary {
-  section_id: number
-  section_name: string
+export interface CreateCalendarEventData {
+  title: string
+  event_type: CalendarEventType
+  start_date: string
+  end_date: string
+  description?: string
+  visible_to: CalendarVisibleTo[]
+}
+
+export interface CalendarEventsResponse {
+  today: string
+  count: number
+  results: CalendarEvent[]
+}
+
+// ── Attendance ────────────────────────────────────────────────────────────────
+export interface AttendanceClassSummary {
+  class_id: string
   class_name: string
+  total_students: number
   present_count: number
   absent_count: number
-  total_students: number
-  attendance_pct: number
+  attendance_percentage: number
 }
 
 export interface AttendanceDailySummary {
   date: string
-  sections: AttendanceSectionSummary[]
+  classes: AttendanceClassSummary[]
+}
+
+export interface AttendanceStudentEntry {
+  id: string
+  name: string
+  section?: string
+}
+
+export interface AttendanceSectionDetail {
+  section_id: string
+  section_name: string
+  total_students: number
+  present_count: number
+  absent_count: number
+  attendance_percentage: number
+  present_students: AttendanceStudentEntry[]
+  absent_students: AttendanceStudentEntry[]
 }
 
 export interface AttendanceClassDetail {
-  class_id: number
-  class_name: string
   date: string
-  sections: AttendanceSectionSummary[]
+  class_id: string
+  class_name: string
+  total_students: number
+  present_count: number
+  absent_count: number
+  attendance_percentage: number
+  present_students: AttendanceStudentEntry[]
+  absent_students: AttendanceStudentEntry[]
+  sections: AttendanceSectionDetail[]
 }
 
-// Exam / Analytics
-export type ExamStatus = 'CREATED' | 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'
-
-export interface Exam {
-  id: number
-  name: string
-  status: ExamStatus
-  class_id?: number
-  section_id?: number
-  class_name?: string
-  created_at?: string
+// ── Student attendance history ────────────────────────────────────────────────
+export interface StudentAttendanceRecord {
+  date: string
+  slot: 'MORNING' | 'AFTERNOON'
+  status: 'PRESENT' | 'ABSENT'
+  confirmed_at: string
 }
 
-export interface ExamOverview {
-  id: number
-  name: string
-  status: ExamStatus
-  class_averages?: { subject: string; average: number }[]
-  sections?: SectionPerformance[]
-  top_students?: StudentPerformance[]
-}
-
-export interface SectionPerformance {
-  section_id: number
-  section_name: string
-  class_name?: string
-  average?: number
-  pass_count?: number
-  fail_count?: number
-  total?: number
-}
-
-export interface StudentPerformance {
-  student_id: number
-  student_name: string
-  total_marks?: number
-  percentage?: number
-  rank?: number
-}
-
-export interface SectionStudents {
-  section_id: number
-  section_name: string
-  students: Student[]
-}
-
-// API pagination
-export interface PaginatedResponse<T> {
+export interface StudentAttendanceHistory {
   count: number
-  next: string | null
-  previous: string | null
-  results: T[]
+  results: StudentAttendanceRecord[]
+  summary: {
+    present_count: number
+    absent_count: number
+    attendance_percentage: number
+  }
+}
+
+// ── Analytics / Exams ─────────────────────────────────────────────────────────
+export type AnalyticsStatus = 'CREATED' | 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'
+
+export interface AnalyticsExam {
+  id: string
+  exam_name: string
+  exam_date: string
+  analytics_status: AnalyticsStatus
+  type?: 'CLASS' | 'SECTION'
+  academic_class?: { id: string; name: string } | null
+}
+
+export interface SubjectAvg {
+  subject_id: string
+  subject_name: string
+  avg: number
+  max_marks: number
+}
+
+export interface SectionAvg {
+  section_id: string
+  section_name: string
+  avg: number
+}
+
+export interface TopStudent {
+  student_id: string
+  name: string
+  student_ref_id: string
+  total_marks: number
+  rank: number
+}
+
+export interface ExamOverviewResponse {
+  exam: {
+    id: string
+    exam_name: string
+    exam_date: string
+    analytics_status: AnalyticsStatus
+    type: 'CLASS' | 'SECTION'
+  }
+  role_view: string
+  class_avgs?: SubjectAvg[]
+  subject_avgs?: SubjectAvg[]
+  sections?: SectionAvg[]
+  top_students?: TopStudent[]
+}
+
+export interface SectionDetailResponse {
+  exam: { id: string; exam_name: string }
+  section: { id: string; name: string }
+  subjects: {
+    subject_id: string
+    subject_name: string
+    section_avg: number
+    class_avg: number
+    delta: number
+  }[]
 }

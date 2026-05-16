@@ -1,39 +1,39 @@
 import { apiGet, apiPost, apiPostForm } from './client'
-import type { Exam, ExamOverview, SectionPerformance, SectionStudents } from '../types'
+import type {
+  AnalyticsExam,
+  ExamOverviewResponse,
+  SectionDetailResponse,
+  PaginatedResponse,
+} from '../types'
 
-export const listExams = (classId?: number): Promise<Exam[]> => {
+// List exams — class_id is an optional UUID filter
+export const listExams = async (classId?: string): Promise<AnalyticsExam[]> => {
   const query = classId ? `?class_id=${classId}` : ''
-  return apiGet(`/analytics/exams/${query}`)
+  const res: { success: boolean; exams?: AnalyticsExam[]; results?: AnalyticsExam[] } =
+    await apiGet(`/analytics/exams/${query}`)
+  return res.exams ?? res.results ?? []
 }
 
-export const getExamOverview = (examId: number): Promise<ExamOverview> =>
+export const getExamOverview = (examId: string): Promise<ExamOverviewResponse> =>
   apiGet(`/analytics/exams/${examId}/overview/`)
 
 export const getSectionDetail = (
-  examId: number,
-  sectionId: number
-): Promise<SectionPerformance> =>
+  examId: string,
+  sectionId: string
+): Promise<SectionDetailResponse> =>
   apiGet(`/analytics/exams/${examId}/sections/${sectionId}/`)
 
-export const getSectionStudents = (
-  sectionId: number,
-  examId?: number
-): Promise<SectionStudents> => {
-  const query = examId ? `?exam_id=${examId}` : ''
-  return apiGet(`/analytics/section/${sectionId}/${query}`)
-}
-
 export interface CreateExamData {
-  name: string
-  class_id?: number
-  section_id?: number
+  exam_name: string
+  class_id?: string
+  section_id?: string
 }
 
-export const createExam = (data: CreateExamData): Promise<Exam> =>
+export const createExam = (data: CreateExamData): Promise<AnalyticsExam> =>
   apiPost('/analytics/exams/', data)
 
-export const uploadExam = (examId: number, file: File): Promise<unknown> => {
+export const uploadExamFile = (examId: string, file: File): Promise<unknown> => {
   const fd = new FormData()
-  fd.append('file', file)
+  fd.append('csv_file', file)
   return apiPostForm(`/analytics/exams/${examId}/upload/`, fd)
 }

@@ -10,8 +10,10 @@ import type { School, Configuration } from '../types'
 export default function SettingsPage() {
   const [school, setSchool] = useState<School | null>(null)
   const [config, setConfig] = useState<Configuration>({
-    attendance_frequency: 'ONCE',
-    parent_query_enabled: false,
+    school_id: '',
+    subdomain: '',
+    attendance_frequency: 'TWICE',
+    parent_query_enabled: true,
     whatsapp_absent_automation_enabled: false,
   })
   const [loading, setLoading] = useState(true)
@@ -45,8 +47,12 @@ export default function SettingsPage() {
     setError('')
     setSuccessMsg('')
     try {
-      const updated = await updateConfiguration(config)
-      setConfig(updated)
+      const updated = await updateConfiguration({
+        attendance_frequency: config.attendance_frequency,
+        whatsapp_absent_automation_enabled: config.whatsapp_absent_automation_enabled,
+        parent_query_enabled: config.parent_query_enabled,
+      })
+      setConfig(prev => ({ ...prev, ...updated }))
       setSuccessMsg('Settings saved successfully!')
       setTimeout(() => setSuccessMsg(''), 3000)
     } catch (err) {

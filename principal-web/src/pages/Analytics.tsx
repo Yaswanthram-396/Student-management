@@ -1,101 +1,86 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Plus, Upload, BarChart3, ArrowLeft, Trophy, AlertCircle } from 'lucide-react'
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell,
 } from 'recharts'
-import { PageHeader } from '../components/ui/PageHeader'
-import { Button } from '../components/ui/Button'
-import { Modal } from '../components/ui/Modal'
-import { Input } from '../components/ui/Input'
-import { Select } from '../components/ui/Select'
-import { Badge } from '../components/ui/Badge'
+import { PageHeader }    from '../components/ui/PageHeader'
+import { Button }        from '../components/ui/Button'
+import { Modal }         from '../components/ui/Modal'
+import { Input }         from '../components/ui/Input'
+import { Select }        from '../components/ui/Select'
+import { Badge }         from '../components/ui/Badge'
 import { Table, TableColumn } from '../components/ui/Table'
-import { Spinner } from '../components/ui/Spinner'
-import { EmptyState } from '../components/ui/EmptyState'
-import { listExams, createExam, uploadExam, getExamOverview } from '../api/analytics'
-import { getClasses, getAllSections } from '../api/principal'
-import type { Exam, ExamOverview, SchoolClass, Section } from '../types'
+import { Spinner }       from '../components/ui/Spinner'
+import { EmptyState }    from '../components/ui/EmptyState'
+import { listExams, createExam, uploadExamFile, getExamOverview } from '../api/analytics'
+import { getClasses, getSections } from '../api/principal'
+import type { AnalyticsExam, AnalyticsStatus, ExamOverviewResponse, SchoolClass, Section } from '../types'
 
-type ExamStatus = 'CREATED' | 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'
-
-function statusBadge(status: ExamStatus) {
-  const map: Record<ExamStatus, 'default' | 'warning' | 'info' | 'success' | 'danger'> = {
-    CREATED: 'default',
-    PENDING: 'warning',
-    RUNNING: 'info',
-    DONE: 'success',
-    FAILED: 'danger',
+function statusBadge(status: AnalyticsStatus) {
+  const MAP: Record<AnalyticsStatus, 'default' | 'warning' | 'info' | 'success' | 'danger'> = {
+    CREATED: 'default', PENDING: 'warning', RUNNING: 'info', DONE: 'success', FAILED: 'danger',
   }
-  return <Badge variant={map[status]}>{status}</Badge>
+  return <Badge variant={MAP[status]}>{status}</Badge>
 }
 
+const CHART_COLORS = ['#185FA5','#16825D','#C76A00','#9B59B6','#E74C3C']
+
 export default function AnalyticsPage() {
-  const [exams, setExams] = useState<Exam[]>([])
+  const [exams,   setExams  ] = useState<AnalyticsExam[]>([])
   const [classes, setClasses] = useState<SchoolClass[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error,   setError  ] = useState('')
 
-  // Create exam modal
-  const [createModal, setCreateModal] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: '', class_id: '', section_id: '' })
+  // Create exam
+  const [createModal,     setCreateModal    ] = useState(false)
+  const [createForm,      setCreateForm     ] = useState({ exam_name: '', class_id: '', section_id: '' })
   const [createFormError, setCreateFormError] = useState('')
-  const [createLoading, setCreateLoading] = useState(false)
+  const [createLoading,   setCreateLoading  ] = useState(false)
 
-  // Upload modal
-  const [uploadModal, setUploadModal] = useState(false)
-  const [uploadTarget, setUploadTarget] = useState<Exam | null>(null)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  // Upload
+  const [uploadModal,   setUploadModal  ] = useState(false)
+  const [uploadTarget,  setUploadTarget ] = useState<AnalyticsExam | null>(null)
+  const [uploadFile,    setUploadFile   ] = useState<File | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
-  const [uploadMsg, setUploadMsg] = useState('')
+  const [uploadMsg,     setUploadMsg    ] = useState('')
 
-  // Exam detail
-  const [examDetail, setExamDetail] = useState<ExamOverview | null>(null)
+  // Detail
+  const [examDetail,        setExamDetail       ] = useState<ExamOverviewResponse | null>(null)
   const [examDetailLoading, setExamDetailLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [examData, classData, sectionData] = await Promise.allSettled([
+      const [examRes, classRes, secRes] = await Promise.allSettled([
         listExams(),
         getClasses(),
-        getAllSections(),
+        getSections(),
       ])
-      if (examData.status === 'fulfilled') setExams(examData.value)
+      if (examRes.status  === 'fulfilled') setExams(examRes.value)
       else setError('Failed to load exams')
-      if (classData.status === 'fulfilled') setClasses(classData.value)
-      if (sectionData.status === 'fulfilled') setSections(sectionData.value)
+      if (classRes.status === 'fulfilled') setClasses(classRes.value)
+      if (secRes.status   === 'fulfilled') setSections(secRes.value)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData])
 
   const handleCreateExam = async () => {
-    if (!createForm.name.trim()) {
-      setCreateFormError('Exam name is required')
-      return
-    }
+    if (!createForm.exam_name.trim()) { setCreateFormError('Exam name is required'); return }
     setCreateLoading(true)
     try {
       await createExam({
-        name: createForm.name.trim(),
-        class_id: createForm.class_id ? Number(createForm.class_id) : undefined,
-        section_id: createForm.section_id ? Number(createForm.section_id) : undefined,
+        exam_name:  createForm.exam_name.trim(),
+        class_id:   createForm.class_id   || undefined,
+        section_id: createForm.section_id || undefined,
       })
       setCreateModal(false)
-      setCreateForm({ name: '', class_id: '', section_id: '' })
+      setCreateForm({ exam_name: '', class_id: '', section_id: '' })
       fetchData()
     } catch (err) {
       setCreateFormError(err instanceof Error ? err.message : 'Create failed')
@@ -104,27 +89,17 @@ export default function AnalyticsPage() {
     }
   }
 
-  const openUpload = (exam: Exam) => {
-    setUploadTarget(exam)
-    setUploadFile(null)
-    setUploadMsg('')
-    setUploadModal(true)
+  const openUpload = (exam: AnalyticsExam) => {
+    setUploadTarget(exam); setUploadFile(null); setUploadMsg(''); setUploadModal(true)
   }
 
   const handleUpload = async () => {
-    if (!uploadFile || !uploadTarget) {
-      setUploadMsg('Please select a file')
-      return
-    }
-    setUploadLoading(true)
-    setUploadMsg('')
+    if (!uploadFile || !uploadTarget) { setUploadMsg('Please select a CSV file'); return }
+    setUploadLoading(true); setUploadMsg('')
     try {
-      await uploadExam(uploadTarget.id, uploadFile)
-      setUploadMsg('Upload successful! Processing...')
-      setTimeout(() => {
-        setUploadModal(false)
-        fetchData()
-      }, 1500)
+      await uploadExamFile(uploadTarget.id, uploadFile)
+      setUploadMsg('Upload successful! Processing in background…')
+      setTimeout(() => { setUploadModal(false); fetchData() }, 1800)
     } catch (err) {
       setUploadMsg(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -132,68 +107,70 @@ export default function AnalyticsPage() {
     }
   }
 
-  const openExamDetail = async (exam: Exam) => {
-    if (exam.status !== 'DONE') return
+  const openExamDetail = async (exam: AnalyticsExam) => {
+    if (exam.analytics_status !== 'DONE') return
     setExamDetailLoading(true)
     try {
       const data = await getExamOverview(exam.id)
       setExamDetail(data)
     } catch {
-      setExamDetail({ id: exam.id, name: exam.name, status: exam.status })
+      setExamDetail(null)
     } finally {
       setExamDetailLoading(false)
     }
   }
 
-  const columns: TableColumn<Exam>[] = [
+  const columns: TableColumn<AnalyticsExam>[] = [
     {
-      key: 'name',
+      key: 'exam_name',
       header: 'Exam Name',
       render: (e) => (
         <button
-          onClick={() => e.status === 'DONE' && openExamDetail(e)}
-          className={`font-medium text-left ${e.status === 'DONE' ? 'text-[#185FA5] hover:underline' : 'text-[#101828]'}`}
+          onClick={() => e.analytics_status === 'DONE' && openExamDetail(e)}
+          className={`font-medium text-left ${e.analytics_status === 'DONE' ? 'text-[#185FA5] hover:underline' : 'text-[#101828]'}`}
         >
-          {e.name}
+          {e.exam_name}
         </button>
       ),
     },
     {
-      key: 'class_name',
+      key: 'academic_class',
       header: 'Class',
-      render: (e) => <span className="text-[#667085]">{e.class_name || '—'}</span>,
+      render: (e) => <span className="text-[#667085]">{e.academic_class?.name || '—'}</span>,
     },
     {
-      key: 'status',
-      header: 'Status',
-      render: (e) => statusBadge(e.status as ExamStatus),
-    },
-    {
-      key: 'created_at',
-      header: 'Created',
+      key: 'exam_date',
+      header: 'Date',
       render: (e) => (
-        <span className="text-[#667085] text-xs">
-          {e.created_at ? new Date(e.created_at).toLocaleDateString() : '—'}
+        <span className="text-xs text-[#667085]">
+          {e.exam_date ? new Date(e.exam_date).toLocaleDateString('en-IN') : '—'}
         </span>
       ),
+    },
+    {
+      key: 'analytics_status',
+      header: 'Status',
+      render: (e) => statusBadge(e.analytics_status),
     },
     {
       key: 'actions',
       header: 'Actions',
       render: (e) => (
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => openUpload(e)}
-            className="p-1.5 rounded-md text-[#667085] hover:bg-blue-50 hover:text-[#185FA5] transition-colors"
-            title="Upload Results"
-          >
-            <Upload size={15} />
-          </button>
-          {e.status === 'DONE' && (
+          {e.analytics_status === 'CREATED' && (
+            <button
+              onClick={() => openUpload(e)}
+              className="p-1.5 rounded text-[#667085] hover:bg-blue-50 hover:text-[#185FA5]"
+              title="Upload CSV"
+            >
+              <Upload size={15} />
+            </button>
+          )}
+          {e.analytics_status === 'DONE' && (
             <button
               onClick={() => openExamDetail(e)}
-              className="p-1.5 rounded-md text-[#667085] hover:bg-green-50 hover:text-[#16825D] transition-colors"
-              title="View Overview"
+              className="p-1.5 rounded text-[#667085] hover:bg-green-50 hover:text-[#16825D]"
+              title="View Analytics"
             >
               <BarChart3 size={15} />
             </button>
@@ -203,64 +180,49 @@ export default function AnalyticsPage() {
     },
   ]
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Spinner size="lg" className="text-[#185FA5]" />
-      </div>
-    )
-  }
+  if (loading) return <div className="flex justify-center items-center h-64"><Spinner size="lg" className="text-[#185FA5]" /></div>
+  if (examDetailLoading) return <div className="flex justify-center items-center h-64"><Spinner size="lg" className="text-[#185FA5]" /></div>
 
-  // Exam overview detail page
-  if (examDetailLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Spinner size="lg" className="text-[#185FA5]" />
-      </div>
-    )
-  }
-
+  // ── Exam detail view ──────────────────────────────────────────────────────
   if (examDetail) {
+    const avgs = examDetail.class_avgs ?? examDetail.subject_avgs ?? []
+    const sections_list = examDetail.sections ?? []
+    const top = examDetail.top_students ?? []
+
+    const chartData = avgs.map(a => ({
+      subject: a.subject_name,
+      average: a.max_marks > 0 ? Math.round((a.avg / a.max_marks) * 100) : 0,
+    }))
+
     return (
       <div>
         <div className="flex items-center gap-3 mb-5">
-          <button
-            onClick={() => setExamDetail(null)}
-            className="flex items-center gap-1.5 text-sm text-[#185FA5] hover:underline"
-          >
-            <ArrowLeft size={16} />
-            Back to exams
+          <button onClick={() => setExamDetail(null)} className="flex items-center gap-1.5 text-sm text-[#185FA5] hover:underline">
+            <ArrowLeft size={16} />Back to exams
           </button>
           <span className="text-[#EAECF0]">|</span>
-          <h2 className="text-sm font-semibold text-[#101828]">{examDetail.name}</h2>
-          {statusBadge(examDetail.status as ExamStatus)}
+          <h2 className="text-sm font-semibold text-[#101828]">{examDetail.exam.exam_name}</h2>
+          {statusBadge(examDetail.exam.analytics_status)}
         </div>
 
-        {/* Class averages chart */}
-        {examDetail.class_averages && examDetail.class_averages.length > 0 && (
+        {chartData.length > 0 && (
           <div className="bg-white border border-[#EAECF0] rounded-xl p-5 shadow-sm mb-5">
             <h3 className="text-sm font-semibold text-[#101828] mb-4">Subject-wise Class Averages</h3>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={examDetail.class_averages} barSize={32}>
+              <BarChart data={chartData} barSize={32}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#EAECF0" vertical={false} />
                 <XAxis dataKey="subject" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#667085' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#667085' }} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={{ border: 'none', borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: number) => [`${v}%`, 'Average']}
-                />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#667085' }} domain={[0, 100]} tickFormatter={v => `${v}%`} />
+                <Tooltip contentStyle={{ border: 'none', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'Average']} />
                 <Bar dataKey="average" radius={[4, 4, 0, 0]}>
-                  {examDetail.class_averages!.map((_, i) => (
-                    <Cell key={i} fill={['#185FA5', '#16825D', '#C76A00', '#9B59B6', '#E74C3C'][i % 5]} />
-                  ))}
+                  {chartData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         )}
 
-        {/* Section performance */}
-        {examDetail.sections && examDetail.sections.length > 0 && (
+        {sections_list.length > 0 && (
           <div className="bg-white border border-[#EAECF0] rounded-xl shadow-sm mb-5 overflow-hidden">
             <div className="px-5 py-4 border-b border-[#EAECF0]">
               <h3 className="text-sm font-semibold text-[#101828]">Section Performance</h3>
@@ -268,23 +230,16 @@ export default function AnalyticsPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Section</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Average</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Pass</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Fail</th>
+                  {['Section','Average Score'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAECF0]">
-                {examDetail.sections.map((sec) => (
+                {sections_list.map(sec => (
                   <tr key={sec.section_id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-[#101828]">
-                      {sec.class_name ? `${sec.class_name} — ${sec.section_name}` : sec.section_name}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[#101828]">
-                      {sec.average !== undefined ? `${sec.average}%` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[#16825D] font-medium">{sec.pass_count ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-[#D92D20] font-medium">{sec.fail_count ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-[#101828]">Section {sec.section_name}</td>
+                    <td className="px-4 py-3 text-sm text-[#101828]">{sec.avg !== undefined ? `${sec.avg.toFixed(1)}%` : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -292,8 +247,7 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Top students */}
-        {examDetail.top_students && examDetail.top_students.length > 0 && (
+        {top.length > 0 && (
           <div className="bg-white border border-[#EAECF0] rounded-xl shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-[#EAECF0] flex items-center gap-2">
               <Trophy size={16} className="text-[#C76A00]" />
@@ -302,21 +256,18 @@ export default function AnalyticsPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Rank</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Student</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Total Marks</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">Percentage</th>
+                  {['Rank','Student','Ref ID','Total Marks'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#667085] uppercase">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAECF0]">
-                {examDetail.top_students.map((st, i) => (
+                {top.map((st, i) => (
                   <tr key={st.student_id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-bold text-[#C76A00]">#{st.rank ?? i + 1}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-[#101828]">{st.student_name}</td>
-                    <td className="px-4 py-3 text-sm text-[#101828]">{st.total_marks ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-[#16825D]">
-                      {st.percentage !== undefined ? `${st.percentage}%` : '—'}
-                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-[#101828]">{st.name}</td>
+                    <td className="px-4 py-3 text-sm text-[#667085]">{st.student_ref_id}</td>
+                    <td className="px-4 py-3 text-sm text-[#101828]">{st.total_marks}</td>
                   </tr>
                 ))}
               </tbody>
@@ -324,29 +275,22 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {!examDetail.class_averages?.length && !examDetail.sections?.length && !examDetail.top_students?.length && (
-          <EmptyState
-            icon={<BarChart3 size={48} />}
-            title="No overview data"
-            description="Exam overview data is not available yet."
-          />
+        {!chartData.length && !sections_list.length && !top.length && (
+          <EmptyState icon={<BarChart3 size={48} />} title="No overview data" description="Exam overview data is not available." />
         )}
       </div>
     )
   }
 
+  // ── Exam list view ────────────────────────────────────────────────────────
   return (
     <div>
       <PageHeader
         title="Analytics"
         subtitle="Exam results and academic performance"
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus size={16} />}
-            onClick={() => { setCreateForm({ name: '', class_id: '', section_id: '' }); setCreateFormError(''); setCreateModal(true) }}
-          >
+          <Button variant="primary" size="sm" leftIcon={<Plus size={16} />}
+            onClick={() => { setCreateForm({ exam_name: '', class_id: '', section_id: '' }); setCreateFormError(''); setCreateModal(true) }}>
             Create Exam
           </Button>
         }
@@ -360,39 +304,21 @@ export default function AnalyticsPage() {
 
       <div className="bg-white border border-[#EAECF0] rounded-xl shadow-sm overflow-hidden">
         {exams.length === 0 ? (
-          <EmptyState
-            icon={<BarChart3 size={48} />}
-            title="No exams yet"
-            description="Create an exam and upload results to see analytics."
-            action={
-              <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setCreateModal(true)}>
-                Create Exam
-              </Button>
-            }
+          <EmptyState icon={<BarChart3 size={48} />} title="No exams yet"
+            description="Create an exam and upload CSV results to see analytics."
+            action={<Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setCreateModal(true)}>Create Exam</Button>}
           />
         ) : (
-          <Table
-            columns={columns}
-            data={exams}
-            keyExtractor={(e) => e.id}
-            emptyMessage="No exams found"
-          />
+          <Table columns={columns} data={exams} keyExtractor={e => e.id} emptyMessage="No exams found" />
         )}
       </div>
 
-      {/* Create Exam Modal */}
-      <Modal
-        open={createModal}
-        onClose={() => setCreateModal(false)}
-        title="Create Exam"
+      {/* ── Create exam modal ── */}
+      <Modal open={createModal} onClose={() => setCreateModal(false)} title="Create Exam"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setCreateModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" loading={createLoading} onClick={handleCreateExam}>
-              Create
-            </Button>
+            <Button variant="secondary" onClick={() => setCreateModal(false)}>Cancel</Button>
+            <Button variant="primary" loading={createLoading} onClick={handleCreateExam}>Create</Button>
           </>
         }
       >
@@ -403,63 +329,42 @@ export default function AnalyticsPage() {
               <p className="text-sm text-[#D92D20]">{createFormError}</p>
             </div>
           )}
-          <Input
-            label="Exam Name"
-            placeholder="e.g. Mid-Term 2024"
-            value={createForm.name}
-            onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-            autoFocus
-          />
-          <Select
-            label="Class (optional)"
-            placeholder="Select class..."
-            options={classes.map((c) => ({ value: c.id, label: c.name }))}
+          <Input label="Exam Name" placeholder="e.g. Mid-Term 2024" autoFocus
+            value={createForm.exam_name}
+            onChange={e => setCreateForm(f => ({ ...f, exam_name: e.target.value }))} />
+          <Select label="Class (optional)" placeholder="Select class…"
+            options={classes.map(c => ({ value: c.id, label: c.name }))}
             value={createForm.class_id}
-            onChange={(e) => setCreateForm((f) => ({ ...f, class_id: e.target.value }))}
-          />
-          <Select
-            label="Section (optional)"
-            placeholder="Select section..."
-            options={sections.map((s) => ({
-              value: s.id,
-              label: s.class_name ? `${s.class_name} — ${s.name}` : s.name,
-            }))}
+            onChange={e => setCreateForm(f => ({ ...f, class_id: e.target.value, section_id: '' }))} />
+          <Select label="Section (optional)" placeholder="Select section…"
+            options={sections
+              .filter(s => !createForm.class_id || s.academic_class.id === createForm.class_id)
+              .map(s => ({ value: s.id, label: `${s.academic_class.name} — ${s.name}` }))}
             value={createForm.section_id}
-            onChange={(e) => setCreateForm((f) => ({ ...f, section_id: e.target.value }))}
-          />
+            onChange={e => setCreateForm(f => ({ ...f, section_id: e.target.value }))} />
+          <p className="text-xs text-[#667085]">Provide either a class or a section, not both.</p>
         </div>
       </Modal>
 
-      {/* Upload Modal */}
-      <Modal
-        open={uploadModal}
-        onClose={() => setUploadModal(false)}
-        title={`Upload Results — ${uploadTarget?.name || ''}`}
-        size="sm"
+      {/* ── Upload modal ── */}
+      <Modal open={uploadModal} onClose={() => setUploadModal(false)} size="sm"
+        title={`Upload Results — ${uploadTarget?.exam_name || ''}`}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setUploadModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" loading={uploadLoading} onClick={handleUpload}>
-              Upload
-            </Button>
+            <Button variant="secondary" onClick={() => setUploadModal(false)}>Cancel</Button>
+            <Button variant="primary" loading={uploadLoading} onClick={handleUpload}>Upload</Button>
           </>
         }
       >
         <div className="space-y-3">
           <p className="text-sm text-[#667085]">
-            Upload a CSV file containing the exam results for{' '}
-            <span className="font-semibold text-[#101828]">{uploadTarget?.name}</span>.
+            Upload a CSV file with exam results for <span className="font-semibold text-[#101828]">{uploadTarget?.exam_name}</span>.
           </p>
-          <input
-            type="file"
-            accept=".csv,.xlsx"
-            onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-            className="text-sm text-[#667085] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#185FA5] file:text-white hover:file:bg-[#185FA5]/90"
-          />
+          <input type="file" accept=".csv"
+            onChange={e => setUploadFile(e.target.files?.[0] || null)}
+            className="text-sm text-[#667085] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#185FA5] file:text-white hover:file:bg-[#185FA5]/90" />
           {uploadMsg && (
-            <p className={`text-sm ${uploadMsg.includes('success') ? 'text-[#16825D]' : 'text-[#D92D20]'}`}>
+            <p className={`text-sm ${uploadMsg.includes('successful') ? 'text-[#16825D]' : 'text-[#D92D20]'}`}>
               {uploadMsg}
             </p>
           )}

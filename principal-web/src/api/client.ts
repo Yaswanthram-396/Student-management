@@ -84,8 +84,9 @@ async function request(
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await request(path, { method: 'GET' })
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(err || `GET ${path} failed with status ${res.status}`)
+    let errMsg = `Request failed (${res.status})`
+    try { const d = await res.json(); errMsg = d?.details || d?.detail || errMsg } catch { /* ignore */ }
+    throw new Error(errMsg)
   }
   return res.json()
 }
@@ -147,18 +148,20 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return res.json()
 }
 
-export async function apiDelete(path: string): Promise<void> {
+export async function apiDelete<T = void>(path: string): Promise<T> {
   const res = await request(path, { method: 'DELETE' })
   if (!res.ok) {
     let errMsg = `DELETE ${path} failed with status ${res.status}`
     try {
       const errData = await res.json()
-      errMsg = JSON.stringify(errData)
+      errMsg = errData?.details || JSON.stringify(errData)
     } catch {
       errMsg = await res.text() || errMsg
     }
     throw new Error(errMsg)
   }
+  if (res.status === 204) return undefined as T
+  try { return res.json() } catch { return undefined as T }
 }
 
 export async function apiPostForm<T>(path: string, formData: FormData): Promise<T> {

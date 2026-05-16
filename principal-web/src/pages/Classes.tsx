@@ -43,12 +43,12 @@ export default function ClassesPage() {
   const [sectionForm, setSectionForm] = useState({ name: '' })
   const [sectionFormError, setSectionFormError] = useState('')
   const [sectionFormLoading, setSectionFormLoading] = useState(false)
-  const [sectionTargetClass, setSectionTargetClass] = useState<number | null>(null)
+  const [sectionTargetClass, setSectionTargetClass] = useState<string | null>(null)
   const [editingSection, setEditingSection] = useState<Section | null>(null)
 
   // Delete confirmation
   const [deleteModal, setDeleteModal] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ type: 'class' | 'section'; id: number; name: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'class' | 'section'; id: string; name: string } | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const fetchClasses = useCallback(async () => {
@@ -130,7 +130,7 @@ export default function ClassesPage() {
     }
   }
 
-  const openCreateSection = (classId: number) => {
+  const openCreateSection = (classId: string) => {
     setSectionModalMode('create')
     setSectionForm({ name: '' })
     setSectionFormError('')
@@ -144,7 +144,7 @@ export default function ClassesPage() {
     setSectionForm({ name: section.name })
     setSectionFormError('')
     setEditingSection(section)
-    setSectionTargetClass(section.class_id)
+    setSectionTargetClass(section.academic_class.id)
     setSectionModal(true)
   }
 
@@ -162,7 +162,7 @@ export default function ClassesPage() {
       }
       setSectionModal(false)
       // Refresh sections for the relevant class
-      const targetClassId = sectionTargetClass || editingSection?.class_id
+      const targetClassId = sectionTargetClass || editingSection?.academic_class.id
       if (targetClassId) {
         const sections = await getSections(targetClassId)
         setClasses((prev) =>
@@ -176,7 +176,7 @@ export default function ClassesPage() {
     }
   }
 
-  const confirmDelete = (type: 'class' | 'section', id: number, name: string) => {
+  const confirmDelete = (type: 'class' | 'section', id: string, name: string) => {
     setDeleteTarget({ type, id, name })
     setDeleteModal(true)
   }
@@ -263,7 +263,7 @@ export default function ClassesPage() {
                       {cls.name}
                     </p>
                     <p className="text-xs text-[#667085]">
-                      {cls.sections ? cls.sections.length : (cls.section_count || 0)} section{cls.sections ? (cls.sections.length !== 1 ? 's' : '') : ''}
+                      {cls.sections ? cls.sections.length : 0} section{cls.sections && cls.sections.length !== 1 ? 's' : ''}
                     </p>
                   </div>
                   {cls.expanded ? (
@@ -326,8 +326,8 @@ export default function ClassesPage() {
                             </div>
                             <div>
                               <p className="text-sm font-medium text-[#101828]">{sec.name}</p>
-                              {sec.student_count !== undefined && (
-                                <p className="text-xs text-[#667085]">{sec.student_count} students</p>
+                              {sec.class_teacher && (
+                                <p className="text-xs text-[#667085]">CT: {sec.class_teacher.name}</p>
                               )}
                             </div>
                           </div>
