@@ -333,3 +333,101 @@ export interface SectionDetailResponse {
     delta: number
   }[]
 }
+
+// ── Analytics section students ─────────────────────────────────────────────────
+export interface AnalyticsSectionStudent {
+  student_id: string
+  student_ref_id: string
+  name: string
+  subject_details: { subject_id: string; subject_name: string; subject_percentage: number }[]
+  total_pct: number
+  subject_risk: Record<string, string>
+  overall_risk: string
+}
+
+export interface SectionStudentsAnalyticsResponse {
+  success: boolean
+  class_name: string
+  section_name: string
+  section_id: string
+  exam: { id: string; exam_name: string; exam_date: string }
+  students: AnalyticsSectionStudent[]
+}
+
+// ── Section heatmap ────────────────────────────────────────────────────────────
+export interface HeatmapQuestion {
+  q_no: number
+  correct_count: number
+  wrong_count: number
+  skip_count: number
+  difficulty_index: number
+  difficulty_tag: 'EASY' | 'MEDIUM' | 'HARD'
+  has_key_error: boolean
+}
+
+export interface SectionHeatmapResponse {
+  success: boolean
+  class_name: string
+  section_name: string
+  section_id: string
+  subject_name: string
+  total_questions: number
+  exam: { id: string; exam_name: string; exam_date: string }
+  questions: HeatmapQuestion[]
+}
+
+// ── Question detail ────────────────────────────────────────────────────────────
+export interface QuestionDetailResponse {
+  success: boolean
+  class_name: string
+  section_name: string
+  section_id: string
+  subject_name: string
+  q_no: number
+  exam: { id: string; exam_name: string; exam_date: string }
+  question: HeatmapQuestion & { discrimination_index: number }
+}
+
+// ── Student analytics summary ──────────────────────────────────────────────────
+export interface StudentAnalyticsSubject {
+  subject_id: string
+  subject_name: string
+  total_marks: number
+  max_marks: number
+  percentage: number
+  exam_rank: number
+  correct: number
+  wrong: number
+  unattempted: number
+  risk_label: string
+  performance_label: string
+  z_score: number
+}
+
+export interface StudentSummaryAnalyticsResponse {
+  success: boolean
+  student: { student_id: string; student_ref_id: string; name: string; class_name: string; section_name: string }
+  exam: { id: string; exam_name: string; exam_date: string }
+  exams: { id: string; exam_name: string; exam_date: string; analytics_status: string }[]
+  total_marks: number
+  max_marks: number
+  percentage: number
+  class_rank: number
+  section_rank: number
+  subjects: StudentAnalyticsSubject[]
+  overall_risk: string
+}
+
+// ── Student subject drill-down ─────────────────────────────────────────────────
+export interface StudentSubjectAnalyticsResponse {
+  success: boolean
+  student: { student_id: string; student_ref_id: string; name: string; class_name: string; section_name: string }
+  exam: { id: string; exam_name: string; exam_date: string }
+  subject_name: string
+  result: {
+    total_marks: number; max_marks: number; percentage: number; exam_rank: number
+    correct: number; wrong: number; unattempted: number
+    risk_label: string; performance_label: string; z_score: number
+  }
+  questions: { q_no: number; status: 'C' | 'W' | 'U' }[]
+}
