@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarCheck, ChevronLeft, ChevronRight, ArrowLeft, Users } from 'lucide-react'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
@@ -157,18 +158,40 @@ function SectionCard({ sec }: { sec: AttendanceSectionDetail }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AttendancePage() {
-  const [date, setDate] = useState(today())
-  const [classes, setClasses] = useState<AttendanceClassSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
-  const [classDetail, setClassDetail] = useState<AttendanceClassDetail | null>(null)
+  // Date and class detail are both driven by URL params
+  const date    = searchParams.get('date')    ?? today()
+  const classId = searchParams.get('classId') ?? ''
+
+  const [classes,       setClasses      ] = useState<AttendanceClassSummary[]>([])
+  const [loading,       setLoading      ] = useState(true)
+  const [error,         setError        ] = useState('')
+  const [classDetail,   setClassDetail  ] = useState<AttendanceClassDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  /** Navigate to a new date — clears the class drill-down */
+  function setDate(newDate: string) {
+    navigate(`?date=${newDate}`)
+  }
+
+  /** Drill into a class — pushes a new history entry */
+  function openClassDetail(cls: AttendanceClassSummary) {
+    navigate(`?date=${date}&classId=${encodeURIComponent(cls.class_id)}`)
+    // Fetch detail immediately (don't wait for effect to catch up)
+    setDetailLoading(true)
+    getAttendanceClassDetail(cls.class_id, date)
+      .then(setClassDetail)
+      .catch(() => setClassDetail(null))
+      .finally(() => setDetailLoading(false))
+  }
+
+  // ── Fetch daily summary whenever date changes ──────────────────────────────
   const fetchSummary = useCallback(async (d: string) => {
     setLoading(true)
     setError('')
-    setClassDetail(null)
     try {
       const data = await getAttendanceDailySummary(d)
       setClasses(data.classes || [])
@@ -181,17 +204,16 @@ export default function AttendancePage() {
 
   useEffect(() => { fetchSummary(date) }, [date, fetchSummary])
 
-  const openClassDetail = async (cls: AttendanceClassSummary) => {
+  // ── Reload class detail when classId param changes (e.g. browser back/fwd) ─
+  useEffect(() => {
+    if (!classId) { setClassDetail(null); return }
     setDetailLoading(true)
-    try {
-      const detail = await getAttendanceClassDetail(cls.class_id, date)
-      setClassDetail(detail)
-    } catch {
-      setClassDetail(null)
-    } finally {
-      setDetailLoading(false)
-    }
-  }
+    getAttendanceClassDetail(classId, date)
+      .then(setClassDetail)
+      .catch(() => setClassDetail(null))
+      .finally(() => setDetailLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classId, date])
 
   const totalPresent = classes.reduce((s, c) => s + c.present_count, 0)
   const totalAbsent  = classes.reduce((s, c) => s + c.absent_count, 0)
@@ -205,7 +227,7 @@ export default function AttendancePage() {
       {/* Date navigation */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <button
-          onClick={() => setDate((d) => offsetDate(d, -1))}
+          onClick={() => setDate(offsetDate(date, -1))}
           className="p-2 rounded-lg border border-[#EAECF0] hover:bg-gray-50 text-[#667085]"
         >
           <ChevronLeft size={18} />
@@ -218,7 +240,7 @@ export default function AttendancePage() {
           className="px-3 py-2 text-sm border border-[#EAECF0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#185FA5]"
         />
         <button
-          onClick={() => setDate((d) => offsetDate(d, 1))}
+          onClick={() => setDate(offsetDate(date, 1))}
           disabled={date >= today()}
           className="p-2 rounded-lg border border-[#EAECF0] hover:bg-gray-50 text-[#667085] disabled:opacity-40"
         >
@@ -246,7 +268,7 @@ export default function AttendancePage() {
         <div>
           <div className="flex items-center gap-3 mb-5">
             <button
-              onClick={() => setClassDetail(null)}
+              onClick={() => navigate(-1)}
               className="flex items-center gap-1.5 text-sm text-[#185FA5] hover:underline"
             >
               <ArrowLeft size={16} />

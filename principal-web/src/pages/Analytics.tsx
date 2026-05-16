@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Upload, BarChart3, ArrowLeft, Trophy, AlertCircle, Users, ChevronRight, Activity } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -861,7 +862,42 @@ function StudentSubjectView({
 // MAIN: Analytics Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const [view, setView] = useState<View>({ kind: 'list' })
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  // ── Derive current view from URL search params ─────────────────────────────
+  const view = useMemo((): View => {
+    const v = searchParams.get('v') ?? 'list'
+    const g = (k: string) => searchParams.get(k) ?? ''
+    switch (v) {
+      case 'overview':
+        return { kind: 'overview', examId: g('eid'), examName: g('en') }
+      case 'section_detail':
+        return { kind: 'section_detail', examId: g('eid'), examName: g('en'), sectionId: g('sid'), sectionName: g('sn') }
+      case 'section_students':
+        return { kind: 'section_students', examId: g('eid'), examName: g('en'), sectionId: g('sid'), sectionName: g('sn') }
+      case 'heatmap':
+        return { kind: 'heatmap', examId: g('eid'), examName: g('en'), sectionId: g('sid'), sectionName: g('sn'), subjectId: g('subid'), subjectName: g('subn') }
+      case 'question_detail':
+        return { kind: 'question_detail', examId: g('eid'), examName: g('en'), sectionId: g('sid'), sectionName: g('sn'), subjectId: g('subid'), subjectName: g('subn'), qNo: parseInt(g('qno')) || 1 }
+      case 'student_summary':
+        return { kind: 'student_summary', examId: g('eid'), examName: g('en'), studentId: g('stid'), studentName: g('stn') }
+      case 'student_subject':
+        return { kind: 'student_subject', examId: g('eid'), examName: g('en'), studentId: g('stid'), studentName: g('stn'), subjectId: g('subid'), subjectName: g('subn') }
+      default:
+        return { kind: 'list' }
+    }
+  }, [searchParams])
+
+  // ── Navigation helpers ─────────────────────────────────────────────────────
+  /** Push a new drill-down level — creates a browser history entry */
+  function navTo(params: Record<string, string | number>) {
+    const sp = new URLSearchParams()
+    Object.entries(params).forEach(([k, v]) => sp.set(k, String(v)))
+    navigate(`?${sp.toString()}`)
+  }
+  /** Go one step back in browser history */
+  const navBack = () => navigate(-1)
 
   // Exam list state
   const [exams,   setExams  ] = useState<AnalyticsExam[]>([])
@@ -931,7 +967,7 @@ export default function AnalyticsPage() {
     {
       key: 'exam_name', header: 'Exam Name',
       render: e => (
-        <button onClick={() => e.analytics_status === 'DONE' && setView({ kind: 'overview', examId: e.id, examName: e.exam_name })}
+        <button onClick={() => e.analytics_status === 'DONE' && navTo({ v: 'overview', eid: e.id, en: e.exam_name })}
           className={`font-medium text-left ${e.analytics_status === 'DONE' ? 'text-[#185FA5] hover:underline' : 'text-[#101828]'}`}>
           {e.exam_name}
         </button>
@@ -951,7 +987,7 @@ export default function AnalyticsPage() {
             </button>
           )}
           {e.analytics_status === 'DONE' && (
-            <button onClick={() => setView({ kind: 'overview', examId: e.id, examName: e.exam_name })}
+            <button onClick={() => navTo({ v: 'overview', eid: e.id, en: e.exam_name })}
               className="p-1.5 rounded text-[#667085] hover:bg-green-50 hover:text-[#16825D]" title="View Analytics">
               <Activity size={15} />
             </button>
@@ -966,11 +1002,11 @@ export default function AnalyticsPage() {
     return (
       <ExamOverviewView
         examId={view.examId} examName={view.examName}
-        onBack={() => setView({ kind: 'list' })}
+        onBack={navBack}
         onSectionStudents={(sectionId, sectionName) =>
-          setView({ kind: 'section_students', examId: view.examId, examName: view.examName, sectionId, sectionName })}
+          navTo({ v: 'section_students', eid: view.examId, en: view.examName, sid: sectionId, sn: sectionName })}
         onSectionDetail={(sectionId, sectionName) =>
-          setView({ kind: 'section_detail', examId: view.examId, examName: view.examName, sectionId, sectionName })}
+          navTo({ v: 'section_detail', eid: view.examId, en: view.examName, sid: sectionId, sn: sectionName })}
       />
     )
   }
@@ -980,9 +1016,9 @@ export default function AnalyticsPage() {
       <SectionDetailView
         examId={view.examId} examName={view.examName}
         sectionId={view.sectionId} sectionName={view.sectionName}
-        onBack={() => setView({ kind: 'overview', examId: view.examId, examName: view.examName })}
+        onBack={navBack}
         onHeatmap={(subjectId, subjectName) =>
-          setView({ kind: 'heatmap', examId: view.examId, examName: view.examName, sectionId: view.sectionId, sectionName: view.sectionName, subjectId, subjectName })}
+          navTo({ v: 'heatmap', eid: view.examId, en: view.examName, sid: view.sectionId, sn: view.sectionName, subid: subjectId, subn: subjectName })}
       />
     )
   }
@@ -992,9 +1028,9 @@ export default function AnalyticsPage() {
       <SectionStudentsView
         examId={view.examId} examName={view.examName}
         sectionId={view.sectionId} sectionName={view.sectionName}
-        onBack={() => setView({ kind: 'overview', examId: view.examId, examName: view.examName })}
+        onBack={navBack}
         onStudent={(studentId, studentName) =>
-          setView({ kind: 'student_summary', examId: view.examId, examName: view.examName, studentId, studentName })}
+          navTo({ v: 'student_summary', eid: view.examId, en: view.examName, stid: studentId, stn: studentName })}
       />
     )
   }
@@ -1005,8 +1041,9 @@ export default function AnalyticsPage() {
         examId={view.examId} examName={view.examName}
         sectionId={view.sectionId} sectionName={view.sectionName}
         subjectId={view.subjectId} subjectName={view.subjectName}
-        onBack={() => setView({ kind: 'section_detail', examId: view.examId, examName: view.examName, sectionId: view.sectionId, sectionName: view.sectionName })}
-        onQuestion={qNo => setView({ kind: 'question_detail', examId: view.examId, examName: view.examName, sectionId: view.sectionId, sectionName: view.sectionName, subjectId: view.subjectId, subjectName: view.subjectName, qNo })}
+        onBack={navBack}
+        onQuestion={qNo =>
+          navTo({ v: 'question_detail', eid: view.examId, en: view.examName, sid: view.sectionId, sn: view.sectionName, subid: view.subjectId, subn: view.subjectName, qno: qNo })}
       />
     )
   }
@@ -1018,7 +1055,7 @@ export default function AnalyticsPage() {
         sectionId={view.sectionId} sectionName={view.sectionName}
         subjectId={view.subjectId} subjectName={view.subjectName}
         qNo={view.qNo}
-        onBack={() => setView({ kind: 'heatmap', examId: view.examId, examName: view.examName, sectionId: view.sectionId, sectionName: view.sectionName, subjectId: view.subjectId, subjectName: view.subjectName })}
+        onBack={navBack}
       />
     )
   }
@@ -1028,13 +1065,9 @@ export default function AnalyticsPage() {
       <StudentSummaryView
         examId={view.examId} examName={view.examName}
         studentId={view.studentId} studentName={view.studentName}
-        onBack={() => {
-          // Try to go back to section students, but we don't have sectionId here
-          // So go back to exam overview
-          setView({ kind: 'overview', examId: view.examId, examName: view.examName })
-        }}
+        onBack={navBack}
         onSubject={(subjectId, subjectName) =>
-          setView({ kind: 'student_subject', examId: view.examId, examName: view.examName, studentId: view.studentId, studentName: view.studentName, subjectId, subjectName })}
+          navTo({ v: 'student_subject', eid: view.examId, en: view.examName, stid: view.studentId, stn: view.studentName, subid: subjectId, subn: subjectName })}
       />
     )
   }
@@ -1045,7 +1078,7 @@ export default function AnalyticsPage() {
         examId={view.examId} examName={view.examName}
         studentId={view.studentId} studentName={view.studentName}
         subjectId={view.subjectId} subjectName={view.subjectName}
-        onBack={() => setView({ kind: 'student_summary', examId: view.examId, examName: view.examName, studentId: view.studentId, studentName: view.studentName })}
+        onBack={navBack}
       />
     )
   }
