@@ -61,7 +61,12 @@ function queryStatusLabel(s: QueryStatus): string {
 }
 
 function getInitials(name: string) {
-  return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
 }
 
 // ─── Student dropdown ─────────────────────────────────────────────────────────
@@ -84,7 +89,9 @@ function StudentDropdown({
     <>
       <Pressable style={styles.dropdownBtn} onPress={() => setOpen(true)}>
         <Ionicons name="person-outline" size={13} color={colors.parent} />
-        <Text style={styles.dropdownBtnText} numberOfLines={1}>{displayName}</Text>
+        <Text style={styles.dropdownBtnText} numberOfLines={1}>
+          {displayName}
+        </Text>
         <Ionicons name="chevron-down" size={13} color={colors.parent} />
       </Pressable>
 
@@ -99,10 +106,21 @@ function StudentDropdown({
             {options.map((s) => (
               <Pressable
                 key={s.id}
-                style={[styles.dropdownItem, selectedId === s.id && styles.dropdownItemActive]}
-                onPress={() => { onChange(s.id); setOpen(false); }}
+                style={[
+                  styles.dropdownItem,
+                  selectedId === s.id && styles.dropdownItemActive,
+                ]}
+                onPress={() => {
+                  onChange(s.id);
+                  setOpen(false);
+                }}
               >
-                <Text style={[styles.dropdownItemText, selectedId === s.id && styles.dropdownItemTextActive]}>
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    selectedId === s.id && styles.dropdownItemTextActive,
+                  ]}
+                >
                   {s.name}
                 </Text>
                 {selectedId === s.id && (
@@ -126,8 +144,12 @@ function SkeletonCard({ opacity }: { opacity: number }) {
         <View style={styles.skeletonTitle} />
         <View style={styles.skeletonPill} />
       </View>
-      <View style={[styles.skeletonLine, { marginTop: spacing.sm, width: "60%" }]} />
-      <View style={[styles.skeletonLine, { marginTop: spacing.xs, width: "40%" }]} />
+      <View
+        style={[styles.skeletonLine, { marginTop: spacing.sm, width: "60%" }]}
+      />
+      <View
+        style={[styles.skeletonLine, { marginTop: spacing.xs, width: "40%" }]}
+      />
     </View>
   );
 }
@@ -146,16 +168,25 @@ function QueryCard({
   return (
     <Pressable style={styles.queryCard} onPress={onPress}>
       <View style={styles.queryCardTop}>
-        <Text style={styles.querySubject} numberOfLines={1}>{item.subject}</Text>
-        <StatusPill variant={queryStatusVariant(item.status)} label={queryStatusLabel(item.status)} />
+        <Text style={styles.querySubject} numberOfLines={1}>
+          {item.subject}
+        </Text>
+        <StatusPill
+          variant={queryStatusVariant(item.status)}
+          label={queryStatusLabel(item.status)}
+        />
       </View>
 
       <View style={styles.queryTeacherRow}>
         <View style={styles.teacherAvatar}>
-          <Text style={styles.teacherAvatarText}>{getInitials(item.assigned_teacher.name)}</Text>
+          <Text style={styles.teacherAvatarText}>
+            {getInitials(item.assigned_teacher.name)}
+          </Text>
         </View>
         <View style={{ flex: 1, marginLeft: spacing.sm }}>
-          <Text style={styles.queryTeacherText}>Sent to: {item.assigned_teacher.name}</Text>
+          <Text style={styles.queryTeacherText}>
+            Sent to: {item.assigned_teacher.name}
+          </Text>
           {showStudent && (
             <Text style={styles.queryStudentText}>{item.studentName}</Text>
           )}
@@ -165,7 +196,9 @@ function QueryCard({
       <View style={styles.queryCardBottom}>
         <View style={styles.queryDateRow}>
           <Ionicons name="time-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.queryDate}>{formatQueryDate(item.created_at)}</Text>
+          <Text style={styles.queryDate}>
+            {formatQueryDate(item.created_at)}
+          </Text>
         </View>
         {(item.status === "ANSWERED" || item.status === "CLOSED") && (
           <View style={styles.viewRepliesRow}>
@@ -180,25 +213,60 @@ function QueryCard({
 
 // ─── Reply bubble ─────────────────────────────────────────────────────────────
 
-function ReplyBubble({ reply, teacherName }: { reply: QueryReply; teacherName: string }) {
+function ReplyBubble({
+  reply,
+  teacherName,
+}: {
+  reply: QueryReply;
+  teacherName: string;
+}) {
   const isTeacher = reply.sender_role === "TEACHER";
   return (
-    <View style={[styles.replyBubbleWrap, isTeacher ? styles.replyLeft : styles.replyRight]}>
+    <View
+      style={[
+        styles.replyBubbleWrap,
+        isTeacher ? styles.replyLeft : styles.replyRight,
+      ]}
+    >
       {isTeacher && (
         <View style={styles.teacherAvatar}>
-          <Text style={styles.teacherAvatarText}>{getInitials(teacherName)}</Text>
+          <Text style={styles.teacherAvatarText}>
+            {getInitials(teacherName)}
+          </Text>
         </View>
       )}
       <View style={{ maxWidth: "75%" }}>
-        <Text style={[styles.replyMeta, isTeacher ? { textAlign: "left" } : { textAlign: "right" }]}>
+        <Text
+          style={[
+            styles.replyMeta,
+            isTeacher ? { textAlign: "left" } : { textAlign: "right" },
+          ]}
+        >
           {isTeacher ? teacherName : "You"}
         </Text>
-        <View style={[styles.bubble, isTeacher ? styles.bubbleTeacher : styles.bubbleParent]}>
-          <Text style={[styles.bubbleText, isTeacher ? { color: colors.textPrimary } : { color: colors.surface }]}>
+        <View
+          style={[
+            styles.bubble,
+            isTeacher ? styles.bubbleTeacher : styles.bubbleParent,
+          ]}
+        >
+          <Text
+            style={[
+              styles.bubbleText,
+              isTeacher
+                ? { color: colors.textPrimary }
+                : { color: colors.surface },
+            ]}
+          >
             {reply.message}
           </Text>
         </View>
-        <Text style={[styles.replyTime, isTeacher ? { textAlign: "left" } : { textAlign: "right" }]}>
+        <Text
+          style={[
+            styles.replyTime,
+            isTeacher ? { textAlign: "left" } : { textAlign: "right" },
+          ]}
+        >
           {formatQueryDate(reply.created_at)}
         </Text>
       </View>
@@ -244,7 +312,9 @@ function QueryDetailSheet({
     setReplyError(null);
     try {
       const newReply = await replyToQuery(detail.id, replyText.trim());
-      setDetail((prev) => prev ? { ...prev, replies: [...prev.replies, newReply] } : prev);
+      setDetail((prev) =>
+        prev ? { ...prev, replies: [...prev.replies, newReply] } : prev,
+      );
       setReplyText("");
       setReplySent(true);
       setTimeout(() => {
@@ -274,34 +344,55 @@ function QueryDetailSheet({
         {!loading && detail && (
           <>
             <View style={styles.detailHeader}>
-              <Text style={styles.detailSubject} numberOfLines={2}>{detail.subject}</Text>
-              <StatusPill variant={queryStatusVariant(detail.status)} label={queryStatusLabel(detail.status)} />
+              <Text style={styles.detailSubject} numberOfLines={2}>
+                {detail.subject}
+              </Text>
+              <StatusPill
+                variant={queryStatusVariant(detail.status)}
+                label={queryStatusLabel(detail.status)}
+              />
             </View>
 
             <View style={styles.detailMeta}>
               <View style={styles.teacherAvatar}>
-                <Text style={styles.teacherAvatarText}>{getInitials(detail.assigned_teacher.name)}</Text>
+                <Text style={styles.teacherAvatarText}>
+                  {getInitials(detail.assigned_teacher.name)}
+                </Text>
               </View>
               <View style={{ marginLeft: spacing.sm }}>
-                <Text style={styles.detailMetaText}>{detail.assigned_teacher.name}</Text>
-                <Text style={styles.detailMetaTime}>{formatQueryDate(detail.created_at)}</Text>
+                <Text style={styles.detailMetaText}>
+                  {detail.assigned_teacher.name}
+                </Text>
+                <Text style={styles.detailMetaTime}>
+                  {formatQueryDate(detail.created_at)}
+                </Text>
               </View>
             </View>
 
             <View style={styles.divider} />
 
-            <ScrollView ref={scrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={scrollRef}
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+            >
               <Text style={styles.sectionChip}>YOUR QUERY</Text>
               <View style={styles.originalMsgCard}>
                 <Text style={styles.originalMsgText}>{detail.message}</Text>
               </View>
 
-              <Text style={[styles.sectionChip, { marginTop: spacing.lg }]}>REPLIES</Text>
+              <Text style={[styles.sectionChip, { marginTop: spacing.lg }]}>
+                REPLIES
+              </Text>
               {detail.replies.length === 0 ? (
                 <Text style={styles.noRepliesText}>No replies yet</Text>
               ) : (
                 detail.replies.map((reply) => (
-                  <ReplyBubble key={reply.id} reply={reply} teacherName={detail.assigned_teacher.name} />
+                  <ReplyBubble
+                    key={reply.id}
+                    reply={reply}
+                    teacherName={detail.assigned_teacher.name}
+                  />
                 ))
               )}
               <View style={{ height: spacing.xl }} />
@@ -317,11 +408,17 @@ function QueryDetailSheet({
               <View style={styles.replyInputRow}>
                 {replySent && (
                   <View style={styles.replySentBanner}>
-                    <Ionicons name="checkmark-circle" size={14} color={colors.parent} />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={14}
+                      color={colors.parent}
+                    />
                     <Text style={styles.replySentText}>Reply sent!</Text>
                   </View>
                 )}
-                {replyError && <Text style={styles.replyErrorText}>{replyError}</Text>}
+                {replyError && (
+                  <Text style={styles.replyErrorText}>{replyError}</Text>
+                )}
                 <View style={styles.replyRow}>
                   <TextInput
                     style={styles.replyInput}
@@ -332,14 +429,22 @@ function QueryDetailSheet({
                     multiline
                   />
                   <Pressable
-                    style={[styles.sendBtn, (!replyText.trim() || replySending) && styles.sendBtnDisabled]}
+                    style={[
+                      styles.sendBtn,
+                      (!replyText.trim() || replySending) &&
+                        styles.sendBtnDisabled,
+                    ]}
                     onPress={handleSendReply}
                     disabled={!replyText.trim() || replySending}
                   >
                     {replySending ? (
                       <ActivityIndicator color={colors.surface} size={16} />
                     ) : (
-                      <Ionicons name="arrow-up" size={18} color={colors.surface} />
+                      <Ionicons
+                        name="arrow-up"
+                        size={18}
+                        color={colors.surface}
+                      />
                     )}
                   </Pressable>
                 </View>
@@ -417,14 +522,25 @@ export function QueriesScreen() {
   // FAB entry animation
   useEffect(() => {
     const t = setTimeout(() => {
-      Animated.spring(fabScale, { toValue: 1, useNativeDriver: true, friction: 6 }).start();
+      Animated.spring(fabScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 6,
+      }).start();
     }, 300);
     return () => clearTimeout(t);
   }, [fabScale]);
 
   const memoProfile = React.useMemo(() => profile, [profile]);
   const [queryState, queryActions] = useParentQuery(
-    memoProfile ?? { id: "", name: "", mobile_number: "", school: { id: "", name: "" }, students: [] },
+    memoProfile ?? {
+      id: "",
+      name: "",
+      mobile_number: "",
+      profile_pic_url: "",
+      school: { id: "", name: "" },
+      students: [],
+    },
   );
 
   function startSkeleton() {
@@ -439,7 +555,10 @@ export function QueriesScreen() {
   }
 
   function stopSkeleton() {
-    if (skeletonRef.current) { clearInterval(skeletonRef.current); skeletonRef.current = null; }
+    if (skeletonRef.current) {
+      clearInterval(skeletonRef.current);
+      skeletonRef.current = null;
+    }
   }
 
   const loadQueries = useCallback(
@@ -465,7 +584,11 @@ export function QueriesScreen() {
             studentList.map((s) =>
               getQueries(s.id, statusParam, filters)
                 .then((res: QueryListResponse) =>
-                  res.results.map((q) => ({ ...q, studentId: s.id, studentName: s.name })),
+                  res.results.map((q) => ({
+                    ...q,
+                    studentId: s.id,
+                    studentName: s.name,
+                  })),
                 )
                 .catch(() => [] as TaggedQuery[]),
             ),
@@ -474,8 +597,18 @@ export function QueriesScreen() {
         } else {
           const student = studentList.find((s) => s.id === studentId);
           if (!student) return;
-          const res: QueryListResponse = await getQueries(studentId, statusParam, filters);
-          setQueries(res.results.map((q) => ({ ...q, studentId: student.id, studentName: student.name })));
+          const res: QueryListResponse = await getQueries(
+            studentId,
+            statusParam,
+            filters,
+          );
+          setQueries(
+            res.results.map((q) => ({
+              ...q,
+              studentId: student.id,
+              studentName: student.name,
+            })),
+          );
         }
       } catch {
         setQueriesError("Could not load queries");
@@ -489,7 +622,8 @@ export function QueriesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (students.length > 0) loadQueries(activeStatus, selectedStudentId, students, datePreset);
+      if (students.length > 0)
+        loadQueries(activeStatus, selectedStudentId, students, datePreset);
       return () => stopSkeleton();
     }, [students, activeStatus, selectedStudentId, datePreset, loadQueries]),
   );
@@ -498,7 +632,7 @@ export function QueriesScreen() {
   useEffect(() => {
     if (!queryState.showSuccessToast) return;
     loadQueries(activeStatus, selectedStudentId, students, datePreset);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryState.showSuccessToast]);
 
   const showStudentName = selectedStudentId === "ALL" && students.length > 1;
@@ -542,10 +676,18 @@ export function QueriesScreen() {
           {STATUS_FILTERS.map((f) => (
             <Pressable
               key={f.key}
-              style={[styles.filterPill, activeStatus === f.key && styles.filterPillActive]}
+              style={[
+                styles.filterPill,
+                activeStatus === f.key && styles.filterPillActive,
+              ]}
               onPress={() => setActiveStatus(f.key)}
             >
-              <Text style={[styles.filterLabel, activeStatus === f.key && styles.filterLabelActive]}>
+              <Text
+                style={[
+                  styles.filterLabel,
+                  activeStatus === f.key && styles.filterLabelActive,
+                ]}
+              >
                 {f.label}
               </Text>
             </Pressable>
@@ -555,15 +697,26 @@ export function QueriesScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.filterContent, { paddingTop: 0, paddingBottom: spacing.md }]}
+          contentContainerStyle={[
+            styles.filterContent,
+            { paddingTop: 0, paddingBottom: spacing.md },
+          ]}
         >
           {DATE_PRESETS.map((p) => (
             <Pressable
               key={p.key}
-              style={[styles.filterPill, datePreset === p.key && styles.filterPillActive]}
+              style={[
+                styles.filterPill,
+                datePreset === p.key && styles.filterPillActive,
+              ]}
               onPress={() => setDatePreset(p.key)}
             >
-              <Text style={[styles.filterLabel, datePreset === p.key && styles.filterLabelActive]}>
+              <Text
+                style={[
+                  styles.filterLabel,
+                  datePreset === p.key && styles.filterLabelActive,
+                ]}
+              >
                 {p.label}
               </Text>
             </Pressable>
@@ -588,7 +741,9 @@ export function QueriesScreen() {
           <Text style={styles.errorText}>{queriesError}</Text>
           <Pressable
             style={styles.retryBtn}
-            onPress={() => loadQueries(activeStatus, selectedStudentId, students, datePreset)}
+            onPress={() =>
+              loadQueries(activeStatus, selectedStudentId, students, datePreset)
+            }
           >
             <Text style={styles.retryBtnText}>Retry</Text>
           </Pressable>
@@ -604,11 +759,16 @@ export function QueriesScreen() {
             <QueryCard
               item={item}
               showStudent={showStudentName}
-              onPress={() => { setSelectedQueryId(item.id); setShowDetail(true); }}
+              onPress={() => {
+                setSelectedQueryId(item.id);
+                setShowDetail(true);
+              }}
             />
           )}
           contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.sm + spacing.xs }} />}
+          ItemSeparatorComponent={() => (
+            <View style={{ height: spacing.sm + spacing.xs }} />
+          )}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.centerWrap}>
@@ -628,7 +788,11 @@ export function QueriesScreen() {
           style={styles.fabBtn}
           onPress={() => profile && queryActions.openQuerySheet()}
         >
-          <Ionicons name="chatbubble-ellipses" size={20} color={colors.surface} />
+          <Ionicons
+            name="chatbubble-ellipses"
+            size={20}
+            color={colors.surface}
+          />
           <Text style={styles.fabLabel}>Raise a Query</Text>
         </Pressable>
       </Animated.View>
@@ -643,7 +807,10 @@ export function QueriesScreen() {
       <QueryDetailSheet
         visible={showDetail}
         queryId={selectedQueryId}
-        onClose={() => { setShowDetail(false); setSelectedQueryId(null); }}
+        onClose={() => {
+          setShowDetail(false);
+          setSelectedQueryId(null);
+        }}
       />
 
       {profile && (
@@ -729,7 +896,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   dropdownItemActive: { backgroundColor: colors.primaryLight },
-  dropdownItemText: { ...(typography.body as object), color: colors.textSecondary },
+  dropdownItemText: {
+    ...(typography.body as object),
+    color: colors.textSecondary,
+  },
   dropdownItemTextActive: { color: colors.parent, fontWeight: "600" },
 
   filterBar: {
@@ -757,8 +927,18 @@ const styles = StyleSheet.create({
   filterLabelActive: { color: colors.surface },
 
   listContent: { padding: spacing.lg },
-  centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: spacing.xxxl },
-  errorText: { fontSize: 14, color: colors.textMuted, textAlign: "center", marginBottom: spacing.md },
+  centerWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: spacing.xxxl,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginBottom: spacing.md,
+  },
   retryBtn: {
     borderWidth: 1,
     borderColor: colors.parent,
@@ -774,12 +954,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E7EB",
     marginBottom: spacing.md,
   },
-  emptyTitle: { fontSize: 15, fontWeight: "500", color: "#111111", marginBottom: spacing.xs },
-  emptyBody: { fontSize: 13, color: colors.textMuted, textAlign: "center", maxWidth: 240 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#111111",
+    marginBottom: spacing.xs,
+  },
+  emptyBody: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    maxWidth: 240,
+  },
 
-  skeletonRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
-  skeletonTitle: { height: 14, width: "55%", backgroundColor: "#E5E7EB", borderRadius: 6 },
-  skeletonPill: { height: 14, width: "22%", backgroundColor: "#E5E7EB", borderRadius: 999 },
+  skeletonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+  skeletonTitle: {
+    height: 14,
+    width: "55%",
+    backgroundColor: "#E5E7EB",
+    borderRadius: 6,
+  },
+  skeletonPill: {
+    height: 14,
+    width: "22%",
+    backgroundColor: "#E5E7EB",
+    borderRadius: 999,
+  },
   skeletonLine: { height: 10, backgroundColor: "#E5E7EB", borderRadius: 6 },
 
   queryCard: {
@@ -796,10 +1000,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: spacing.sm - 2,
   },
-  querySubject: { fontSize: 14, fontWeight: "500", color: "#111111", flex: 1, marginRight: spacing.sm },
-  queryTeacherRow: { flexDirection: "row", alignItems: "center", marginTop: 6, marginBottom: spacing.sm },
+  querySubject: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#111111",
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  queryTeacherRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    marginBottom: spacing.sm,
+  },
   queryTeacherText: { fontSize: 12, color: colors.textMuted },
-  queryStudentText: { fontSize: 11, color: colors.parent, fontWeight: "500", marginTop: 2 },
+  queryStudentText: {
+    fontSize: 11,
+    color: colors.parent,
+    fontWeight: "500",
+    marginTop: 2,
+  },
   queryCardBottom: {
     flexDirection: "row",
     alignItems: "center",
@@ -825,7 +1045,13 @@ const styles = StyleSheet.create({
   teacherAvatarText: { fontSize: 10, fontWeight: "700", color: colors.surface },
 
   detailSheetInner: { flex: 1 },
-  detailClose: { position: "absolute", top: 0, right: 0, zIndex: 10, padding: spacing.xs },
+  detailClose: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    zIndex: 10,
+    padding: spacing.xs,
+  },
   detailCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
   detailHeader: {
     flexDirection: "row",
@@ -842,27 +1068,72 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
   },
-  detailMeta: { flexDirection: "row", alignItems: "center", marginBottom: spacing.md },
-  detailMetaText: { ...(typography.caption as object), color: colors.textSecondary },
-  detailMetaTime: { ...(typography.caption as object), color: colors.textMuted, marginTop: 2 },
-  divider: { height: 0.5, backgroundColor: colors.border, marginBottom: spacing.md },
-  sectionChip: { ...(typography.label as object), color: colors.textMuted, marginBottom: spacing.sm },
-  originalMsgCard: { backgroundColor: "#F9F9F9", borderRadius: 10, padding: spacing.md, marginBottom: spacing.sm },
+  detailMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  detailMetaText: {
+    ...(typography.caption as object),
+    color: colors.textSecondary,
+  },
+  detailMetaTime: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  divider: {
+    height: 0.5,
+    backgroundColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  sectionChip: {
+    ...(typography.label as object),
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  originalMsgCard: {
+    backgroundColor: "#F9F9F9",
+    borderRadius: 10,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
   originalMsgText: { fontSize: 14, color: "#444444", lineHeight: 22 },
-  noRepliesText: { ...(typography.caption as object), color: colors.textMuted, textAlign: "center", marginVertical: spacing.lg },
+  noRepliesText: {
+    ...(typography.caption as object),
+    color: colors.textMuted,
+    textAlign: "center",
+    marginVertical: spacing.lg,
+  },
 
-  replyBubbleWrap: { flexDirection: "row", marginBottom: spacing.md, alignItems: "flex-end" },
+  replyBubbleWrap: {
+    flexDirection: "row",
+    marginBottom: spacing.md,
+    alignItems: "flex-end",
+  },
   replyLeft: { justifyContent: "flex-start" },
   replyRight: { justifyContent: "flex-end" },
-  replyMeta: { fontSize: 11, color: colors.textMuted, marginBottom: spacing.xs },
-  bubble: { borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  replyMeta: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  bubble: {
+    borderRadius: 14,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
   bubbleTeacher: { backgroundColor: "#F3F4F6" },
   bubbleParent: { backgroundColor: colors.parent },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   replyTime: { fontSize: 11, color: colors.textMuted, marginTop: spacing.xs },
 
   replyInputRow: { paddingTop: spacing.sm },
-  replyErrorText: { fontSize: 12, color: colors.danger, marginBottom: spacing.xs },
+  replyErrorText: {
+    fontSize: 12,
+    color: colors.danger,
+    marginBottom: spacing.xs,
+  },
   replyRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   replyInput: {
     flex: 1,
@@ -891,7 +1162,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     alignItems: "center",
   },
-  closedBannerText: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+  closedBannerText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
 
   replySentBanner: {
     flexDirection: "row",

@@ -2,20 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-    notificationsApi,
-    type AppNotification,
-    type NotificationType,
+  notificationsApi,
+  type AppNotification,
+  type NotificationType,
 } from "../../services/notifications";
 
 const ACCENT = "#1D9E75";
@@ -248,7 +248,9 @@ export function NotificationsSheet({
                   color="#DC2626"
                 />
               </View>
-              <Text style={styles.errorTitle}>Couldn't load notifications</Text>
+              <Text style={styles.errorTitle}>
+                Couldn&apos;t load notifications
+              </Text>
               <Text style={styles.errorBody}>{error}</Text>
               <Pressable
                 style={styles.retryBtn}
@@ -269,7 +271,7 @@ export function NotificationsSheet({
                   color="#CCCCCC"
                 />
               </View>
-              <Text style={styles.stateText}>You're all caught up</Text>
+              <Text style={styles.stateText}>You&apos;re all caught up</Text>
               <Text style={styles.stateSubtext}>No unread notifications</Text>
             </View>
           )}
